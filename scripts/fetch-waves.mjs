@@ -80,6 +80,31 @@ async function latest(set) {
   })).filter((x) => isFinite(x.lat) && isFinite(x.lon) && isFinite(x.v) && x.ms);
 }
 
+// --probe: describe what the server holds instead of collecting, to work out
+// dataset and column names when collection finds nothing. Writes no file.
+if (process.argv.includes('--probe')) {
+  const safe = (p) => erddap(p).catch((e) => { console.log('  failed:', e.message); return []; });
+  console.log('Wave-related standard names on the server:');
+  const names = (await safe('/categorize/standard_name/index.json')).map((r) => r.Category || Object.values(r)[0]).filter((n) => /wave/i.test(n));
+  console.log('  ' + names.join('\n  '));
+  for (const n of names.slice(0, 12)) {
+    const ds = await safe(`/categorize/standard_name/${enc(n)}/index.json`);
+    console.log(`${n}: ${ds.length} datasets: ${ds.slice(0, 25).map((r) => r['Dataset ID']).join(', ')}`);
+  }
+  console.log('\nDatasets whose ID or title mentions waves:');
+  const all = await safe('/tabledap/allDatasets.json?' + ['datasetID,title,cdm_data_type,minLatitude,maxLatitude,minLongitude,maxLongitude,maxTime',
+    'datasetID=~"(?i).*(VGHS|VHM0|VAVH|VTPK|VMDR|WAVE|WAV).*"'].map(enc).join('&'));
+  all.slice(0, 60).forEach((r) => console.log(`  ${r.datasetID} | ${r.cdm_data_type} | lat ${r.minLatitude}..${r.maxLatitude} lon ${r.minLongitude}..${r.maxLongitude} | to ${r.maxTime} | ${String(r.title).slice(0, 80)}`));
+  for (const r of all.filter((x) => /EP_|INSTAC|TS_/i.test(x.datasetID)).slice(0, 4)) {
+    const info = await safe(`/info/${enc(r.datasetID)}/index.json`);
+    const vars = {};
+    info.forEach((x) => { const v = x['Variable Name']; vars[v] = vars[v] || []; if (/^(standard_name|cf_role|long_name|units)$/.test(x['Attribute Name'])) vars[v].push(`${x['Attribute Name']}=${x.Value}`); });
+    console.log(`\n${r.datasetID} columns:`);
+    Object.entries(vars).filter(([v]) => v !== 'NC_GLOBAL').forEach(([v, a]) => console.log(`  ${v}: ${a.join('; ')}`));
+  }
+  process.exit(0);
+}
+
 const out = process.argv[2] || 'waves.json';
 const at = {}; // stations keyed by position, since one buoy can sit in several datasets
 const key = (x) => `${x.lat.toFixed(1)},${x.lon.toFixed(1)}`;
