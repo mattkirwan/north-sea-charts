@@ -9,7 +9,10 @@
 // Everything found is logged, so the Actions log shows what was used.
 import { writeFileSync } from 'node:fs';
 
-const ERDDAP = 'https://erddap.emodnet-physics.eu/erddap';
+// EMODnet runs two ERDDAP servers: erddap.emodnet-physics.eu mostly holds
+// gliders, while the near-real-time collections from fixed buoys and platforms
+// are on er2webapps. ERDDAP_URL overrides it for testing.
+const ERDDAP = process.env.ERDDAP_URL || 'https://er2webapps.emodnet-physics.eu/erddap';
 const BOX = { s: 53.5, n: 75, w: -12, e: 32 };
 const HOURS = 6;    // older readings than this aren't "latest"
 const PER_KIND = 8; // datasets to read per measurement, collections first
@@ -93,8 +96,9 @@ if (process.argv.includes('--probe')) {
   }
   console.log('\nDatasets whose ID or title mentions waves:');
   const all = await safe('/tabledap/allDatasets.json?' + ['datasetID,title,cdm_data_type,minLatitude,maxLatitude,minLongitude,maxLongitude,maxTime',
-    'datasetID=~"(?i).*(VGHS|VHM0|VAVH|VTPK|VMDR|WAVE|WAV).*"'].map(enc).join('&'));
+    'datasetID=~".*(VGHS|VHM0|VAVH|VTPK|VTZA|VMDR|VEMH|WAVE|Wave|wave|WAV).*"'].map(enc).join('&'));
   all.slice(0, 60).forEach((r) => console.log(`  ${r.datasetID} | ${r.cdm_data_type} | lat ${r.minLatitude}..${r.maxLatitude} lon ${r.minLongitude}..${r.maxLongitude} | to ${r.maxTime} | ${String(r.title).slice(0, 80)}`));
+  console.log(`  (${all.length} in all)`);
   for (const r of all.filter((x) => /EP_|INSTAC|TS_/i.test(x.datasetID)).slice(0, 4)) {
     const info = await safe(`/info/${enc(r.datasetID)}/index.json`);
     const vars = {};
