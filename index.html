@@ -1099,10 +1099,14 @@ function renderWind() {
    Predicted sea level from Open-Meteo's marine model (free, no key) at sea
    points off the River Tees and Whitby, averaged to stand in for Saltburn,
    which sits between them. Highs and lows are found from the hourly curve.
-   Heights are relative to mean sea level, not chart datum. */
+   The model gives levels about mean sea level; adding the mean level above
+   chart datum turns them into tide-table heights. */
 const TIDE = {
   ports: [{ name: 'River Tees', lat: 54.66, lon: -1.1 }, { name: 'Whitby', lat: 54.5, lon: -0.6 }],
   maxAge: 3 * H,
+  // Mean level above chart datum (m), from the mean of MHWS, MHWN, MLWN and MLWS:
+  // Whitby 5.6, 4.3, 1.9, 0.8 → 3.15; River Tees 5.55, 4.30, 2.00, 0.90 → 3.19.
+  datum: 3.17,
   url() {
     return `https://marine-api.open-meteo.com/v1/marine?latitude=${this.ports.map((p) => p.lat)}&longitude=${this.ports.map((p) => p.lon)}` +
       '&hourly=sea_level_height_msl&timezone=GMT&timeformat=unixtime&past_days=1&forecast_days=7';
@@ -1110,9 +1114,9 @@ const TIDE = {
 };
 const fUkTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const tideDays = $('#tideDays');
-let tides = store.get('nsv.tides', null);
+let tides = store.get('nsv.tides.cd', null);
 let tideBusy = false, tideFailed = false;
-const metres = (m) => `${m < 0 ? '−' : '+'}${Math.abs(m).toFixed(1)} m`;
+const metres = (m) => `${m < 0 ? '−' : ''}${Math.abs(m).toFixed(1)} m`;
 const ukClock = (ms) => fUkTime.format(Math.round(ms / 300e3) * 300e3); // to the nearest 5 min
 
 async function fetchTides() {
@@ -1129,7 +1133,7 @@ async function fetchTides() {
       const time = series[0].time.map((t) => t * 1000);
       const level = time.map((_, i) => {
         const v = series.map((h) => h.sea_level_height_msl[i]).filter((x) => x != null);
-        return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+        return v.length ? v.reduce((a, b) => a + b, 0) / v.length + TIDE.datum : null;
       });
       return { at: Date.now(), time, level, used: TIDE.ports.filter((_, i) => ok[i]).map((p) => p.name) };
     } catch {}
@@ -1141,7 +1145,7 @@ async function refreshTides(force) {
   if (tideBusy || (fresh && !force)) { renderLocal(); return; }
   tideBusy = true;
   renderLocal();
-  try { tides = await fetchTides(); tideFailed = false; store.set('nsv.tides', tides); }
+  try { tides = await fetchTides(); tideFailed = false; store.set('nsv.tides.cd', tides); }
   catch { tideFailed = true; }
   tideBusy = false;
   renderLocal();
@@ -1206,7 +1210,7 @@ function tideCurve(d, turns, lo, hi, width) {
     .map((e) => `<circle cx="${x(e.ms).toFixed(1)}" cy="${y(e.m).toFixed(1)}" r="4" fill="${e.hi ? 'var(--glass)' : 'var(--ink)'}" stroke="var(--glass)" stroke-width="2"/>`).join('');
   wrap.innerHTML =
     `<svg viewBox="0 0 ${W} ${Hh}" style="overflow:hidden" aria-hidden="true">${grid}` +
-    `<line x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="var(--slate)" stroke-opacity=".5" stroke-dasharray="3 4"/>` +
+    `<line x1="0" x2="${W}" y1="${y(TIDE.datum)}" y2="${y(TIDE.datum)}" stroke="var(--slate)" stroke-opacity=".5" stroke-dasharray="3 4"/>` +
     `<path d="${line}L${pts[pts.length - 1][0]},${Hh}L${pts[0][0]},${Hh}Z" fill="var(--glass)" fill-opacity=".14"/>` +
     `<path d="${line}" fill="none" stroke="var(--glass)" stroke-width="2" stroke-linejoin="round"/>` +
     (nowIn ? `<line x1="${x(now)}" x2="${x(now)}" y1="0" y2="${Hh}" stroke="var(--amber)" stroke-width="2"/>` +
@@ -1288,7 +1292,7 @@ function renderTides() {
   });
   const used = tides.used.length > 1 ? `averaged between sea points off ${tides.used.join(' and ')}` : `for a sea point off ${tides.used[0]}`;
   $('#tideFine').textContent = `Predicted sea level from Open-Meteo's marine model, ${used}. ` +
-    'Heights are metres above or below mean sea level, the dashed line, not chart datum, so they won\'t match tide-table heights; the range between high and low does. ' +
+    `Heights are metres above chart datum, like tide tables, using a mean level of ${TIDE.datum.toFixed(1)} m (the dashed line) from the published Whitby and River Tees levels. ` +
     'Times are UK time to the nearest 5 minutes and can differ from the official tables by 15–30 minutes. ' +
     'Touch the curve to read the level at any time; the amber line is now.';
 }
@@ -1375,7 +1379,7 @@ function renderToday() {
   } else wBox.innerHTML = `<div class="wmsg">${windBusy ? 'Loading the wind forecast' : "Couldn't load the wind forecast. Check your connection and tap Refresh."}</div>`;
 
   $('#todayFine').textContent = 'Wind from the Met Office models and tides from the Open-Meteo marine model, both via open-meteo.com. ' +
-    'Tide heights are above or below mean sea level, not chart datum. Arrows on the wind point the way it blows; the amber outline is this hour. ' +
+    'Tide heights are above chart datum, like tide tables. Arrows on the wind point the way it blows; the amber outline is this hour. ' +
     'Forecast has the coming days: pressure charts for the swell, then wind and tides.';
 }
 const renderLocal = () => { renderToday(); renderWind(); renderTides(); };
