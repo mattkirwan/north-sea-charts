@@ -27,6 +27,7 @@ import matplotlib
 matplotlib.use('Agg')
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
@@ -36,7 +37,7 @@ from scipy.ndimage import gaussian_filter, maximum_filter, minimum_filter
 BUCKET = 'https://noaa-gfs-bdp-pds.s3.amazonaws.com'
 STEPS = list(range(0, 169, 6))
 AREA = dict(w=-90, e=90, s=20, n=90)          # data we keep: well beyond the map, so colour fills it
-VIEW = [-24, 30, 47, 76]                       # map extent: lon W, lon E, lat S, lat N
+VIEW = [-20, 20, 49, 78]                       # map extent: lon W, lon E, lat S, lat N
 SALTBURN = (54.583, -0.973)
 PROJ = ccrs.LambertConformal(central_longitude=5, central_latitude=62, standard_parallels=(55, 70))
 FIELDS = {'PRMSL:mean sea level': 'prmsl', 'HGT:500 mb': 'gh'}
@@ -44,7 +45,7 @@ FIELDS = {'PRMSL:mean sea level': 'prmsl', 'HGT:500 mb': 'gh'}
 INK, PAPER, COAST = '#173242', '#E8EEF1', '#0F2230'
 # 500 hPa height in decametres: cold (low) blues through a pale middle around
 # 552 dam to warm (high) oranges; opaque, so bands don't show seams.
-HGT_CMAP = LinearSegmentedColormap.from_list('h500', ['#1d3b78', '#2c66a8', '#4f93c8', '#93c0dc', '#d6dccf', '#efc58d', '#e39a52', '#c8662c', '#9c3f1c'])
+HGT_CMAP = LinearSegmentedColormap.from_list('h500', ['#2a1f7a', '#2443a8', '#2f7fd0', '#56b3d9', '#9fd6c9', '#e8e2a6', '#f2b65e', '#e5793a', '#c2452a', '#8f2420'])
 HGT_LEVELS = np.arange(496, 605, 4)
 
 
@@ -107,7 +108,7 @@ def extrema(field, lons, lats, size, kind):
     sm = gaussian_filter(field, 3)
     filt = maximum_filter if kind == 'H' else minimum_filter
     peaks = np.argwhere(sm == filt(sm, size=size, mode='nearest'))
-    wide = filt(sm, size=size * 3, mode='nearest')  # keep only centres that dominate a wider area
+    wide = filt(sm, size=size * 2, mode='nearest')  # keep only centres that dominate a wider area
     out = []
     for y, x in peaks:
         if 8 < y < field.shape[0] - 8 and 8 < x < field.shape[1] - 8 and abs(sm[y, x] - wide[y, x]) < 0.6:
@@ -137,12 +138,17 @@ def draw(run, step, f, path):
     ax.add_feature(cfeature.COASTLINE.with_scale('50m'), edgecolor=COAST, linewidth=0.9, zorder=3)
     ax.add_feature(cfeature.BORDERS.with_scale('50m'), edgecolor=COAST, linewidth=0.4, alpha=0.5, zorder=3)
     ps = gaussian_filter(p, 1.0)
-    cs = ax.contour(lons, lats, ps, levels=np.arange(920, 1072, 4), colors=PAPER, linewidths=1.0, transform=ccrs.PlateCarree(), zorder=4)
-    ax.clabel(cs, fmt='%d', fontsize=10, inline=True, inline_spacing=5)
-    for kind, colour in (('L', '#b3001b'), ('H', '#0b3d91')):
-        for lo, la, v in extrema(p, lons, lats, 60, kind):
-            ax.text(lo, la, kind, color=colour, fontsize=22, fontweight='bold', ha='center', va='center', transform=ccrs.PlateCarree(), zorder=5)
-            ax.text(lo, la - 0.9, f'{v:.0f}', color=colour, fontsize=10, fontweight='bold', ha='center', va='top', transform=ccrs.PlateCarree(), zorder=5)
+    # Dark isobars read on every colour; a faint light halo keeps them clear on the darkest blues.
+    halo = [pe.withStroke(linewidth=2.6, foreground=(1, 1, 1, 0.35))]
+    cs = ax.contour(lons, lats, ps, levels=np.arange(920, 1072, 4), colors='#13202b', linewidths=1.1, transform=ccrs.PlateCarree(), zorder=4)
+    cs.set_path_effects(halo)
+    for t in ax.clabel(cs, fmt='%d', fontsize=10, inline=True, inline_spacing=5, colors='#13202b'):
+        t.set_path_effects([pe.withStroke(linewidth=2.5, foreground='white')])
+    white = [pe.withStroke(linewidth=3, foreground='white')]
+    for kind, colour in (('L', '#c1121f'), ('H', '#0b3d91')):
+        for lo, la, v in extrema(p, lons, lats, 48, kind):
+            ax.text(lo, la, kind, color=colour, fontsize=24, fontweight='bold', ha='center', va='center', transform=ccrs.PlateCarree(), zorder=5, path_effects=white)
+            ax.text(lo, la - 0.9, f'{v:.0f}', color=colour, fontsize=11, fontweight='bold', ha='center', va='top', transform=ccrs.PlateCarree(), zorder=5, path_effects=white)
     ax.plot(SALTBURN[1], SALTBURN[0], 'o', ms=6, color='#FFC23D', mec=COAST, mew=1, transform=ccrs.PlateCarree(), zorder=6)
     valid = run + dt.timedelta(hours=step)
     ax.text(0.012, 0.008, f'GFS {run:%Hz %d %b} +{step}h · valid {valid:%a %d %b %H}z · NOAA data', transform=ax.transAxes,
