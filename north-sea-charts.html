@@ -1,0 +1,822 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0F2230">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="North Sea">
+<title>North Sea pressure charts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0F2230; --ink-90:rgba(15,34,48,.92); --paper:#E8EEF1; --slate:#8AA0AD;
+  --amber:#FFC23D; --glass:#7ED6C3; --hair:rgba(232,238,241,.16);
+  --f-cond:"Barlow Condensed","Arial Narrow","Roboto Condensed",system-ui,sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --st:env(safe-area-inset-top,0px); --sb:env(safe-area-inset-bottom,0px);
+  --sl:env(safe-area-inset-left,0px); --sr:env(safe-area-inset-right,0px);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--ink);color:var(--paper);font-family:var(--f-body);
+  -webkit-font-smoothing:antialiased;overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
+body{position:fixed;inset:0}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:8px}
+[hidden]{display:none!important}
+
+/* Chart stage */
+#stage{position:absolute;inset:0;overflow:hidden;touch-action:none;background:#173242;cursor:grab}
+#layer{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+#layer img{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:none;-webkit-user-drag:none}
+#layer img.on{opacity:1}
+
+/* Valid time, the main read-out */
+.top{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+  padding:calc(var(--st) + 12px) calc(var(--sr) + 18px) 34px calc(var(--sl) + 18px);
+  background:linear-gradient(to bottom,rgba(15,34,48,.9),rgba(15,34,48,.62) 60%,rgba(15,34,48,0));
+  pointer-events:none;text-shadow:0 1px 8px rgba(15,34,48,.6);transition:opacity .2s}
+.day{font-family:var(--f-cond);font-weight:600;font-size:22px;line-height:1.1;letter-spacing:.01em}
+.clock{font-family:var(--f-cond);font-weight:700;font-size:56px;line-height:.92;font-variant-numeric:tabular-nums;margin-top:2px}
+.clock small{font-size:17px;font-weight:600;color:var(--slate);margin-left:6px;letter-spacing:.02em}
+.utc{font-size:14px;color:var(--slate);margin-top:4px;font-variant-numeric:tabular-nums}
+.lead-wrap{text-align:right}
+.lead{font-family:var(--f-cond);font-weight:600;font-size:30px;line-height:1.1;font-variant-numeric:tabular-nums}
+.rel{font-size:14px;color:var(--slate);margin-top:2px}
+.past .clock,.past .day{color:#C9D5DB}
+
+/* Bottom: timeline and controls */
+.bottom{position:absolute;left:0;right:0;bottom:0;
+  padding:40px calc(var(--sr) + 10px) calc(var(--sb) + 8px) calc(var(--sl) + 10px);
+  background:linear-gradient(to top,rgba(15,34,48,.95),rgba(15,34,48,.82) 62%,rgba(15,34,48,0));transition:opacity .2s}
+.tl{position:relative;height:54px;margin:0 8px;touch-action:none;cursor:pointer;border-radius:6px}
+.days{position:absolute;inset:0}
+.dlab{position:absolute;top:0;bottom:0;border-left:1px solid var(--hair);padding:0 0 0 4px;font-size:12px;line-height:16px;
+  color:var(--slate);white-space:nowrap;overflow:hidden}
+.dlab.alt{background:rgba(232,238,241,.035)}
+.dlab.today{color:var(--paper);font-weight:500}
+.bars{position:absolute;left:0;right:0;top:20px;bottom:4px;display:flex;align-items:flex-end;gap:1px;pointer-events:none}
+.bar{flex:1;height:9px;border-radius:1px;background:rgba(232,238,241,.13)}
+.bar.ok{background:rgba(232,238,241,.5)}
+.bar.missing{background:transparent;box-shadow:inset 0 0 0 1px rgba(232,238,241,.22)}
+.bar.cur{background:var(--amber);height:28px}
+.now{position:absolute;top:18px;bottom:0;width:2px;margin-left:-1px;background:var(--glass);pointer-events:none}
+.now::before{content:"";position:absolute;top:-3px;left:-2px;width:6px;height:6px;border-radius:50%;background:var(--glass)}
+.controls{display:flex;align-items:center;gap:2px;margin-top:6px}
+.btn{width:46px;height:46px;flex:none;display:grid;place-items:center;border-radius:50%}
+.btn:active{background:rgba(232,238,241,.12)}
+.btn.play{background:var(--amber);color:var(--ink);margin:0 4px}
+.btn svg{width:22px;height:22px}
+.run{flex:1;min-width:0;text-align:right;font-size:13px;line-height:1.35;color:var(--slate);padding-right:4px;overflow:hidden}
+.run b{color:var(--paper);font-weight:500}
+body.bare .top,body.bare .bottom{opacity:0;pointer-events:none}
+
+/* Messages */
+.notice{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(320px,86vw);text-align:center;
+  background:var(--ink-90);padding:14px 16px;border-radius:14px;font-size:15px;line-height:1.45;pointer-events:none}
+.notice.quiet{width:auto;padding:6px 12px;font-size:13px;color:var(--slate);border-radius:999px}
+.toast{position:absolute;left:50%;top:calc(var(--st) + 128px);transform:translateX(-50%);background:var(--ink-90);
+  padding:8px 14px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+.hint{position:absolute;left:50%;bottom:calc(var(--sb) + 172px);transform:translateX(-50%);width:min(340px,90vw);
+  background:var(--ink-90);border:1px solid var(--hair);border-radius:16px;padding:14px 16px}
+.hint p{margin:0 0 10px;font-size:15px;line-height:1.4}
+.hint div{display:flex;gap:8px}
+
+/* Shared pill buttons */
+.pill{padding:10px 14px;border-radius:12px;background:rgba(232,238,241,.1);font-size:15px}
+.pill.primary{background:var(--amber);color:var(--ink);font-weight:600}
+
+/* Framing mode */
+.adjustbar{display:none;position:absolute;left:0;right:0;top:0;align-items:center;gap:8px;
+  padding:calc(var(--st) + 10px) calc(var(--sr) + 14px) 10px calc(var(--sl) + 16px);background:var(--ink-90)}
+.adjustbar p{flex:1;margin:0;font-size:14px;line-height:1.35}
+.reticle{display:none;position:absolute;left:50%;top:72%;width:38%;height:20%;transform:translate(-50%,-50%);
+  border:2px dashed rgba(255,194,61,.9);border-radius:18px;pointer-events:none}
+.reticle span{position:absolute;left:50%;bottom:-24px;transform:translateX(-50%);white-space:nowrap;font-size:13px;color:var(--amber)}
+body.adjust .adjustbar{display:flex}
+body.adjust .reticle{display:block}
+body.adjust .top,body.adjust .bottom,body.adjust .hint{display:none}
+body.adjust #stage{cursor:move}
+
+/* Settings sheet */
+.sheet{position:absolute;inset:0;background:rgba(5,14,20,.5);display:flex;align-items:flex-end;justify-content:center}
+.card{width:100%;max-width:520px;max-height:86%;overflow:auto;-webkit-user-select:text;user-select:text;
+  background:var(--ink);border-radius:20px 20px 0 0;padding:18px calc(var(--sr) + 18px) calc(var(--sb) + 18px) calc(var(--sl) + 18px);
+  box-shadow:0 -12px 40px rgba(0,0,0,.35)}
+.card h2{font-family:var(--f-cond);font-weight:600;font-size:24px;margin:0 0 6px}
+.field{padding:12px 0;border-top:1px solid var(--hair)}
+.field>span{display:block;font-size:13px;color:var(--slate);margin-bottom:8px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{padding:8px 13px;border-radius:999px;background:rgba(232,238,241,.08);font-size:14px}
+.seg button[aria-pressed="true"]{background:var(--paper);color:var(--ink);font-weight:600}
+.actions{display:flex;flex-wrap:wrap;gap:8px;padding-top:14px;border-top:1px solid var(--hair)}
+.fine{font-size:13px;color:var(--slate);line-height:1.5;margin:14px 0 0}
+.fine a{color:var(--paper)}
+
+@media (min-width:700px){
+  .clock{font-size:64px}
+  .top{padding-left:calc(var(--sl) + 28px);padding-right:calc(var(--sr) + 28px)}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div id="stage" aria-label="Weather chart. Drag sideways to move through time; pinch with two fingers to frame the map.">
+  <div id="layer">
+    <img id="imgA" alt="" referrerpolicy="no-referrer" draggable="false">
+    <img id="imgB" alt="" referrerpolicy="no-referrer" draggable="false">
+  </div>
+</div>
+<div class="reticle" aria-hidden="true"><span>Put the UK here</span></div>
+
+<header class="top" id="top">
+  <div>
+    <div class="day" id="day">Loading</div>
+    <div class="clock"><span id="hhmm">--:--</span><small id="tz"></small></div>
+    <div class="utc" id="utc"></div>
+  </div>
+  <div class="lead-wrap">
+    <div class="lead" id="lead"></div>
+    <div class="rel" id="rel"></div>
+  </div>
+</header>
+
+<div class="hint" id="hint" hidden>
+  <p>Frame the North Sea once and every frame keeps that crop.</p>
+  <div><button class="pill primary" id="hintGo">Adjust view</button><button class="pill" id="hintNo">Not now</button></div>
+</div>
+<div class="notice" id="notice" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<footer class="bottom">
+  <div class="tl" id="tl" role="slider" tabindex="0" aria-label="Forecast time" aria-valuemin="0">
+    <div class="days" id="days"></div>
+    <div class="bars" id="bars"></div>
+    <div class="now" id="now" hidden></div>
+  </div>
+  <div class="controls">
+    <button class="btn" id="prev" aria-label="Previous frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <button class="btn play" id="play" aria-label="Play"><svg viewBox="0 0 24 24" fill="currentColor"><path id="playIcon" d="M8 5.5v13l11-6.5z"/></svg></button>
+    <button class="btn" id="next" aria-label="Next frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+    <div class="run" id="run">Finding the latest run</div>
+    <button class="btn" id="more" aria-label="Chart settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+  </div>
+</footer>
+
+<div class="adjustbar">
+  <p>Drag and pinch until the UK sits in the box.</p>
+  <button class="pill" id="adjReset">Reset</button>
+  <button class="pill primary" id="adjDone">Done</button>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <h2 id="sheetTitle">Chart settings</h2>
+    <div class="field"><span>Chart</span><div class="seg" id="segChart"></div></div>
+    <div class="field"><span>Map</span><div class="seg" id="segRegion"></div></div>
+    <div class="field"><span>Model run</span><div class="seg" id="segRun"></div></div>
+    <div class="field"><span>How far ahead</span><div class="seg" id="segDays"></div></div>
+    <div class="field"><span>Time between frames</span><div class="seg" id="segStep"></div></div>
+    <div class="field"><span>Playback speed</span><div class="seg" id="segSpeed"></div></div>
+    <div class="actions">
+      <button class="pill" id="actAdjust">Adjust view</button>
+      <button class="pill" id="actReload">Reload charts</button>
+      <button class="pill" id="actFull" hidden>Full screen</button>
+      <button class="pill primary" id="actDone">Done</button>
+    </div>
+    <p class="fine" id="fine"></p>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const H = 3600e3;
+const $ = (s) => document.querySelector(s);
+const pad2 = (n) => String(n).padStart(2, '0');
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+
+/* ------------------------------------------------------------------
+   Source adapter. wetterzentrale.de renders NOAA GFS 0.25° data.
+   Files are named by run slot (00/06/12/18), not by date, and each
+   slot is overwritten daily, so the run date is worked out here.
+   To add a source, copy this object and change url()/page()/timings.
+------------------------------------------------------------------- */
+let cacheBust = 0;
+const runKey = (ms) => { const d = new Date(ms); return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}${pad2(d.getUTCHours())}`; };
+const SOURCE = {
+  model: 'GFS',
+  cycleH: 6,
+  maxStep: 384,
+  earliestLagH: 3.75, // first frames of a run appear ~3.5 h after init
+  scheduleLagH: 5,    // whole run is normally there ~5 h after init
+  url(runMs, step, o) {
+    const hh = pad2(new Date(runMs).getUTCHours());
+    return `https://wetterzentrale.de/maps/GFSOP${o.region}${hh}_${step}_${o.chart}.png?run=${runKey(runMs)}${cacheBust ? '&v=' + cacheBust : ''}`;
+  },
+  page(runMs, step, o) {
+    const map = o.region === 'UK' ? 20 : 1;
+    return `https://wetterzentrale.de/en/topkarten.php?map=${map}&model=gfs&var=${o.chart}&time=${step}&run=${new Date(runMs).getUTCHours()}&lid=OP&h=0&mv=0&tr=${o.step}`;
+  }
+};
+
+const CHARTS = [['1', 'Pressure + 500 hPa'], ['9', '10 m wind']];
+const REGIONS = [['EU', 'North Sea crop'], ['UK', 'UK map']];
+const DAYS = [[5, '5 days'], [7, '7 days'], [10, '10 days'], [16, '16 days']];
+const STEPS = [[6, '6 hours'], [3, '3 hours']];
+const SPEEDS = [[700, 'Slow'], [420, 'Normal'], [220, 'Fast']];
+// Starting crop as a fraction of the source image: centre point and visible height.
+const DEFAULT_VIEWS = { EU: { cx: 0.41, cy: 0.31, span: 0.62 }, UK: { cx: 0.5, cy: 0.5, span: 1.02 } };
+const DEFAULTS = { chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420 };
+
+const opts = Object.assign({}, DEFAULTS, store.get('nsv.opts', {}));
+const saveOpts = () => store.set('nsv.opts', opts);
+
+/* ---------------- Time formatting ---------------- */
+const TZ = (Intl.DateTimeFormat().resolvedOptions().timeZone) || 'UTC';
+const fmt = (o) => new Intl.DateTimeFormat('en-GB', Object.assign({ timeZone: TZ }, o));
+const fDay = fmt({ weekday: 'short', day: 'numeric', month: 'short' });
+const fWeekday = fmt({ weekday: 'short' });
+const fDate = fmt({ day: 'numeric' });
+const fTime = fmt({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const fKey = fmt({ year: 'numeric', month: '2-digit', day: '2-digit' });
+const fZone = fmt({ timeZoneName: 'short' });
+const fUtc = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const fRunDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' });
+const fRunShort = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'short' });
+const tzName = (ms) => { try { const p = fZone.formatToParts(ms).find((x) => x.type === 'timeZoneName'); return p ? p.value : ''; } catch { return ''; } };
+const IS_UTC = TZ === 'UTC' || TZ === 'Etc/UTC' || tzName(Date.now()) === 'UTC';
+const dayKey = (ms) => fKey.format(ms);
+const runLabel = (ms) => `${pad2(new Date(ms).getUTCHours())}Z`;
+
+function relative(ms) {
+  const abs = Math.abs(ms);
+  if (abs < 45 * 60e3) return 'now';
+  let m = Math.round(abs / 60e3), d = Math.floor(m / 1440);
+  m -= d * 1440;
+  let h = Math.round(m / 60);
+  if (h === 24) { d += 1; h = 0; }
+  const parts = [];
+  if (d) parts.push(d + (d === 1 ? ' day' : ' days'));
+  if (h) parts.push(h + (h === 1 ? ' hr' : ' hrs'));
+  return ms < 0 ? parts.join(' ') + ' ago' : 'in ' + parts.join(' ');
+}
+function ago(ms) {
+  const m = Math.round((Date.now() - ms) / 60e3);
+  return m < 1 ? 'just now' : m === 1 ? '1 min ago' : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
+}
+
+/* ---------------- State ---------------- */
+let frames = [];
+let idx = 0;
+let runMs = 0, latestMs = 0, runHow = 'schedule';
+let natural = null;
+let view = null;
+let loadToken = 0;
+let playing = false, playTimer = 0;
+let lastCheck = 0;
+let adjusting = false;
+const probeCache = new Map();
+
+const stage = $('#stage'), layer = $('#layer');
+let front = $('#imgA'), back = $('#imgB');
+const tl = $('#tl'), barsEl = $('#bars'), daysEl = $('#days'), nowEl = $('#now');
+const notice = $('#notice'), toastEl = $('#toast'), sheet = $('#sheet'), hint = $('#hint');
+
+/* ---------------- Working out which run is on the server ---------------- */
+const cycleStart = (ms) => {
+  const d = new Date(ms);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), Math.floor(d.getUTCHours() / SOURCE.cycleH) * SOURCE.cycleH);
+};
+
+// Reads the last frame's Last-Modified date. Only works if the server allows
+// cross-origin reads; otherwise returns 'unknown' and the schedule is used.
+async function probe(rMs) {
+  const lastStep = Math.min(opts.days * 24, SOURCE.maxStep);
+  const url = SOURCE.url(rMs, lastStep, opts);
+  if (probeCache.has(url)) return probeCache.get(url);
+  let res = 'unknown';
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 6000);
+    const r = await fetch(url, { method: 'HEAD', mode: 'cors', cache: 'no-store', referrerPolicy: 'no-referrer', signal: ctl.signal });
+    clearTimeout(t);
+    const lm = Date.parse(r.headers.get('last-modified') || '');
+    if (r.ok && lm) res = lm >= rMs + 2 * H ? 'ok' : 'stale';
+    else if (r.status === 404) res = 'stale';
+  } catch { res = 'unknown'; }
+  if (res !== 'stale') probeCache.set(url, res);
+  return res;
+}
+
+async function resolveLatest() {
+  const now = Date.now();
+  const optimistic = cycleStart(now - SOURCE.earliestLagH * H);
+  const v = await probe(optimistic);
+  if (v === 'ok') return { ms: optimistic, how: 'server' };
+  if (v === 'stale') return { ms: optimistic - SOURCE.cycleH * H, how: 'server' };
+  return { ms: cycleStart(now - SOURCE.scheduleLagH * H), how: 'schedule' };
+}
+
+/* ---------------- Loading frames ---------------- */
+async function load({ keepValid = true, latest = null } = {}) {
+  const token = ++loadToken;
+  stopPlay();
+  const prevValid = frames[idx] ? frames[idx].valid : null;
+  if (!latest) latest = await resolveLatest();
+  if (token !== loadToken) return;
+  latestMs = latest.ms;
+  runHow = latest.how;
+  runMs = latestMs - opts.runOffset * SOURCE.cycleH * H;
+  lastCheck = Date.now();
+
+  const maxStep = Math.min(opts.days * 24, SOURCE.maxStep);
+  frames = [];
+  for (let h = 0; h <= maxStep; h += opts.step) {
+    frames.push({ step: h, valid: runMs + h * H, url: SOURCE.url(runMs, h, opts), status: 'pending', img: null });
+  }
+  idx = nearestIndex(keepValid && prevValid ? prevValid : Date.now());
+  front.dataset.url = '';
+  buildTimeline();
+  show(idx);
+  updateRunLine();
+  await preload(token);
+}
+
+function nearestIndex(ms) {
+  let best = 0, d = Infinity;
+  frames.forEach((f, i) => { const x = Math.abs(f.valid - ms); if (x < d) { d = x; best = i; } });
+  return best;
+}
+
+function loadFrame(f) {
+  return new Promise((resolve) => {
+    const im = new Image();
+    im.referrerPolicy = 'no-referrer';
+    im.decoding = 'async';
+    im.onload = () => { f.status = 'ok'; f.img = im; resolve(); };
+    im.onerror = () => { f.status = 'missing'; resolve(); };
+    im.src = f.url;
+  });
+}
+
+function preload(token) {
+  const start = idx;
+  const order = frames.map((_, i) => i).sort((a, b) => Math.abs(a - start) - Math.abs(b - start));
+  let next = 0;
+  const worker = async () => {
+    while (next < order.length) {
+      if (token !== loadToken) return;
+      const i = order[next++];
+      await loadFrame(frames[i]);
+      if (token !== loadToken) return;
+      markBar(i);
+      if (i === idx) show(idx);
+      updateRunLine();
+    }
+  };
+  return Promise.all(Array.from({ length: 6 }, worker)).then(() => {
+    if (token !== loadToken) return;
+    if (!frames.some((f) => f.status === 'ok')) {
+      showNotice("Couldn't load any charts from wetterzentrale.de. Check your connection. If this page is open inside an app preview, host it on a normal web address instead, as previews often block images from other sites.");
+    }
+    updateRunLine();
+  });
+}
+
+/* ---------------- Showing a frame ---------------- */
+function show(i) {
+  if (!frames.length) return;
+  idx = Math.max(0, Math.min(frames.length - 1, i));
+  const f = frames[idx];
+  renderMeta(f);
+  markCurrent();
+  if (f.status === 'ok') { hideNotice(); swapTo(f); }
+  else if (f.status === 'missing') showNotice(`There's no chart on the server for +${f.step} h.`);
+  else showNotice('Loading chart', true);
+}
+
+let swapSeq = 0;
+async function swapTo(f) {
+  if (front.dataset.url === f.url) return;
+  const seq = ++swapSeq;
+  back.dataset.url = f.url;
+  back.src = f.url;
+  try { await back.decode(); } catch {}
+  if (seq !== swapSeq || !back.naturalWidth) return;
+  if (!natural || natural.w !== back.naturalWidth || natural.h !== back.naturalHeight) {
+    natural = { w: back.naturalWidth, h: back.naturalHeight };
+    applyView();
+  }
+  back.alt = `${SOURCE.model} chart for ${fDay.format(f.valid)} ${fTime.format(f.valid)}`;
+  back.classList.add('on');
+  front.classList.remove('on');
+  [front, back] = [back, front];
+}
+
+function renderMeta(f) {
+  $('#day').textContent = fDay.format(f.valid);
+  $('#hhmm').textContent = fTime.format(f.valid);
+  $('#tz').textContent = tzName(f.valid);
+  $('#utc').textContent = IS_UTC ? '' : `${fUtc.format(f.valid)} UTC`;
+  $('#lead').textContent = `+${f.step} h`;
+  $('#rel').textContent = relative(f.valid - Date.now());
+  $('#top').classList.toggle('past', f.valid < Date.now() - 45 * 60e3);
+  tl.setAttribute('aria-valuetext', `${fDay.format(f.valid)} ${fTime.format(f.valid)}, plus ${f.step} hours`);
+}
+
+function updateRunLine() {
+  const el = $('#run');
+  if (!runMs) { el.textContent = 'Finding the latest run'; return; }
+  const done = frames.filter((f) => f.status !== 'pending').length;
+  const older = opts.runOffset ? ', older run' : '';
+  const second = done < frames.length ? `Loading ${done} of ${frames.length}` : `Checked ${ago(lastCheck)}`;
+  el.innerHTML = '';
+  const b = document.createElement('b');
+  b.textContent = `${SOURCE.model} ${runLabel(runMs)}`;
+  el.append(b, ` ${fRunDay.format(runMs)}${older}`, document.createElement('br'), second);
+}
+
+/* ---------------- Timeline ---------------- */
+let curBar = null;
+function buildTimeline() {
+  barsEl.innerHTML = '';
+  curBar = null;
+  const frag = document.createDocumentFragment();
+  frames.forEach(() => { const b = document.createElement('span'); b.className = 'bar'; frag.appendChild(b); });
+  barsEl.appendChild(frag);
+  tl.setAttribute('aria-valuemax', String(frames.length - 1));
+  layoutDays();
+  placeNow();
+}
+function layoutDays() {
+  daysEl.innerHTML = '';
+  if (!frames.length) return;
+  const n = frames.length, w = tl.clientWidth || 300, today = dayKey(Date.now());
+  const groups = [];
+  frames.forEach((f, i) => {
+    const k = dayKey(f.valid), g = groups[groups.length - 1];
+    if (!g || g.k !== k) groups.push({ k, start: i, end: i + 1, ms: f.valid }); else g.end = i + 1;
+  });
+  groups.forEach((g, gi) => {
+    const el = document.createElement('span');
+    el.className = 'dlab' + (gi % 2 ? ' alt' : '') + (g.k === today ? ' today' : '');
+    el.style.left = (g.start / n * 100) + '%';
+    el.style.width = ((g.end - g.start) / n * 100) + '%';
+    const px = w * (g.end - g.start) / n;
+    el.textContent = px >= 46 ? `${fWeekday.format(g.ms)} ${fDate.format(g.ms)}` : px >= 18 ? fDate.format(g.ms) : '';
+    daysEl.appendChild(el);
+  });
+}
+function markBar(i) {
+  const b = barsEl.children[i];
+  if (!b) return;
+  b.classList.toggle('ok', frames[i].status === 'ok');
+  b.classList.toggle('missing', frames[i].status === 'missing');
+}
+function markCurrent() {
+  if (curBar) curBar.classList.remove('cur');
+  curBar = barsEl.children[idx] || null;
+  if (curBar) curBar.classList.add('cur');
+  tl.setAttribute('aria-valuenow', String(idx));
+}
+function placeNow() {
+  if (frames.length < 2) { nowEl.hidden = true; return; }
+  const fi = (Date.now() - frames[0].valid) / (opts.step * H);
+  if (fi < -0.5 || fi > frames.length - 0.5) { nowEl.hidden = true; return; }
+  nowEl.hidden = false;
+  nowEl.style.left = ((fi + 0.5) / frames.length * 100) + '%';
+}
+
+let scrubbing = false;
+function idxFromX(x) {
+  const r = barsEl.getBoundingClientRect();
+  const p = Math.min(Math.max(x - r.left, 0), r.width - 0.01);
+  return Math.floor(p / r.width * frames.length);
+}
+tl.addEventListener('pointerdown', (e) => {
+  if (!frames.length) return;
+  stopPlay();
+  scrubbing = true;
+  tl.setPointerCapture(e.pointerId);
+  show(idxFromX(e.clientX));
+});
+tl.addEventListener('pointermove', (e) => { if (scrubbing) { const i = idxFromX(e.clientX); if (i !== idx) show(i); } });
+tl.addEventListener('pointerup', () => { scrubbing = false; });
+tl.addEventListener('pointercancel', () => { scrubbing = false; });
+
+/* ---------------- Playback ---------------- */
+const PLAY = 'M8 5.5v13l11-6.5z', PAUSE = 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z';
+function setPlayIcon() {
+  $('#playIcon').setAttribute('d', playing ? PAUSE : PLAY);
+  $('#play').setAttribute('aria-label', playing ? 'Pause' : 'Play');
+}
+function play() {
+  if (playing || frames.length < 2) return;
+  playing = true;
+  setPlayIcon();
+  tick();
+}
+function tick() {
+  if (!playing) return;
+  let n = idx;
+  for (let k = 0; k < frames.length; k++) { n = (n + 1) % frames.length; if (frames[n].status === 'ok') break; }
+  show(n);
+  playTimer = setTimeout(tick, n === frames.length - 1 ? opts.speed * 3 : opts.speed);
+}
+function stopPlay() {
+  clearTimeout(playTimer);
+  if (!playing) return;
+  playing = false;
+  setPlayIcon();
+}
+const togglePlay = () => (playing ? stopPlay() : play());
+const step = (d) => show(idx + d);
+
+$('#play').addEventListener('click', togglePlay);
+$('#prev').addEventListener('click', () => { stopPlay(); step(-1); });
+$('#next').addEventListener('click', () => { stopPlay(); step(1); });
+
+/* ---------------- Crop / view ---------------- */
+const viewKey = () => `nsv.view.${opts.region}`;
+const loadView = () => Object.assign({}, DEFAULT_VIEWS[opts.region], store.get(viewKey(), {}));
+function stageSize() { return { w: stage.clientWidth, h: stage.clientHeight }; }
+function viewToT(v) {
+  const { w, h } = stageSize();
+  const s = h / (v.span * natural.h);
+  return { s, tx: w / 2 - v.cx * natural.w * s, ty: h / 2 - v.cy * natural.h * s };
+}
+function tToView(t) {
+  const { w, h } = stageSize();
+  return { span: h / (t.s * natural.h), cx: (w / 2 - t.tx) / (natural.w * t.s), cy: (h / 2 - t.ty) / (natural.h * t.s) };
+}
+function clampScale(s) {
+  const { h } = stageSize();
+  return Math.min(Math.max(s, h / (3 * natural.h)), h / (0.08 * natural.h));
+}
+function applyView() {
+  if (!natural || !view) return;
+  const t = viewToT(view);
+  layer.style.width = natural.w + 'px';
+  layer.style.height = natural.h + 'px';
+  layer.style.transform = `translate(${t.tx}px, ${t.ty}px) scale(${t.s})`;
+}
+let saveTimer = 0;
+function setT(t) {
+  view = tToView(t);
+  applyView();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveView, 400);
+}
+function saveView() {
+  store.set(viewKey(), view);
+  store.set('nsv.framed', true);
+  hint.hidden = true;
+}
+
+/* Gestures on the chart:
+   one finger sideways = move through time, tap = hide/show controls,
+   two fingers = pan and zoom the crop (saved). In Adjust view, one finger pans. */
+const pointers = new Map();
+let g = null;
+function baseline() {
+  const pts = [...pointers.values()];
+  if (!natural || !pts.length) return null;
+  const t = viewToT(view);
+  if (pts.length >= 2) {
+    const [a, b] = pts;
+    return { t, mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, n: 2 };
+  }
+  return { t, mid: { x: pts[0].x, y: pts[0].y }, dist: 1, n: 1 };
+}
+function moveTransform(base) {
+  const pts = [...pointers.values()];
+  if (!base) return;
+  let mid, k = 1;
+  if (base.n === 2 && pts.length >= 2) {
+    const [a, b] = pts;
+    mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    k = Math.hypot(a.x - b.x, a.y - b.y) / base.dist;
+  } else if (base.n === 1 && pts.length === 1) {
+    mid = pts[0];
+  } else return;
+  const s = clampScale(base.t.s * k);
+  const r = s / base.t.s;
+  setT({ s, tx: mid.x - (base.mid.x - base.t.tx) * r, ty: mid.y - (base.mid.y - base.t.ty) * r });
+}
+
+stage.addEventListener('pointerdown', (e) => {
+  try { stage.setPointerCapture(e.pointerId); } catch {}
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (adjusting || pointers.size >= 2) {
+    stopPlay();
+    g = { mode: 'frame', base: baseline() };
+  } else {
+    g = { mode: 'pending', x0: e.clientX, y0: e.clientY, t0: performance.now(), i0: idx };
+  }
+});
+stage.addEventListener('pointermove', (e) => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (!g) return;
+  if (g.mode === 'frame') { moveTransform(g.base); return; }
+  const dx = e.clientX - g.x0, dy = e.clientY - g.y0;
+  if (g.mode === 'pending' && Math.hypot(dx, dy) > 10) {
+    g.mode = Math.abs(dx) > Math.abs(dy) ? 'time' : 'none';
+    if (g.mode === 'time') stopPlay();
+  }
+  if (g.mode === 'time') {
+    const i = g.i0 - Math.round(dx / 26);
+    if (i !== idx) show(i);
+  }
+});
+function pointerEnd(e) {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.delete(e.pointerId);
+  if (!g) return;
+  if (g.mode === 'frame') {
+    g = pointers.size ? { mode: 'frame', base: baseline() } : null;
+    return;
+  }
+  if (g.mode === 'pending' && e.type === 'pointerup' && performance.now() - g.t0 < 350) {
+    document.body.classList.toggle('bare');
+  }
+  g = null;
+}
+stage.addEventListener('pointerup', pointerEnd);
+stage.addEventListener('pointercancel', pointerEnd);
+stage.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (!natural) return;
+  const t = viewToT(view);
+  const s = clampScale(t.s * Math.exp(-e.deltaY * 0.0015));
+  const r = s / t.s;
+  setT({ s, tx: e.clientX - (e.clientX - t.tx) * r, ty: e.clientY - (e.clientY - t.ty) * r });
+}, { passive: false });
+
+function enterAdjust() {
+  closeSheet();
+  hint.hidden = true;
+  stopPlay();
+  adjusting = true;
+  document.body.classList.remove('bare');
+  document.body.classList.add('adjust');
+}
+function exitAdjust() {
+  adjusting = false;
+  document.body.classList.remove('adjust');
+  if (view) saveView();
+  toast('Crop saved');
+}
+$('#adjDone').addEventListener('click', exitAdjust);
+$('#adjReset').addEventListener('click', () => { view = Object.assign({}, DEFAULT_VIEWS[opts.region]); applyView(); });
+$('#hintGo').addEventListener('click', enterAdjust);
+$('#hintNo').addEventListener('click', () => { hint.hidden = true; store.set('nsv.framed', true); });
+function maybeHint() { hint.hidden = !(opts.region === 'EU' && !store.get('nsv.framed', false)); }
+
+/* ---------------- Messages ---------------- */
+function showNotice(msg, quiet) { notice.textContent = msg; notice.classList.toggle('quiet', !!quiet); notice.hidden = false; }
+function hideNotice() { notice.hidden = true; }
+let toastTimer = 0;
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2400);
+}
+
+/* ---------------- Settings sheet ---------------- */
+function seg(el, key, items) {
+  el.innerHTML = '';
+  items.forEach(([v, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.setAttribute('aria-pressed', String(opts[key] === v));
+    b.addEventListener('click', () => {
+      if (opts[key] === v) return;
+      opts[key] = v;
+      saveOpts();
+      [...el.children].forEach((c) => c.setAttribute('aria-pressed', String(c === b)));
+      onOptChange(key);
+    });
+    el.appendChild(b);
+  });
+}
+function onOptChange(key) {
+  if (key === 'speed') return;
+  if (key === 'region') { view = loadView(); natural = null; maybeHint(); }
+  if (key !== 'runOffset') probeCache.clear();
+  load({ keepValid: true }).then(renderFine);
+}
+function runItems() {
+  if (!latestMs) return [[0, 'Latest']];
+  return [0, 1, 2].map((o) => {
+    const ms = latestMs - o * SOURCE.cycleH * H;
+    return [o, `${fRunShort.format(ms)} ${runLabel(ms)}${o === 0 ? ' (latest)' : ''}`];
+  });
+}
+function renderFine() {
+  const f = frames[idx];
+  const how = runHow === 'server'
+    ? "The run time is confirmed from the server's file dates."
+    : "The run time is worked out from the GFS schedule, because the server doesn't share file dates with other sites.";
+  const p = $('#fine');
+  p.textContent = `Charts from wetterzentrale.de, drawn from NOAA's GFS model. ${how} New runs are checked every 10 minutes while this page is open. `;
+  if (f) {
+    const a = document.createElement('a');
+    a.href = SOURCE.page(runMs, f.step, opts);
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = 'Open this frame on wetterzentrale.de';
+    p.append(a);
+  }
+  if (isIOS && !standalone) p.append(document.createElement('br'), 'On iPhone, use Share, then Add to Home Screen, to open this full screen.');
+}
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+const standalone = window.navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+function openSheet() {
+  stopPlay();
+  seg($('#segChart'), 'chart', CHARTS);
+  seg($('#segRegion'), 'region', REGIONS);
+  seg($('#segRun'), 'runOffset', runItems());
+  seg($('#segDays'), 'days', DAYS);
+  seg($('#segStep'), 'step', STEPS);
+  seg($('#segSpeed'), 'speed', SPEEDS);
+  $('#actFull').hidden = !document.fullscreenEnabled;
+  $('#actFull').textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
+  renderFine();
+  sheet.hidden = false;
+  $('#actDone').focus();
+}
+function closeSheet() { sheet.hidden = true; }
+$('#more').addEventListener('click', openSheet);
+$('#actDone').addEventListener('click', closeSheet);
+$('#actAdjust').addEventListener('click', enterAdjust);
+$('#actReload').addEventListener('click', () => {
+  cacheBust = Date.now();
+  probeCache.clear();
+  closeSheet();
+  load({ keepValid: true }).then(() => toast('Charts reloaded'));
+});
+$('#actFull').addEventListener('click', async () => {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+  } catch {}
+  closeSheet();
+});
+sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
+
+/* ---------------- Keyboard ---------------- */
+document.addEventListener('keydown', (e) => {
+  if (!sheet.hidden) { if (e.key === 'Escape') closeSheet(); return; }
+  if (adjusting) { if (e.key === 'Escape' || e.key === 'Enter') exitAdjust(); return; }
+  if (e.key === 'ArrowRight') { stopPlay(); step(1); e.preventDefault(); }
+  else if (e.key === 'ArrowLeft') { stopPlay(); step(-1); e.preventDefault(); }
+  else if (e.key === ' ' && !e.target.closest('button')) { togglePlay(); e.preventDefault(); }
+  else if (e.key === 'Home') { stopPlay(); show(0); }
+  else if (e.key === 'End') { stopPlay(); show(frames.length - 1); }
+});
+
+/* ---------------- Periodic refresh ---------------- */
+async function checkForNewRun() {
+  if (adjusting || !runMs) return;
+  const latest = await resolveLatest();
+  lastCheck = Date.now();
+  if (latest.ms !== latestMs) {
+    toast(`New ${SOURCE.model} run: ${runLabel(latest.ms)}, loading`);
+    await load({ keepValid: true, latest });
+  }
+  updateRunLine();
+}
+setInterval(checkForNewRun, 10 * 60e3);
+setInterval(() => { updateRunLine(); placeNow(); if (frames[idx]) renderMeta(frames[idx]); }, 30e3);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && Date.now() - lastCheck > 60e3) checkForNewRun();
+});
+let resizeTimer = 0;
+window.addEventListener('resize', () => {
+  applyView();
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { layoutDays(); placeNow(); }, 120);
+});
+
+/* ---------------- Start ---------------- */
+view = loadView();
+maybeHint();
+load({ keepValid: false });
+})();
+</script>
+</body>
+</html>
