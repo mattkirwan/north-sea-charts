@@ -8,11 +8,6 @@ on:
   schedule:
     - cron: '7,37 * * * *'
   workflow_dispatch:
-    inputs:
-      probe_wavenet:
-        description: 'Temporary: look for the Cefas WaveNet feed instead of collecting'
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -30,14 +25,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Look for the WaveNet feed
-        if: ${{ inputs.probe_wavenet }}
-        run: node scripts/probe-wavenet.mjs
       - name: Fetch from NOAA NDBC
-        if: ${{ !inputs.probe_wavenet }}
         run: node scripts/fetch-waves.mjs "$RUNNER_TEMP/waves.json"
       - name: Publish to the data branch
-        if: ${{ !inputs.probe_wavenet }}
         env:
           TOKEN: ${{ github.token }}
         run: |
