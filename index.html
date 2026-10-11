@@ -196,6 +196,19 @@ body.adjust #stage{cursor:move}
 .cam iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .links{display:flex;flex-wrap:wrap;gap:8px}
 a.pill{display:inline-block;color:inherit;text-decoration:none}
+.hov{overflow-x:auto;margin:14px calc(-16px - var(--sr)) 0 calc(-16px - var(--sl));padding-bottom:6px;touch-action:pan-x pan-y;-webkit-overflow-scrolling:touch}
+.hgrid{--hlab:calc(118px + var(--sl));--hcol:44px;display:grid;gap:3px;width:max-content;padding-right:16px;font-variant-numeric:tabular-nums}
+.hlab{position:sticky;left:0;z-index:1;background:var(--ink);padding:4px 6px 0 calc(16px + var(--sl))}
+.hlab b{display:block;font-size:13px;font-weight:600;line-height:1.2}
+.hlab span{display:block;font-size:11px;color:var(--slate);margin-top:2px}
+.hday{font-size:12px;color:var(--paper);border-left:1px solid var(--hair);padding-left:4px;white-space:nowrap;overflow:hidden}
+.hhr{font-size:11px;color:var(--slate);text-align:center}
+.hc{height:54px;border-radius:7px;text-align:center;padding-top:7px;background:var(--w-none)}
+.hc .v{font-family:var(--f-cond);font-weight:600;font-size:18px;line-height:1.1}
+.hc .p{display:flex;align-items:center;justify-content:center;gap:2px;font-size:11px;color:var(--paper);opacity:.8;margin-top:2px}
+.hc .p svg{width:11px;height:11px}
+.hkey{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--slate);margin-top:12px}
+.hkey i{flex:1;max-width:180px;height:10px;border-radius:5px;background:linear-gradient(to right,rgba(126,214,195,.05),rgba(126,214,195,.6))}
 .wmsg{padding:28px 0;text-align:center;color:var(--slate);font-size:15px;line-height:1.45}
 @media (max-width:360px){.wc .s{font-size:18px}.wgrid{gap:2px}}
 
@@ -263,6 +276,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
   <nav class="subnav">
     <div class="tabs" role="tablist" aria-label="Forecast">
       <button role="tab" data-route="pressure" aria-controls="sPressure">Pressure</button>
+      <button role="tab" data-route="swell" aria-controls="sSwell">Swell</button>
       <button role="tab" data-route="wind" aria-controls="sWind">Wind</button>
       <button role="tab" data-route="tides" aria-controls="sTides">Tides</button>
     </div>
@@ -316,6 +330,17 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
       <button class="pill primary" id="adjDone">Done</button>
     </div>
   </div>
+
+  <section class="sub panel" id="sSwell" role="tabpanel" aria-label="Swell forecast" hidden>
+    <div class="wtools">
+      <div class="status" id="swellStatus"></div>
+      <button class="pill" id="swellReload">Refresh</button>
+    </div>
+    <div class="tile" id="swellHead" hidden></div>
+    <div class="hov"><div id="swellGrid"></div></div>
+    <div class="hkey"><span>0 m</span><i></i><span>4 m+</span></div>
+    <p class="fine" id="swellFine"></p>
+  </section>
 
   <section class="sub panel" id="sWind" role="tabpanel" aria-label="Wind forecast" hidden>
     <div class="wtools">
@@ -1331,6 +1356,167 @@ function renderTides() {
     'Touch the curve to read the level at any time; the amber line is now.';
 }
 
+/* ---------------- Swell ----------------
+   Modelled swell at sea points strung from Bear Island, south of Svalbard,
+   down to just off Saltburn, from Open-Meteo's marine models. Read down and
+   across: a swell heading this way appears at the northern points first and
+   reaches Saltburn later, so it shows as a diagonal. */
+const SWELL = {
+  points: [
+    { name: 'Bear Island', lat: 74.0, lon: 17.0 },
+    { name: 'Lofoten Basin', lat: 70.5, lon: 9.0 },
+    { name: 'Norwegian Sea', lat: 66.5, lon: 3.0 },
+    { name: 'N North Sea', lat: 61.5, lon: 1.5 },
+    { name: 'C North Sea', lat: 58.0, lon: 0.5 },
+    { name: 'Off Saltburn', lat: 54.75, lon: -0.8 }
+  ],
+  stepH: 6,
+  cols: 28, // a week of 6-hourly columns
+  maxAge: 3 * H,
+  url() {
+    return `https://marine-api.open-meteo.com/v1/marine?latitude=${this.points.map((p) => p.lat)}&longitude=${this.points.map((p) => p.lon)}` +
+      '&hourly=swell_wave_height,swell_wave_period,swell_wave_direction&timezone=GMT&timeformat=unixtime&forecast_days=7';
+  }
+};
+const swellEl = $('#swellGrid');
+let swell = store.get('nsv.swell', null);
+let swellBusy = false, swellFailed = false;
+
+// Great-circle distance to Saltburn, and how long a 12 s swell takes to cover
+// it: deep-water group speed is gT/4π, about 9.4 m/s or 800 km a day.
+function kmToSaltburn(p) {
+  const r = Math.PI / 180, a = p.lat * r, b = WIND.lat * r;
+  const h = Math.sin((b - a) / 2) ** 2 + Math.cos(a) * Math.cos(b) * Math.sin((WIND.lon - p.lon) * r / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+function leadTime(km) {
+  const hrs = km * 1000 / (9.81 * 12 / (4 * Math.PI)) / 3600;
+  return hrs < 1 ? '' : hrs < 36 ? `~${Math.round(hrs)} h` : `~${(hrs / 24).toFixed(1).replace('.0', '')} d`;
+}
+
+async function fetchSwell() {
+  // The automatic model choice has been known to return empty swell fields, so
+  // fall back to NOAA's global wave model explicitly.
+  for (const extra of ['&cell_selection=sea', '', '&models=ncep_gfswave025&cell_selection=sea', '&models=ncep_gfswave025']) {
+    try {
+      const r = await fetch(SWELL.url() + extra, { cache: 'no-store' });
+      if (!r.ok) continue;
+      let j = await r.json();
+      if (!Array.isArray(j)) j = [j];
+      const first = j.find((x) => x && x.hourly && x.hourly.time);
+      if (!first) continue;
+      const rows = SWELL.points.map((_, i) => {
+        const h = (j[i] && j[i].hourly) || {};
+        return { h: h.swell_wave_height || [], p: h.swell_wave_period || [], d: h.swell_wave_direction || [] };
+      });
+      if (!rows.some((x) => x.h.some((v) => v != null))) continue;
+      return { at: Date.now(), time: first.hourly.time.map((t) => t * 1000), rows, model: extra.includes('gfswave') ? 'NOAA GFS-Wave' : '' };
+    } catch {}
+  }
+  throw new Error('No swell forecast');
+}
+async function refreshSwell(force) {
+  const fresh = swell && Date.now() - swell.at < SWELL.maxAge;
+  if (swellBusy || (fresh && !force)) { renderLocal(); return; }
+  swellBusy = true;
+  renderLocal();
+  try { swell = await fetchSwell(); swellFailed = false; store.set('nsv.swell', swell); }
+  catch { swellFailed = true; }
+  swellBusy = false;
+  renderLocal();
+}
+
+const swellShade = (m) => `rgba(126,214,195,${(0.05 + 0.55 * Math.min(Math.max(m, 0) / 4, 1)).toFixed(3)})`;
+function renderSwell() {
+  if (!showing('swell')) return;
+  const status = $('#swellStatus'), head = $('#swellHead');
+  swellEl.innerHTML = '';
+  head.innerHTML = '';
+  head.hidden = true;
+  if (!swell) {
+    status.textContent = 'Next 7 days';
+    swellEl.innerHTML = `<div class="wmsg">${swellBusy ? 'Loading the swell forecast' : "Couldn't load the swell forecast from open-meteo.com. Check your connection and tap Refresh."}</div>`;
+    return;
+  }
+  status.textContent = `Next 7 days · ${swellBusy ? 'updating' : swellFailed ? `couldn't update, showing ${ago(swell.at)}` : `updated ${ago(swell.at)}`}`;
+
+  // Columns: every 6 hours (UK time), from the current block onwards.
+  const now = Date.now(), cols = [];
+  swell.time.forEach((ms, i) => {
+    if (cols.length < SWELL.cols && ms > now - SWELL.stepH * H && ukAt(ms).hour % SWELL.stepH === 0) cols.push(i);
+  });
+  if (!cols.length) return;
+
+  // Headline: the biggest swell forecast off Saltburn.
+  const home = swell.rows[swell.rows.length - 1];
+  let best = -1;
+  cols.forEach((i) => { if (home.h[i] != null && (best < 0 || home.h[i] > home.h[best])) best = i; });
+  if (best >= 0) {
+    const ms = swell.time[best], u = ukAt(ms);
+    const [y, m, d] = u.day.split('-').map(Number), dayMs = Date.UTC(y, m - 1, d);
+    head.hidden = false;
+    head.innerHTML = `<div class="k">Biggest swell off Saltburn this week</div>` +
+      `<div class="big">${home.h[best].toFixed(1)}<small>m</small>${home.p[best] != null ? ` ${Math.round(home.p[best])}<small>s</small>` : ''}</div>` +
+      `<div class="d">${home.d[best] != null ? `From ${compass(home.d[best])} · ` : ''}${fWindWeekday.format(dayMs)} ${fWindDate.format(dayMs)}, ${pad2(u.hour)}:00</div>`;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'hgrid';
+  grid.style.gridTemplateColumns = `var(--hlab) repeat(${cols.length}, var(--hcol))`;
+  // Header: day names spanning their columns, then the hours.
+  const corner = () => { const c = document.createElement('div'); c.className = 'hlab'; return c; };
+  grid.appendChild(corner());
+  const groups = [];
+  cols.forEach((i) => { const k = ukAt(swell.time[i]).day, g = groups[groups.length - 1]; if (g && g.k === k) g.n++; else groups.push({ k, n: 1 }); });
+  groups.forEach((g) => {
+    const [y, m, d] = g.k.split('-').map(Number), ms = Date.UTC(y, m - 1, d);
+    const el = document.createElement('div');
+    el.className = 'hday';
+    el.style.gridColumn = `span ${g.n}`;
+    el.textContent = g.n > 1 ? `${fWindWeekday.format(ms).slice(0, 3)} ${d}` : `${d}`;
+    grid.appendChild(el);
+  });
+  grid.appendChild(corner());
+  cols.forEach((i, c) => {
+    const el = document.createElement('div');
+    el.className = 'hhr';
+    el.textContent = c === 0 ? 'now' : pad2(ukAt(swell.time[i]).hour);
+    grid.appendChild(el);
+  });
+  // One row per point, north to south.
+  SWELL.points.forEach((p, r) => {
+    const row = swell.rows[r], km = kmToSaltburn(p);
+    const lab = document.createElement('div');
+    lab.className = 'hlab';
+    const dist = km < 60 ? `${Math.round(km)} km out` : `${(Math.round(km / 10) * 10).toLocaleString('en-GB')} km · ${leadTime(km)}`;
+    lab.innerHTML = `<b>${p.name}</b><span>${dist}</span>`;
+    grid.appendChild(lab);
+    cols.forEach((i) => {
+      const h = row.h[i], per = row.p[i], dir = row.d[i];
+      const el = document.createElement('div');
+      el.className = 'hc';
+      if (h == null) { el.innerHTML = '<div class="v">–</div>'; el.setAttribute('aria-label', 'No data'); }
+      else {
+        el.style.background = swellShade(h);
+        el.innerHTML = `<div class="v">${h.toFixed(1)}</div><div class="p">` +
+          (dir != null ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(${Math.round(dir)}deg)"><path d="${ARROW}"/></svg>` : '') +
+          `${per != null ? Math.round(per) + 's' : ''}</div>`;
+        const u = ukAt(swell.time[i]);
+        el.setAttribute('aria-label', `${p.name}, ${u.day} ${pad2(u.hour)}:00: swell ${h.toFixed(1)} metres` +
+          (per != null ? `, ${Math.round(per)} seconds` : '') + (dir != null ? `, from ${compass(dir)}` : ''));
+      }
+      el.setAttribute('role', 'img');
+      grid.appendChild(el);
+    });
+  });
+  swellEl.appendChild(grid);
+
+  $('#swellFine').textContent = `Modelled swell, not the whole sea state, from ${swell.model ? swell.model + ' via ' : ''}Open-Meteo's marine models, every 6 hours in UK time. ` +
+    'Each box is swell height in metres, with its period and an arrow for the way it is travelling; darker means bigger. ' +
+    'A swell coming our way shows as a diagonal, reaching the northern points first. Only swell heading roughly south or south-west reaches Saltburn. ' +
+    'Under each place is its distance from Saltburn and how long a 12-second swell takes to cover it (about 800 km a day; longer periods travel faster).';
+}
+
 /* ---------------- Today ----------------
    Saltburn right now and for the rest of today, from the same wind and tide
    data as the Forecast tabs. */
@@ -1428,10 +1614,11 @@ function renderToday() {
 }
 function renderLocal() {
   document.querySelectorAll('.lightLabel').forEach((el) => { el.textContent = `Under ${speedIn(WIND.light)} ${UNIT_S()}`; });
-  renderToday(); renderCam(); renderWind(); renderTides();
+  renderToday(); renderCam(); renderSwell(); renderWind(); renderTides();
 }
 function refreshLocal(force) {
   const now = route === 'today' || route === 'cam';
+  if (route === 'swell') refreshSwell(force);
   if (now || route === 'wind') refreshWind(force);
   if (now || route === 'tides') refreshTides(force);
 }
@@ -1440,7 +1627,7 @@ function refreshLocal(force) {
    Today, Cam, or one of the Forecast tabs. The hash names the view so links and
    home-screen bookmarks open in the right place; tab taps replace it rather
    than stacking history. The charts only start loading on first visit. */
-const ROUTES = ['today', 'cam', 'pressure', 'wind', 'tides'];
+const ROUTES = ['today', 'cam', 'pressure', 'swell', 'wind', 'tides'];
 // The shop's live stream: loaded only while Cam is open, so it costs no data otherwise.
 const CAM_SRC = 'https://www.youtube.com/embed/4BAG3xt3YQo?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1';
 const camFrame = $('#camFrame');
@@ -1466,6 +1653,7 @@ function syncRoute() {
   }
   if (r !== 'cam' && camFrame.dataset.on === '1') { camFrame.src = 'about:blank'; camFrame.dataset.on = ''; }
   $('#sPressure').hidden = r !== 'pressure';
+  $('#sSwell').hidden = r !== 'swell';
   $('#sWind').hidden = r !== 'wind';
   $('#sTides').hidden = r !== 'tides';
   document.querySelectorAll('.tabbar button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.route === top)));
@@ -1477,7 +1665,7 @@ function syncRoute() {
     stopPlay();
     if (adjusting) exitAdjust();
   }
-  if (r !== prev) { const pane = { today: '#vToday', cam: '#vCam', wind: '#sWind', tides: '#sTides' }[r]; if (pane) $(pane).scrollTop = 0; }
+  if (r !== prev) { const pane = { today: '#vToday', cam: '#vCam', swell: '#sSwell', wind: '#sWind', tides: '#sTides' }[r]; if (pane) $(pane).scrollTop = 0; }
   refreshLocal();
 }
 window.addEventListener('popstate', syncRoute);
@@ -1491,6 +1679,7 @@ $('#todayReload').addEventListener('click', () => refreshLocal(true));
 $('#todaySettings').addEventListener('click', openSheet);
 $('#windReload').addEventListener('click', () => refreshWind(true));
 $('#tideReload').addEventListener('click', () => refreshTides(true));
+$('#swellReload').addEventListener('click', () => refreshSwell(true));
 
 /* ---------------- Keyboard ---------------- */
 document.addEventListener('keydown', (e) => {
