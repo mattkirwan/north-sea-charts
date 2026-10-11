@@ -1,0 +1,41 @@
+# Every half hour, collect the latest measured waves (scripts/fetch-waves.mjs)
+# and publish them as waves.json on the `data` branch, which the app reads.
+# The branch holds a single commit that is replaced each time, so the repo
+# doesn't grow and main's history stays clean.
+name: Collect latest waves
+
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: waves
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Fetch from EMODnet
+        run: node scripts/fetch-waves.mjs "$RUNNER_TEMP/waves.json"
+      - name: Publish to the data branch
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP"
+          mkdir out && mv waves.json out/ && cd out
+          git init -q -b data
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add waves.json
+          git commit -q -m "Latest waves $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data
