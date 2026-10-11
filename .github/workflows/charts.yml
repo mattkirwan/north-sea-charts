@@ -1,0 +1,58 @@
+# Every hour, draw our own pressure charts from the newest complete NOAA GFS run
+# (scripts/gfs_charts.py) and publish them on the `charts` branch, which the app
+# reads. Skips quickly when that run is already published. The branch holds a
+# single commit replaced each time, so the repo doesn't grow.
+name: Draw GFS charts
+
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+    inputs:
+      check:
+        description: 'Also make side-by-side checks against Wetterzentrale and print spot values'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: charts
+  cancel-in-progress: false
+
+jobs:
+  draw:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libeccodes-dev > /dev/null
+          pip install -q cfgrib eccodes xarray matplotlib cartopy scipy
+      - name: Which run is published
+        id: pub
+        run: |
+          run=$(curl -fsS "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/charts/manifest.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["runLabel"])' || true)
+          echo "Published: ${run:-none}"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+      - name: Draw
+        env:
+          PUBLISHED_RUN: ${{ steps.pub.outputs.run }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
+        run: python scripts/gfs_charts.py "$RUNNER_TEMP/charts" ${{ inputs.check && '--check' || '' }}
+      - name: Publish to the charts branch
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP/charts" 2>/dev/null && [ -f manifest.json ] || { echo 'Nothing new to publish'; exit 0; }
+          git init -q -b charts
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -q -m "GFS charts $(python3 -c 'import json; print(json.load(open("manifest.json"))["runLabel"])')"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" charts
