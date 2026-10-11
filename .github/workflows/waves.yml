@@ -8,11 +8,6 @@ on:
   schedule:
     - cron: '7,37 * * * *'
   workflow_dispatch:
-    inputs:
-      probe:
-        description: 'Only describe what EMODnet holds (for debugging); publish nothing'
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -30,14 +25,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Describe what EMODnet holds
-        if: ${{ inputs.probe }}
-        run: node scripts/fetch-waves.mjs --probe
-      - name: Fetch from EMODnet
-        if: ${{ !inputs.probe }}
+      - name: Fetch from NOAA NDBC
         run: node scripts/fetch-waves.mjs "$RUNNER_TEMP/waves.json"
       - name: Publish to the data branch
-        if: ${{ !inputs.probe }}
         env:
           TOKEN: ${{ github.token }}
         run: |
