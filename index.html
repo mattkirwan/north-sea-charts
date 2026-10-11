@@ -145,6 +145,22 @@ body.adjust #stage{cursor:move}
 .wlegend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--slate);padding-top:14px;margin-top:14px;border-top:1px solid var(--hair)}
 .wlegend span{display:inline-flex;align-items:center;gap:6px}
 .sw{width:14px;height:14px;border-radius:4px;display:inline-block}
+.tabs{display:flex;gap:4px;padding:4px;margin:14px auto 0;border-radius:14px;background:rgba(232,238,241,.07)}
+.tabs button{flex:1;padding:9px 0;border-radius:10px;font-size:15px;font-weight:500;color:var(--slate)}
+.tabs button[aria-selected="true"]{background:var(--paper);color:var(--ink);font-weight:600}
+.tnote{font-size:14px;color:var(--slate);line-height:1.35}
+.tev{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;margin-bottom:8px}
+.te{border-radius:9px;padding:6px 8px 7px;background:var(--w-none);font-variant-numeric:tabular-nums}
+.te .k{font-size:12px;color:var(--slate)}
+.te .tt{font-family:var(--f-cond);font-weight:600;font-size:21px;line-height:1.15}
+.te .h{font-size:13px;color:var(--slate)}
+.te.hi .k{color:var(--glass)}
+.te.past{opacity:.35}
+.tcurve{position:relative;touch-action:pan-y}
+.tcurve svg{display:block;width:100%;height:72px;overflow:visible}
+.tread{position:absolute;top:-2px;transform:translateX(-50%);font-size:12px;white-space:nowrap;background:var(--ink-90);
+  padding:2px 7px;border-radius:999px;pointer-events:none;font-variant-numeric:tabular-nums}
+.taxis{display:flex;justify-content:space-between;font-size:11px;color:var(--slate);margin-top:3px;padding:0 1px}
 .wmsg{padding:28px 0;text-align:center;color:var(--slate);font-size:15px;line-height:1.45}
 @media (max-width:360px){.wc .s{font-size:18px}.wgrid{gap:2px}}
 
@@ -195,7 +211,7 @@ body.adjust #stage{cursor:move}
     <button class="btn play" id="play" aria-label="Play"><svg viewBox="0 0 24 24" fill="currentColor"><path id="playIcon" d="M8 5.5v13l11-6.5z"/></svg></button>
     <button class="btn" id="next" aria-label="Next frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
     <div class="run" id="run">Finding the latest run</div>
-    <button class="btn" id="windBtn" aria-label="Saltburn wind"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9h10.5a2.5 2.5 0 1 0-2.5-2.5M3 13h15a2.5 2.5 0 1 1-2.5 2.5M3 17h7"/></svg></button>
+    <button class="btn" id="localBtn" aria-label="Saltburn wind and tides"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9h10.5a2.5 2.5 0 1 0-2.5-2.5M3 13h15a2.5 2.5 0 1 1-2.5 2.5M3 17h7"/></svg></button>
     <button class="btn" id="more" aria-label="Chart settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
   </div>
 </footer>
@@ -206,14 +222,19 @@ body.adjust #stage{cursor:move}
   <button class="pill primary" id="adjDone">Done</button>
 </div>
 
-<section class="wind" id="wind" hidden aria-labelledby="windTitle">
+<section class="wind" id="local" hidden aria-labelledby="localTitle">
   <div class="whead">
     <div>
-      <h2 id="windTitle">Saltburn wind</h2>
-      <div class="wsub" id="windSub">Today and the next 5 days</div>
+      <h2 id="localTitle">Saltburn</h2>
+      <div class="wsub" id="localSub">Today and the next 5 days</div>
     </div>
-    <button class="pill primary" id="windBack">Charts</button>
+    <button class="pill primary" id="localBack">Charts</button>
   </div>
+  <div class="tabs" role="tablist" aria-label="Local conditions">
+    <button role="tab" id="tabWind" data-tab="wind" aria-controls="windPane">Wind</button>
+    <button role="tab" id="tabTides" data-tab="tides" aria-controls="tidePane">Tides</button>
+  </div>
+  <div id="windPane" role="tabpanel" aria-labelledby="tabWind">
   <div class="wtools">
     <div class="seg" id="segUnit"></div>
     <button class="pill" id="windReload">Refresh</button>
@@ -224,6 +245,15 @@ body.adjust #stage{cursor:move}
     <span><i class="sw xon"></i>Cross-onshore</span><span><i class="sw on"></i>Onshore</span><span><i class="sw light"></i>Under 5 kn</span>
   </div>
   <p class="fine" id="windFine"></p>
+  </div>
+  <div id="tidePane" role="tabpanel" aria-labelledby="tabTides" hidden>
+    <div class="wtools">
+      <div class="tnote" id="tideTrend"></div>
+      <button class="pill" id="tideReload">Refresh</button>
+    </div>
+    <div id="tideDays"></div>
+    <p class="fine" id="tideFine"></p>
+  </div>
 </section>
 
 <div class="sheet" id="sheet" hidden>
@@ -855,16 +885,29 @@ const UNIT_SHORT = { kn: 'kn', mph: 'mph', kmh: 'km/h' };
 const UNIT_S = () => UNIT_SHORT[opts.windUnit];
 const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 const SIDE = { off: 'offshore', xoff: 'cross-offshore', xon: 'cross-onshore', on: 'onshore', light: 'light' };
-const fUkParts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' });
+const fUkParts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const fWindWeekday = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'long' });
 const fWindDate = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', day: 'numeric', month: 'short' });
-const windEl = $('#wind'), windDays = $('#windDays');
+const localEl = $('#local'), windDays = $('#windDays');
+let localTab = store.get('nsv.localTab', 'wind');
+const showing = (tab) => !localEl.hidden && localTab === tab;
 let wind = store.get('nsv.wind', null);
 let windBusy = false, windFailed = false;
 
-function ukNow() {
-  const p = Object.fromEntries(fUkParts.formatToParts(Date.now()).map((x) => [x.type, x.value]));
-  return { day: `${p.year}-${p.month}-${p.day}`, hour: +p.hour };
+// UK calendar day and clock time, whatever zone the phone is set to.
+function ukAt(ms = Date.now()) {
+  const p = Object.fromEntries(fUkParts.formatToParts(ms).map((x) => [x.type, x.value]));
+  return { day: `${p.year}-${p.month}-${p.day}`, hour: +p.hour, min: +p.minute };
+}
+const ukNow = () => ukAt();
+function dayHeading(k, i) {
+  const [y, m, d] = k.split('-').map(Number), ms = Date.UTC(y, m - 1, d);
+  const h3 = document.createElement('h3');
+  h3.textContent = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fWindWeekday.format(ms);
+  const small = document.createElement('small');
+  small.textContent = (i < 2 ? fWindWeekday.format(ms).slice(0, 3) + ' ' : '') + fWindDate.format(ms);
+  h3.appendChild(small);
+  return h3;
 }
 const speedIn = (kn) => Math.round(kn * UNIT_K[opts.windUnit]);
 const compass = (deg) => COMPASS[Math.round(deg / 22.5) % 16];
@@ -949,9 +992,9 @@ function windCell(x, past) {
 }
 
 function renderWind() {
-  if (windEl.hidden) return;
+  if (!showing('wind')) return;
   seg($('#segUnit'), 'windUnit', UNITS);
-  const sub = $('#windSub');
+  const sub = $('#localSub');
   windDays.innerHTML = '';
   if (!wind) {
     sub.textContent = 'Today and the next 5 days';
@@ -965,14 +1008,9 @@ function renderWind() {
   sub.textContent = `Today and the next 5 days · ${status}`;
   const now = ukNow();
   windDaysList().forEach((d, i) => {
-    const [y, m, dd] = d.k.split('-').map(Number), ms = Date.UTC(y, m - 1, dd);
     const sec = document.createElement('section');
     sec.className = 'wday';
-    const h3 = document.createElement('h3');
-    h3.textContent = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fWindWeekday.format(ms);
-    const small = document.createElement('small');
-    small.textContent = (i < 2 ? fWindWeekday.format(ms).slice(0, 3) + ' ' : '') + fWindDate.format(ms);
-    h3.appendChild(small);
+    const h3 = dayHeading(d.k, i);
     const sum = document.createElement('div');
     sum.className = 'wsum';
     sum.textContent = daySummary(d.hours);
@@ -988,32 +1026,243 @@ function renderWind() {
     `${WIND.name} faces north-north-east, so south-westerlies blow offshore and north-easterlies onshore.`;
 }
 
-function syncWind() {
-  const show = location.hash === '#wind';
-  if (show === !windEl.hidden) return;
-  windEl.hidden = !show;
-  if (show) { stopPlay(); closeSheet(); windEl.scrollTop = 0; refreshWind(); $('#windBack').focus(); }
-  else $('#windBtn').focus();
+/* ---------------- Saltburn tides ----------------
+   Predicted sea level from Open-Meteo's marine model (free, no key) at sea
+   points off the River Tees and Whitby, averaged to stand in for Saltburn,
+   which sits between them. Highs and lows are found from the hourly curve.
+   Heights are relative to mean sea level, not chart datum. */
+const TIDE = {
+  ports: [{ name: 'River Tees', lat: 54.66, lon: -1.1 }, { name: 'Whitby', lat: 54.5, lon: -0.6 }],
+  maxAge: 3 * H,
+  url() {
+    return `https://marine-api.open-meteo.com/v1/marine?latitude=${this.ports.map((p) => p.lat)}&longitude=${this.ports.map((p) => p.lon)}` +
+      '&hourly=sea_level_height_msl&timezone=GMT&timeformat=unixtime&past_days=1&forecast_days=7';
+  }
+};
+const fUkTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const tideDays = $('#tideDays');
+let tides = store.get('nsv.tides', null);
+let tideBusy = false, tideFailed = false;
+const metres = (m) => `${m < 0 ? '−' : '+'}${Math.abs(m).toFixed(1)} m`;
+const ukClock = (ms) => fUkTime.format(Math.round(ms / 300e3) * 300e3); // to the nearest 5 min
+
+async function fetchTides() {
+  for (const extra of ['&cell_selection=sea', '']) {
+    try {
+      const r = await fetch(TIDE.url() + extra, { cache: 'no-store' });
+      if (!r.ok) continue;
+      let j = await r.json();
+      if (!Array.isArray(j)) j = [j];
+      const ok = j.map((x) => x && x.hourly && x.hourly.time && x.hourly.sea_level_height_msl &&
+        x.hourly.sea_level_height_msl.some((v) => v != null) ? x.hourly : null);
+      const series = ok.filter(Boolean);
+      if (!series.length) continue;
+      const time = series[0].time.map((t) => t * 1000);
+      const level = time.map((_, i) => {
+        const v = series.map((h) => h.sea_level_height_msl[i]).filter((x) => x != null);
+        return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+      });
+      return { at: Date.now(), time, level, used: TIDE.ports.filter((_, i) => ok[i]).map((p) => p.name) };
+    } catch {}
+  }
+  throw new Error('No tide forecast');
 }
-function openWind() {
-  if (location.hash !== '#wind') history.pushState({ wind: true }, '', '#wind');
-  syncWind();
+async function refreshTides(force) {
+  const fresh = tides && Date.now() - tides.at < TIDE.maxAge;
+  if (tideBusy || (fresh && !force)) { renderTides(); return; }
+  tideBusy = true;
+  renderTides();
+  try { tides = await fetchTides(); tideFailed = false; store.set('nsv.tides', tides); }
+  catch { tideFailed = true; }
+  tideBusy = false;
+  renderTides();
 }
-function closeWind() {
-  if (history.state && history.state.wind) { history.back(); return; }
+
+// Highs and lows: a turning point in the hourly levels, refined with a parabola
+// through it and its neighbours. Repeats of the same kind keep the more extreme.
+function tideTurns(t, y) {
+  const out = [];
+  for (let i = 1; i < y.length - 1; i++) {
+    const a = y[i - 1], b = y[i], c = y[i + 1];
+    if (a == null || b == null || c == null) continue;
+    const hi = b > a && b >= c;
+    if (!hi && !(b < a && b <= c)) continue;
+    const den = a - 2 * b + c;
+    const off = den ? Math.max(-0.5, Math.min(0.5, 0.5 * (a - c) / den)) : 0;
+    const ev = { hi, ms: t[i] + off * H, m: b - 0.25 * (a - c) * off };
+    const last = out[out.length - 1];
+    if (last && last.hi === hi) { if (hi ? ev.m > last.m : ev.m < last.m) out[out.length - 1] = ev; }
+    else out.push(ev);
+  }
+  return out;
+}
+const levelAt = (ms) => {
+  const { time: t, level: y } = tides;
+  const i = Math.floor((ms - t[0]) / H);
+  if (i < 0 || i >= t.length - 1 || y[i] == null || y[i + 1] == null) return null;
+  return y[i] + (y[i + 1] - y[i]) * (ms - t[i]) / H;
+};
+
+function tideDayList() {
+  const today = ukNow().day, days = [];
+  tides.time.forEach((ms) => {
+    const u = ukAt(ms);
+    if (u.day < today || u.hour !== 0) return;
+    if (days.length < WIND.days) days.push({ k: u.day, start: ms });
+  });
+  days.forEach((d, i) => { d.end = days[i + 1] ? days[i + 1].start : d.start + 24 * H; });
+  return days;
+}
+function maxRange(evs) {
+  let r = 0;
+  for (let i = 1; i < evs.length; i++) r = Math.max(r, Math.abs(evs[i].m - evs[i - 1].m));
+  return r;
+}
+
+function tideCurve(d, turns, lo, hi) {
+  const W = Math.max(240, Math.round(tideDays.clientWidth || 340)), Hh = 72, pad = 7;
+  const x = (ms) => (ms - d.start) / (d.end - d.start) * W;
+  const y = (m) => pad + (hi - m) / (hi - lo) * (Hh - 2 * pad);
+  const pts = [];
+  tides.time.forEach((ms, i) => {
+    if (ms >= d.start - H && ms <= d.end + H && tides.level[i] != null) pts.push([x(ms).toFixed(1), y(tides.level[i]).toFixed(1)]);
+  });
+  const wrap = document.createElement('div');
+  wrap.className = 'tcurve';
+  if (pts.length < 2) return wrap;
+  const line = 'M' + pts.map((p) => p.join(',')).join('L');
+  const now = Date.now(), nowIn = now >= d.start && now < d.end, nowM = nowIn ? levelAt(now) : null;
+  const grid = [6, 12, 18].map((h) => `<line x1="${x(d.start + h * H)}" x2="${x(d.start + h * H)}" y1="0" y2="${Hh}" stroke="var(--hair)"/>`).join('');
+  const dots = turns.filter((e) => e.ms >= d.start && e.ms < d.end)
+    .map((e) => `<circle cx="${x(e.ms).toFixed(1)}" cy="${y(e.m).toFixed(1)}" r="4" fill="${e.hi ? 'var(--glass)' : 'var(--ink)'}" stroke="var(--glass)" stroke-width="2"/>`).join('');
+  wrap.innerHTML =
+    `<svg viewBox="0 0 ${W} ${Hh}" style="overflow:hidden" aria-hidden="true">${grid}` +
+    `<line x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="var(--slate)" stroke-opacity=".5" stroke-dasharray="3 4"/>` +
+    `<path d="${line}L${pts[pts.length - 1][0]},${Hh}L${pts[0][0]},${Hh}Z" fill="var(--glass)" fill-opacity=".14"/>` +
+    `<path d="${line}" fill="none" stroke="var(--glass)" stroke-width="2" stroke-linejoin="round"/>` +
+    (nowIn ? `<line x1="${x(now)}" x2="${x(now)}" y1="0" y2="${Hh}" stroke="var(--amber)" stroke-width="2"/>` +
+      (nowM != null ? `<circle cx="${x(now)}" cy="${y(nowM)}" r="4" fill="var(--amber)"/>` : '') : '') +
+    dots + `<line class="cur" x1="0" x2="0" y1="0" y2="${Hh}" stroke="var(--paper)" stroke-width="1.5" visibility="hidden"/></svg>` +
+    '<div class="tread" hidden></div><div class="taxis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
+  // Touch or hover anywhere on the curve to read the level at that time.
+  const svg = wrap.querySelector('svg'), cur = wrap.querySelector('.cur'), read = wrap.querySelector('.tread');
+  let hideTimer = 0;
+  const readAt = (e) => {
+    const r = svg.getBoundingClientRect();
+    const px = Math.max(0, Math.min(r.width, e.clientX - r.left));
+    const ms = d.start + px / r.width * (d.end - d.start), m = levelAt(ms);
+    if (m == null) return;
+    clearTimeout(hideTimer);
+    cur.setAttribute('x1', px / r.width * W); cur.setAttribute('x2', px / r.width * W);
+    cur.setAttribute('visibility', 'visible');
+    read.hidden = false;
+    read.textContent = `${fUkTime.format(ms)} · ${metres(m)}`;
+    read.style.left = Math.max(48, Math.min(r.width - 48, px)) + 'px';
+  };
+  const hide = () => { hideTimer = setTimeout(() => { cur.setAttribute('visibility', 'hidden'); read.hidden = true; }, 1200); };
+  svg.addEventListener('pointerdown', readAt);
+  svg.addEventListener('pointermove', readAt);
+  svg.addEventListener('pointerup', hide);
+  svg.addEventListener('pointerleave', hide);
+  svg.addEventListener('pointercancel', hide);
+  return wrap;
+}
+
+function renderTides() {
+  if (!showing('tides')) return;
+  const sub = $('#localSub'), trend = $('#tideTrend');
+  tideDays.innerHTML = '';
+  trend.textContent = '';
+  if (!tides) {
+    sub.textContent = 'Today and the next 5 days';
+    const m = document.createElement('div');
+    m.className = 'wmsg';
+    m.textContent = tideBusy ? 'Loading the tide forecast' : "Couldn't load the tide forecast from open-meteo.com. Check your connection and tap Refresh.";
+    tideDays.appendChild(m);
+    return;
+  }
+  const status = tideBusy ? 'updating' : tideFailed ? `couldn't update, showing ${ago(tides.at)}` : `updated ${ago(tides.at)}`;
+  sub.textContent = `Today and the next 5 days · ${status}`;
+  const turns = tideTurns(tides.time, tides.level), days = tideDayList(), now = Date.now();
+  if (!days.length) return;
+  const inView = tides.level.filter((m, i) => m != null && tides.time[i] >= days[0].start - H && tides.time[i] <= days[days.length - 1].end + H);
+  const lo = Math.min(...inView), hi = Math.max(...inView);
+  const ranges = days.map((d) => maxRange(turns.filter((e) => e.ms >= d.start - 7 * H && e.ms < d.end + 7 * H)));
+  const dr = ranges[ranges.length - 1] - ranges[0];
+  trend.textContent = dr > 0.3 ? 'Ranges growing towards springs' : dr < -0.3 ? 'Ranges easing towards neaps' : 'Ranges steady this week';
+  days.forEach((d, i) => {
+    const sec = document.createElement('section');
+    sec.className = 'wday';
+    const sum = document.createElement('div');
+    sum.className = 'wsum';
+    sum.textContent = ranges[i] ? `Range up to ${ranges[i].toFixed(1)} m` : '';
+    const evs = document.createElement('div');
+    evs.className = 'tev';
+    turns.filter((e) => e.ms >= d.start && e.ms < d.end).forEach((e) => {
+      const el = document.createElement('div');
+      el.className = 'te' + (e.hi ? ' hi' : '') + (e.ms < now ? ' past' : '');
+      el.innerHTML = `<div class="k">${e.hi ? 'High' : 'Low'}</div><div class="tt">${ukClock(e.ms)}</div><div class="h">${metres(e.m)}</div>`;
+      el.setAttribute('aria-label', `${e.hi ? 'High' : 'Low'} water ${ukClock(e.ms)}, ${metres(e.m)}`);
+      evs.appendChild(el);
+    });
+    sec.append(dayHeading(d.k, i), sum, evs, tideCurve(d, turns, lo, hi));
+    tideDays.appendChild(sec);
+  });
+  const used = tides.used.length > 1 ? `averaged between sea points off ${tides.used.join(' and ')}` : `for a sea point off ${tides.used[0]}`;
+  $('#tideFine').textContent = `Predicted sea level from Open-Meteo's marine model, ${used}. ` +
+    'Heights are metres above or below mean sea level, the dashed line, not chart datum, so they won\'t match tide-table heights; the range between high and low does. ' +
+    'Times are UK time to the nearest 5 minutes and can differ from the official tables by 15–30 minutes. ' +
+    'Touch the curve to read the level at any time; the amber line is now.';
+}
+
+/* ---------------- Switching between charts, wind and tides ---------------- */
+function setTab(tab) {
+  localTab = tab === 'tides' ? 'tides' : 'wind';
+  store.set('nsv.localTab', localTab);
+  $('#tabWind').setAttribute('aria-selected', String(localTab === 'wind'));
+  $('#tabTides').setAttribute('aria-selected', String(localTab === 'tides'));
+  $('#windPane').hidden = localTab !== 'wind';
+  $('#tidePane').hidden = localTab !== 'tides';
+}
+function refreshLocal(force) {
+  if (showing('wind')) refreshWind(force);
+  if (showing('tides')) refreshTides(force);
+}
+function syncLocal() {
+  const m = /^#(wind|tides)$/.exec(location.hash), was = !localEl.hidden;
+  if (m) setTab(m[1]);
+  localEl.hidden = !m;
+  if (m && !was) { stopPlay(); closeSheet(); localEl.scrollTop = 0; $('#localBack').focus(); }
+  if (!m && was) $('#localBtn').focus();
+  refreshLocal();
+}
+function openLocal() {
+  if (location.hash !== '#' + localTab) history.pushState({ local: true }, '', '#' + localTab);
+  syncLocal();
+}
+function closeLocal() {
+  if (history.state && history.state.local) { history.back(); return; }
   history.replaceState(null, '', location.pathname + location.search);
-  syncWind();
+  syncLocal();
 }
-window.addEventListener('popstate', syncWind);
-window.addEventListener('hashchange', syncWind);
-$('#windBtn').addEventListener('click', openWind);
-$('#windBack').addEventListener('click', closeWind);
+window.addEventListener('popstate', syncLocal);
+window.addEventListener('hashchange', syncLocal);
+document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
+  if (b.dataset.tab === localTab) return;
+  history.replaceState(history.state, '', '#' + b.dataset.tab);
+  localEl.scrollTop = 0;
+  syncLocal();
+}));
+$('#localBtn').addEventListener('click', openLocal);
+$('#localBack').addEventListener('click', closeLocal);
 $('#windReload').addEventListener('click', () => refreshWind(true));
+$('#tideReload').addEventListener('click', () => refreshTides(true));
+setTab(localTab);
 
 /* ---------------- Keyboard ---------------- */
 document.addEventListener('keydown', (e) => {
   if (!sheet.hidden) { if (e.key === 'Escape') closeSheet(); return; }
-  if (!windEl.hidden) { if (e.key === 'Escape') closeWind(); return; }
+  if (!localEl.hidden) { if (e.key === 'Escape') closeLocal(); return; }
   if (adjusting) { if (e.key === 'Escape' || e.key === 'Enter') exitAdjust(); return; }
   if (e.key === 'ArrowRight') { stopPlay(); step(1); e.preventDefault(); }
   else if (e.key === 'ArrowLeft') { stopPlay(); step(-1); e.preventDefault(); }
@@ -1036,24 +1285,24 @@ async function checkForNewRun() {
 setInterval(checkForNewRun, 10 * 60e3);
 setInterval(() => {
   updateRunLine(); placeNow(); if (frames[idx]) renderMeta(frames[idx]);
-  if (!windEl.hidden) refreshWind();
+  refreshLocal();
 }, 30e3);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && Date.now() - lastCheck > 60e3) checkForNewRun();
-  if (!document.hidden && !windEl.hidden) refreshWind();
+  if (!document.hidden) refreshLocal();
 });
 let resizeTimer = 0;
 window.addEventListener('resize', () => {
   applyView();
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => { layoutDays(); placeNow(); }, 120);
+  resizeTimer = setTimeout(() => { layoutDays(); placeNow(); renderTides(); }, 120);
 });
 
 /* ---------------- Start ---------------- */
 view = loadView();
 maybeHint();
 load({ keepValid: false });
-syncWind();
+syncLocal();
 })();
 </script>
 </body>
