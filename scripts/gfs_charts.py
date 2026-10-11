@@ -35,16 +35,17 @@ from scipy.ndimage import gaussian_filter, maximum_filter, minimum_filter
 
 BUCKET = 'https://noaa-gfs-bdp-pds.s3.amazonaws.com'
 STEPS = list(range(0, 169, 6))
-AREA = dict(w=-40, e=45, s=35, n=85)          # data we keep
-VIEW = [-22, 32, 48, 77]                       # map extent: lon W, lon E, lat S, lat N
+AREA = dict(w=-90, e=90, s=20, n=90)          # data we keep: well beyond the map, so colour fills it
+VIEW = [-24, 30, 47, 76]                       # map extent: lon W, lon E, lat S, lat N
 SALTBURN = (54.583, -0.973)
 PROJ = ccrs.LambertConformal(central_longitude=5, central_latitude=62, standard_parallels=(55, 70))
 FIELDS = {'PRMSL:mean sea level': 'prmsl', 'HGT:500 mb': 'gh'}
 
-INK, LAND, PAPER = '#173242', '#29495b', '#E8EEF1'
-# 500 hPa height in decametres: cold blues below ~552, warm oranges above, grey between.
-HGT_CMAP = LinearSegmentedColormap.from_list('h500', ['#2b4c8c', '#3f7fbf', '#7fb2d9', '#c9d5db', '#f2c38a', '#e08a3c', '#b8501d'])
-HGT_LEVELS = np.arange(500, 601, 4)
+INK, PAPER, COAST = '#173242', '#E8EEF1', '#0F2230'
+# 500 hPa height in decametres: cold (low) blues through a pale middle around
+# 552 dam to warm (high) oranges; opaque, so bands don't show seams.
+HGT_CMAP = LinearSegmentedColormap.from_list('h500', ['#1d3b78', '#2c66a8', '#4f93c8', '#93c0dc', '#d6dccf', '#efc58d', '#e39a52', '#c8662c', '#9c3f1c'])
+HGT_LEVELS = np.arange(496, 605, 4)
 
 
 def get(url, rng=None, timeout=60):
@@ -106,9 +107,10 @@ def extrema(field, lons, lats, size, kind):
     sm = gaussian_filter(field, 3)
     filt = maximum_filter if kind == 'H' else minimum_filter
     peaks = np.argwhere(sm == filt(sm, size=size, mode='nearest'))
+    wide = filt(sm, size=size * 3, mode='nearest')  # keep only centres that dominate a wider area
     out = []
     for y, x in peaks:
-        if 8 < y < field.shape[0] - 8 and 8 < x < field.shape[1] - 8:
+        if 8 < y < field.shape[0] - 8 and 8 < x < field.shape[1] - 8 and abs(sm[y, x] - wide[y, x]) < 0.6:
             lo, la = float(lons[x]), float(lats[y])
             if VIEW[0] - 2 <= lo <= VIEW[1] + 2 and VIEW[2] - 1 <= la <= VIEW[3] + 1:
                 out.append((lo, la, float(field[y, x])))
@@ -119,24 +121,32 @@ def draw(run, step, f, path):
     p = f['prmsl'].values / 100.0                  # Pa -> hPa
     h = f['gh'].values / 10.0                      # gpm -> dam
     lons, lats = f['prmsl'].longitude.values, f['prmsl'].latitude.values
-    fig = plt.figure(figsize=(9, 11.5), dpi=100)
+    # Size the image to the map's own shape so there are no empty margins.
+    probe = plt.figure()
+    pax = probe.add_axes([0, 0, 1, 1], projection=PROJ)
+    pax.set_extent(VIEW, crs=ccrs.PlateCarree())
+    x0, x1, y0, y1 = pax.get_extent()
+    plt.close(probe)
+    width = 9.0
+    fig = plt.figure(figsize=(width, width * (y1 - y0) / (x1 - x0)), dpi=100)
     ax = fig.add_axes([0, 0, 1, 1], projection=PROJ)
     ax.set_extent(VIEW, crs=ccrs.PlateCarree())
     ax.set_facecolor(INK)
-    ax.add_feature(cfeature.LAND.with_scale('50m'), facecolor=LAND, edgecolor='none', zorder=1)
-    ax.contourf(lons, lats, h, levels=HGT_LEVELS, cmap=HGT_CMAP, extend='both', alpha=0.55, transform=ccrs.PlateCarree(), zorder=2)
-    ax.add_feature(cfeature.COASTLINE.with_scale('50m'), edgecolor=(0.91, 0.93, 0.95, 0.55), linewidth=0.6, zorder=3)
+    cf = ax.contourf(lons, lats, gaussian_filter(h, 1.0), levels=HGT_LEVELS, cmap=HGT_CMAP, extend='both', transform=ccrs.PlateCarree(), zorder=2, antialiased=False)
+    cf.set_edgecolor('face')  # fill the hairline seams between bands
+    ax.add_feature(cfeature.COASTLINE.with_scale('50m'), edgecolor=COAST, linewidth=0.9, zorder=3)
+    ax.add_feature(cfeature.BORDERS.with_scale('50m'), edgecolor=COAST, linewidth=0.4, alpha=0.5, zorder=3)
     ps = gaussian_filter(p, 1.0)
     cs = ax.contour(lons, lats, ps, levels=np.arange(920, 1072, 4), colors=PAPER, linewidths=1.0, transform=ccrs.PlateCarree(), zorder=4)
-    ax.clabel(cs, fmt='%d', fontsize=9, inline=True, inline_spacing=4)
-    for kind, colour in (('L', '#ff7a5c'), ('H', '#7ED6C3')):
+    ax.clabel(cs, fmt='%d', fontsize=10, inline=True, inline_spacing=5)
+    for kind, colour in (('L', '#b3001b'), ('H', '#0b3d91')):
         for lo, la, v in extrema(p, lons, lats, 60, kind):
             ax.text(lo, la, kind, color=colour, fontsize=22, fontweight='bold', ha='center', va='center', transform=ccrs.PlateCarree(), zorder=5)
             ax.text(lo, la - 0.9, f'{v:.0f}', color=colour, fontsize=10, fontweight='bold', ha='center', va='top', transform=ccrs.PlateCarree(), zorder=5)
-    ax.plot(SALTBURN[1], SALTBURN[0], 'o', ms=5, color='#FFC23D', transform=ccrs.PlateCarree(), zorder=6)
+    ax.plot(SALTBURN[1], SALTBURN[0], 'o', ms=6, color='#FFC23D', mec=COAST, mew=1, transform=ccrs.PlateCarree(), zorder=6)
     valid = run + dt.timedelta(hours=step)
     ax.text(0.012, 0.008, f'GFS {run:%Hz %d %b} +{step}h · valid {valid:%a %d %b %H}z · NOAA data', transform=ax.transAxes,
-            color=PAPER, fontsize=9, alpha=0.8, zorder=6)
+            color=COAST, fontsize=9, zorder=6)
     ax.axis('off')
     fig.savefig(path, facecolor=INK)
     plt.close(fig)
@@ -184,6 +194,7 @@ def main():
     outdir = sys.argv[1]
     do_check = '--check' in sys.argv
     os.makedirs(outdir, exist_ok=True)
+    steps = [0, 24, 72] if os.environ.get('QUICK') else STEPS  # QUICK: a preview of the look
     run = latest_run()
     print(f'GFS run {run:%Y-%m-%d %H}z')
     # The workflow passes the run already published; nothing to do if it's this one.
@@ -191,7 +202,7 @@ def main():
         print('Already published; nothing to do.')
         return
     lows, highs = [], []
-    for step in STEPS:
+    for step in steps:
         f = fetch_fields(run, step)
         path = os.path.join(outdir, f'f{step:03d}.png')
         p, lons, lats = draw(run, step, f, path)
@@ -200,12 +211,12 @@ def main():
         print(f'  f{step:03d}: {lo:.0f}-{hi:.0f} hPa, {os.path.getsize(path) // 1024} KB')
         if do_check and step in (0, 24, 72, 120):
             check(run, step, p, lons, lats, path, outdir)
-    manifest = dict(run=int(run.timestamp() * 1000), runLabel=f'{run:%Y-%m-%d %H}z', steps=STEPS, file='f%03d.png',
+    manifest = dict(run=int(run.timestamp() * 1000), runLabel=f'{run:%Y-%m-%d %H}z', steps=steps, file='f%03d.png',
                     generated=int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000), source='NOAA GFS 0.25°',
                     pressure=dict(min=round(min(lows)), max=round(max(highs))))
     with open(os.path.join(outdir, 'manifest.json'), 'w') as fh:
         json.dump(manifest, fh)
-    print(f'Wrote {len(STEPS)} charts and manifest.json')
+    print(f'Wrote {len(steps)} charts and manifest.json')
 
 
 if __name__ == '__main__':
