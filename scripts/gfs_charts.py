@@ -113,7 +113,7 @@ def extrema(field, lons, lats, size, kind):
     for y, x in peaks:
         if 8 < y < field.shape[0] - 8 and 8 < x < field.shape[1] - 8 and abs(sm[y, x] - wide[y, x]) < 0.6:
             lo, la = float(lons[x]), float(lats[y])
-            if VIEW[0] - 2 <= lo <= VIEW[1] + 2 and VIEW[2] - 1 <= la <= VIEW[3] + 1:
+            if VIEW[0] + 1.5 <= lo <= VIEW[1] - 1.5 and VIEW[2] + 1 <= la <= VIEW[3] - 1:  # whole label inside the map
                 out.append((lo, la, float(field[y, x])))
     return out
 

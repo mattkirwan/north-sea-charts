@@ -484,7 +484,7 @@ const SPEEDS = [[700, 'Slow'], [420, 'Normal'], [220, 'Fast']];
 // Starting crop as a fraction of the source image: centre point and visible height.
 const DEFAULT_VIEWS = { EU: { cx: 0.53, cy: 0.34, span: 0.68 }, UK: { cx: 0.5, cy: 0.5, span: 1.02 }, GFS: { cx: 0.5, cy: 0.5, span: 1.0 } };
 const SRCS = [['ours', 'Ours (NOAA GFS)'], ['wz', 'Wetterzentrale']];
-const DEFAULTS = { src: 'wz', chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
+const DEFAULTS = { src: 'ours', chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
 
 const opts = Object.assign({}, DEFAULTS, store.get('nsv.opts', {}));
 const saveOpts = () => store.set('nsv.opts', opts);
