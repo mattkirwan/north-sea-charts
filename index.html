@@ -394,6 +394,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <h2 id="sheetTitle">Settings</h2>
     <div class="field"><span>Wind speed</span><div class="seg" id="segUnit"></div></div>
     <div id="chartSettings">
+    <div class="field"><span>Charts</span><div class="seg" id="segSrc"></div></div>
     <div class="field"><span>Chart</span><div class="seg" id="segChart"></div></div>
     <div class="field"><span>Map</span><div class="seg" id="segRegion"></div></div>
     <div class="field"><span>Model run</span><div class="seg" id="segRun"></div></div>
@@ -437,7 +438,9 @@ const store = {
 ------------------------------------------------------------------- */
 let cacheBust = 0;
 const runKey = (ms) => { const d = new Date(ms); return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}${pad2(d.getUTCHours())}`; };
-const SOURCE = {
+const SOURCES = {};
+SOURCES.wz = {
+  name: 'wetterzentrale.de',
   model: 'GFS',
   cycleH: 6,
   maxStep: 384,
@@ -452,6 +455,26 @@ const SOURCE = {
     return `https://wetterzentrale.de/en/topkarten.php?map=${map}&model=gfs&var=${o.chart}&time=${step}&run=${new Date(runMs).getUTCHours()}&lid=OP&h=0&mv=0&tr=${o.step}`;
   }
 };
+// Our own charts, drawn from NOAA's GFS data every hour by a GitHub Action
+// (scripts/gfs_charts.py) onto the repo's `charts` branch. Only the newest run
+// is kept, every 6 hours out to +168 h; manifest.json says which run it is.
+SOURCES.ours = {
+  name: 'NOAA GFS, drawn by this app',
+  model: 'GFS',
+  cycleH: 6,
+  maxStep: 168,
+  only: { step: 6, runOffset: 0 }, // options this source can't vary
+  region: 'GFS',
+  base: 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/charts/',
+  url(runMs, step) { return `${this.base}f${String(step).padStart(3, '0')}.png?run=${runKey(runMs)}${cacheBust ? '&v=' + cacheBust : ''}`; },
+  page() { return 'https://github.com/mattkirwan/north-sea-charts/tree/charts'; },
+  async latest() {
+    const r = await fetchT(`${this.base}manifest.json?t=${Math.floor(Date.now() / 300e3)}`, { cache: 'no-store' }, 15e3);
+    if (!r.ok) throw new Error(`manifest ${r.status}`);
+    const m = await r.json();
+    return { ms: m.run, how: 'manifest' };
+  }
+};
 
 const CHARTS = [['1', 'Pressure + 500 hPa'], ['9', '10 m wind']];
 const REGIONS = [['EU', 'North Sea crop'], ['UK', 'UK map']];
@@ -459,11 +482,16 @@ const DAYS = [[5, '5 days'], [7, '7 days'], [10, '10 days'], [16, '16 days']];
 const STEPS = [[6, '6 hours'], [3, '3 hours']];
 const SPEEDS = [[700, 'Slow'], [420, 'Normal'], [220, 'Fast']];
 // Starting crop as a fraction of the source image: centre point and visible height.
-const DEFAULT_VIEWS = { EU: { cx: 0.53, cy: 0.34, span: 0.68 }, UK: { cx: 0.5, cy: 0.5, span: 1.02 } };
-const DEFAULTS = { chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
+const DEFAULT_VIEWS = { EU: { cx: 0.53, cy: 0.34, span: 0.68 }, UK: { cx: 0.5, cy: 0.5, span: 1.02 }, GFS: { cx: 0.5, cy: 0.5, span: 1.0 } };
+const SRCS = [['ours', 'Ours (NOAA GFS)'], ['wz', 'Wetterzentrale']];
+const DEFAULTS = { src: 'wz', chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
 
 const opts = Object.assign({}, DEFAULTS, store.get('nsv.opts', {}));
 const saveOpts = () => store.set('nsv.opts', opts);
+let SOURCE = SOURCES[opts.src] || SOURCES.wz;
+// An option's value as the current source uses it (ours has fixed steps and one run).
+const opt = (k) => (SOURCE.only && k in SOURCE.only ? SOURCE.only[k] : opts[k]);
+const viewRegion = () => SOURCE.region || opts.region;
 
 /* ---------------- Time formatting ---------------- */
 const TZ = (Intl.DateTimeFormat().resolvedOptions().timeZone) || 'UTC';
@@ -544,6 +572,10 @@ async function probe(rMs) {
 
 async function resolveLatest() {
   const now = Date.now();
+  if (SOURCE.latest) {
+    try { return await SOURCE.latest(); }
+    catch { return { ms: cycleStart(now - 5 * H), how: 'schedule' }; }
+  }
   const optimistic = cycleStart(now - SOURCE.earliestLagH * H);
   const v = await probe(optimistic);
   if (v === 'ok') return { ms: optimistic, how: 'server' };
@@ -560,12 +592,12 @@ async function load({ keepValid = true, latest = null } = {}) {
   if (token !== loadToken) return;
   latestMs = latest.ms;
   runHow = latest.how;
-  runMs = latestMs - opts.runOffset * SOURCE.cycleH * H;
+  runMs = latestMs - opt('runOffset') * SOURCE.cycleH * H;
   lastCheck = Date.now();
 
   const maxStep = Math.min(opts.days * 24, SOURCE.maxStep);
   frames = [];
-  for (let h = 0; h <= maxStep; h += opts.step) {
+  for (let h = 0; h <= maxStep; h += opt('step')) {
     frames.push({ step: h, valid: runMs + h * H, url: SOURCE.url(runMs, h, opts), status: 'pending', img: null });
   }
   idx = nearestIndex(keepValid && prevValid ? prevValid : Date.now());
@@ -668,7 +700,7 @@ function updateRunLine() {
   const el = $('#run');
   if (!runMs) { el.textContent = 'Finding the latest run'; return; }
   const done = frames.filter((f) => f.status !== 'pending').length;
-  const older = opts.runOffset ? ', older run' : '';
+  const older = opt('runOffset') ? ', older run' : '';
   const second = done < frames.length ? `Loading ${done} of ${frames.length}` : `Checked ${ago(lastCheck)}`;
   el.innerHTML = '';
   const b = document.createElement('b');
@@ -721,7 +753,7 @@ function markCurrent() {
 }
 function placeNow() {
   if (frames.length < 2) { nowEl.hidden = true; return; }
-  const fi = (Date.now() - frames[0].valid) / (opts.step * H);
+  const fi = (Date.now() - frames[0].valid) / (opt('step') * H);
   if (fi < -0.5 || fi > frames.length - 0.5) { nowEl.hidden = true; return; }
   nowEl.hidden = false;
   nowEl.style.left = ((fi + 0.5) / frames.length * 100) + '%';
@@ -777,8 +809,8 @@ $('#prev').addEventListener('click', () => { stopPlay(); step(-1); });
 $('#next').addEventListener('click', () => { stopPlay(); step(1); });
 
 /* ---------------- Crop / view ---------------- */
-const viewKey = () => `nsv.view.${opts.region}`;
-const loadView = () => Object.assign({}, DEFAULT_VIEWS[opts.region], store.get(viewKey(), {}));
+const viewKey = () => `nsv.view.${viewRegion()}`;
+const loadView = () => Object.assign({}, DEFAULT_VIEWS[viewRegion()], store.get(viewKey(), {}));
 function stageSize() { return { w: stage.clientWidth, h: stage.clientHeight }; }
 function viewToT(v) {
   const { w, h } = stageSize();
@@ -908,10 +940,10 @@ function exitAdjust() {
   toast('Crop saved');
 }
 $('#adjDone').addEventListener('click', exitAdjust);
-$('#adjReset').addEventListener('click', () => { view = Object.assign({}, DEFAULT_VIEWS[opts.region]); applyView(); });
+$('#adjReset').addEventListener('click', () => { view = Object.assign({}, DEFAULT_VIEWS[viewRegion()]); applyView(); });
 $('#hintGo').addEventListener('click', enterAdjust);
 $('#hintNo').addEventListener('click', () => { hint.hidden = true; store.set('nsv.framed', true); });
-function maybeHint() { hint.hidden = !(opts.region === 'EU' && !store.get('nsv.framed', false)); }
+function maybeHint() { hint.hidden = !(viewRegion() === 'EU' && !store.get('nsv.framed', false)); }
 
 /* ---------------- Messages ---------------- */
 function showNotice(msg, quiet) { notice.textContent = msg; notice.classList.toggle('quiet', !!quiet); notice.hidden = false; }
@@ -945,7 +977,8 @@ function seg(el, key, items) {
 function onOptChange(key) {
   if (key === 'speed') return;
   if (key === 'speedUnit') { renderLocal(); return; }
-  if (key === 'region') { view = loadView(); natural = null; maybeHint(); }
+  if (key === 'src') { SOURCE = SOURCES[opts.src] || SOURCES.wz; showSourceFields(); }
+  if (key === 'region' || key === 'src') { view = loadView(); natural = null; maybeHint(); }
   if (key !== 'runOffset') probeCache.clear();
   load({ keepValid: true }).then(renderFine);
 }
@@ -958,12 +991,18 @@ function runItems() {
 }
 function renderFine() {
   const f = frames[idx];
-  const how = runHow === 'server'
-    ? "The run time is confirmed from the server's file dates."
-    : "The run time is worked out from the GFS schedule, because the server doesn't share file dates with other sites.";
   const p = $('#fine');
-  p.textContent = `Charts from wetterzentrale.de, drawn from NOAA's GFS model. ${how} New runs are checked every 10 minutes while this page is open. `;
-  if (f) {
+  if (SOURCE === SOURCES.ours) {
+    p.textContent = "Our own charts, drawn every hour from NOAA's GFS model data as soon as a new run is complete: isobars every 4 hPa, " +
+      'with the 500 hPa height as colour (blue for cold upper air, orange for warm) and the yellow dot at Saltburn. ' +
+      'Before publishing, each run is checked for missing frames and impossible pressures. ';
+  } else {
+    const how = runHow === 'server'
+      ? "The run time is confirmed from the server's file dates."
+      : "The run time is worked out from the GFS schedule, because the server doesn't share file dates with other sites.";
+    p.textContent = `Charts from wetterzentrale.de, drawn from NOAA's GFS model. ${how} New runs are checked every 10 minutes while this page is open. `;
+  }
+  if (f && SOURCE === SOURCES.wz) {
     const a = document.createElement('a');
     a.href = SOURCE.page(runMs, f.step, opts);
     a.target = '_blank';
@@ -981,6 +1020,8 @@ function openSheet() {
   const charts = route === 'pressure';
   ['#chartSettings', '#actAdjust', '#actReload', '#fine'].forEach((q) => { $(q).hidden = !charts; });
   seg($('#segUnit'), 'speedUnit', UNITS);
+  seg($('#segSrc'), 'src', SRCS);
+  showSourceFields();
   seg($('#segChart'), 'chart', CHARTS);
   seg($('#segRegion'), 'region', REGIONS);
   seg($('#segRun'), 'runOffset', runItems());
@@ -992,6 +1033,10 @@ function openSheet() {
   renderFine();
   sheet.hidden = false;
   $('#actDone').focus();
+}
+// Our charts come in one style and area, every 6 hours, latest run only.
+function showSourceFields() {
+  ['#segChart', '#segRegion', '#segRun', '#segStep'].forEach((q) => { $(q).closest('.field').hidden = SOURCE === SOURCES.ours; });
 }
 function closeSheet() { sheet.hidden = true; }
 $('#more').addEventListener('click', openSheet);
