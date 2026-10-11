@@ -3,8 +3,9 @@
 For the newest complete GFS run, downloads sea-level pressure and 500 hPa
 geopotential height for each forecast hour (0-168, every 6 h) from NOAA's open
 data on AWS, using the .idx files to fetch just those two fields, and draws a
-chart per hour: isobars every 4 hPa with H/L centres, the 500 hPa height as
-colour, coastlines. Writes PNGs and manifest.json into the output folder.
+chart per hour: sea-level pressure as bright colour (blues and purples for
+lows, oranges and reds for highs) with isobars every 4 hPa, H/L centres and
+coastlines. (500 hPa height is downloaded for the checks but not drawn.) Writes PNGs and manifest.json into the output folder.
 
 We don't forecast anything here: these are NOAA's numbers, drawn. Checks
 before publishing: every frame present, pressures within physical limits.
@@ -43,10 +44,14 @@ PROJ = ccrs.LambertConformal(central_longitude=5, central_latitude=62, standard_
 FIELDS = {'PRMSL:mean sea level': 'prmsl', 'HGT:500 mb': 'gh'}
 
 INK, PAPER, COAST = '#173242', '#E8EEF1', '#0F2230'
-# 500 hPa height in decametres: cold (low) blues through a pale middle around
-# 552 dam to warm (high) oranges; opaque, so bands don't show seams.
-HGT_CMAP = LinearSegmentedColormap.from_list('h500', ['#2a1f7a', '#2443a8', '#2f7fd0', '#56b3d9', '#9fd6c9', '#e8e2a6', '#f2b65e', '#e5793a', '#c2452a', '#8f2420'])
-HGT_LEVELS = np.arange(496, 605, 4)
+# Sea-level pressure, in the same 4 hPa steps as the isobars: deep purple and
+# blue for lows, a light middle near average (~1013), bright orange and red
+# for highs. Saturated so lows and highs stand out at a glance.
+P_CMAP = LinearSegmentedColormap.from_list('mslp', [
+    (0.00, '#3b0a6e'), (0.25, '#3d2fd4'), (0.45, '#1e8ff0'), (0.58, '#27c6e0'),
+    (0.65, '#f4f1c6'),  # ~1013 hPa, about average
+    (0.72, '#ffd23a'), (0.82, '#ff9a1f'), (0.92, '#f04a1c'), (1.00, '#a8101e')])
+P_LEVELS = np.arange(940, 1053, 4)
 
 
 def get(url, rng=None, timeout=60):
@@ -133,11 +138,11 @@ def draw(run, step, f, path):
     ax = fig.add_axes([0, 0, 1, 1], projection=PROJ)
     ax.set_extent(VIEW, crs=ccrs.PlateCarree())
     ax.set_facecolor(INK)
-    cf = ax.contourf(lons, lats, gaussian_filter(h, 1.0), levels=HGT_LEVELS, cmap=HGT_CMAP, extend='both', transform=ccrs.PlateCarree(), zorder=2, antialiased=False)
+    ps = gaussian_filter(p, 1.0)
+    cf = ax.contourf(lons, lats, ps, levels=P_LEVELS, cmap=P_CMAP, extend='both', transform=ccrs.PlateCarree(), zorder=2, antialiased=False)
     cf.set_edgecolor('face')  # fill the hairline seams between bands
     ax.add_feature(cfeature.COASTLINE.with_scale('50m'), edgecolor=COAST, linewidth=0.9, zorder=3)
     ax.add_feature(cfeature.BORDERS.with_scale('50m'), edgecolor=COAST, linewidth=0.4, alpha=0.5, zorder=3)
-    ps = gaussian_filter(p, 1.0)
     # Dark isobars read on every colour; a faint light halo keeps them clear on the darkest blues.
     halo = [pe.withStroke(linewidth=2.6, foreground=(1, 1, 1, 0.35))]
     cs = ax.contour(lons, lats, ps, levels=np.arange(920, 1072, 4), colors='#13202b', linewidths=1.1, transform=ccrs.PlateCarree(), zorder=4)
