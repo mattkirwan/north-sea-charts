@@ -225,7 +225,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div id="todayTide"></div>
   </section>
   <section class="wday" aria-labelledby="todayWindH">
-    <h3 id="todayWindH">Wind <small>hour by hour</small></h3>
+    <h3 id="todayWindH">Wind <small>now until midnight</small></h3>
     <div class="wsum" id="todayWindSum"></div>
     <div id="todayWind"></div>
     <div class="wlegend" aria-label="Colour key">
@@ -242,7 +242,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <h1 id="camTitle">Cam</h1>
     <div class="wsub">Saltburn, live from the Saltburn Surf Shop</div>
   </div>
-  <div class="cam"><iframe id="camFrame" title="Saltburn live surf cam" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+  <div class="cam"><iframe id="camFrame" title="Saltburn live surf cam" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
   <div class="thero" id="camNow"></div>
   <section class="wday" aria-labelledby="slH">
     <h3 id="slH">Surfline cams</h3>
@@ -1046,9 +1046,9 @@ function windDaysList() {
   });
   return days;
 }
-function daySummary(hours) {
-  // Daylight-ish hours only: what matters for getting in the water.
-  const day = hours.filter((x) => x.h >= 6 && x.h <= 18 && x.kn != null);
+function daySummary(hours, label = 'Daytime') {
+  // Forecast days: daylight-ish hours only, what matters for getting in the water.
+  const day = hours.filter((x) => x.kn != null && (label !== 'Daytime' || (x.h >= 6 && x.h <= 18)));
   if (!day.length) return '';
   const count = {};
   day.forEach((x) => { const s = side(x.from, x.kn); count[s] = (count[s] || 0) + 1; });
@@ -1056,10 +1056,10 @@ function daySummary(hours) {
   const lo = speedIn(Math.min(...day.map((x) => x.kn))), hi = speedIn(Math.max(...day.map((x) => x.kn)));
   const gusts = day.map((x) => x.gust).filter((x) => x != null);
   const u = UNIT_S();
-  let txt = !windy.length ? 'Light all day' : (windy[0][1] >= day.length * 0.6 ? 'Mostly ' : 'Mixed, mainly ') + SIDE[windy[0][0]];
+  let txt = !windy.length ? 'Light throughout' : (windy[0][1] >= day.length * 0.6 ? 'Mostly ' : 'Mixed, mainly ') + SIDE[windy[0][0]];
   txt += ` · ${lo === hi ? lo : `${lo}–${hi}`} ${u}`;
   if (gusts.length) txt += `, gusts to ${speedIn(Math.max(...gusts))}`;
-  return `Daytime: ${txt}`;
+  return `${label}: ${txt}`;
 }
 const ARROW = 'M12 4v15M6.5 13.5L12 19l5.5-5.5';
 
@@ -1090,7 +1090,7 @@ function renderWind() {
   const sub = $('#windStatus');
   windDays.innerHTML = '';
   if (!wind) {
-    sub.textContent = 'Today and the next 5 days';
+    sub.textContent = 'Next 5 days';
     const m = document.createElement('div');
     m.className = 'wmsg';
     m.textContent = windBusy ? 'Loading the wind forecast' : "Couldn't load the wind forecast from open-meteo.com. Check your connection and tap Refresh.";
@@ -1098,18 +1098,19 @@ function renderWind() {
     return;
   }
   const status = windBusy ? 'updating' : windFailed ? `couldn't update, showing ${ago(wind.at)}` : `updated ${ago(wind.at)}`;
-  sub.textContent = `Today and the next 5 days · ${status}`;
-  const now = ukNow();
-  windDaysList().forEach((d, i) => {
+  sub.textContent = `Next 5 days · ${status}`;
+  const today = ukNow().day;
+  // Today has its own view, so the forecast starts tomorrow.
+  windDaysList().filter((d) => d.k > today).forEach((d, i) => {
     const sec = document.createElement('section');
     sec.className = 'wday';
-    const h3 = dayHeading(d.k, i);
+    const h3 = dayHeading(d.k, i + 1);
     const sum = document.createElement('div');
     sum.className = 'wsum';
     sum.textContent = daySummary(d.hours);
     const grid = document.createElement('div');
     grid.className = 'wgrid';
-    d.hours.filter((x) => x.h % 3 === 0).forEach((x) => grid.appendChild(windCell(x, d.k === now.day && x.h + 3 <= now.hour)));
+    d.hours.filter((x) => x.h % 3 === 0).forEach((x) => grid.appendChild(windCell(x, false)));
     sec.append(h3, sum, grid);
     windDays.appendChild(sec);
   });
@@ -1290,7 +1291,7 @@ function renderTides() {
   tideDays.innerHTML = '';
   trend.textContent = '';
   if (!tides) {
-    sub.textContent = 'Today and the next 5 days';
+    sub.textContent = 'Next 5 days';
     const m = document.createElement('div');
     m.className = 'wmsg';
     m.textContent = tideBusy ? 'Loading the tide forecast' : "Couldn't load the tide forecast from open-meteo.com. Check your connection and tap Refresh.";
@@ -1298,8 +1299,9 @@ function renderTides() {
     return;
   }
   const status = tideBusy ? 'updating' : tideFailed ? `couldn't update, showing ${ago(tides.at)}` : `updated ${ago(tides.at)}`;
-  sub.textContent = `Today and the next 5 days · ${status}`;
-  const turns = tideTurns(tides.time, tides.level), days = tideDayList(), now = Date.now();
+  sub.textContent = `Next 5 days · ${status}`;
+  const today = ukNow().day;
+  const turns = tideTurns(tides.time, tides.level), days = tideDayList().filter((d) => d.k > today), now = Date.now();
   if (!days.length) return;
   const inView = tides.level.filter((m, i) => m != null && tides.time[i] >= days[0].start - H && tides.time[i] <= days[days.length - 1].end + H);
   const lo = Math.min(...inView), hi = Math.max(...inView);
@@ -1311,7 +1313,7 @@ function renderTides() {
     const sum = document.createElement('div');
     sum.className = 'wsum';
     sum.textContent = ranges[i] ? `Range up to ${ranges[i].toFixed(1)} m` : '';
-    sec.append(dayHeading(d.k, i), sum, tideEvents(d, turns, now), tideCurve(d, turns, lo, hi, tideDays.clientWidth));
+    sec.append(dayHeading(d.k, i + 1), sum, tideEvents(d, turns, now), tideCurve(d, turns, lo, hi, tideDays.clientWidth));
     tideDays.appendChild(sec);
   });
   const used = tides.used.length > 1 ? `averaged between sea points off ${tides.used.join(' and ')}` : `for a sea point off ${tides.used[0]}`;
@@ -1398,12 +1400,13 @@ function renderToday() {
   wBox.innerHTML = '';
   $('#todayWindSum').textContent = '';
   if (wDay) {
-    $('#todayWindSum').textContent = daySummary(wDay.hours);
-    for (let r = 0; r < wDay.hours.length; r += 8) {
+    const ahead = wDay.hours.filter((h) => h.h >= uk.hour);
+    $('#todayWindSum').textContent = daySummary(ahead, 'Until midnight');
+    for (let r = 0; r < ahead.length; r += 8) {
       const grid = document.createElement('div');
       grid.className = 'wgrid';
-      wDay.hours.slice(r, r + 8).forEach((h) => {
-        const c = windCell(h, h.h < uk.hour);
+      ahead.slice(r, r + 8).forEach((h) => {
+        const c = windCell(h, false);
         if (h.h === uk.hour) c.classList.add('nowc');
         grid.appendChild(c);
       });
@@ -1444,7 +1447,12 @@ function syncRoute() {
   $('#vToday').hidden = top !== 'today';
   $('#vCam').hidden = top !== 'cam';
   $('#vForecast').hidden = top !== 'forecast';
-  if (r === 'cam' && camFrame.dataset.on !== '1') { camFrame.src = CAM_SRC; camFrame.dataset.on = '1'; }
+  if (r === 'cam' && camFrame.dataset.on !== '1') {
+    camFrame.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+    camFrame.allowFullscreen = true;
+    camFrame.src = CAM_SRC;
+    camFrame.dataset.on = '1';
+  }
   if (r !== 'cam' && camFrame.dataset.on === '1') { camFrame.src = 'about:blank'; camFrame.dataset.on = ''; }
   $('#sPressure').hidden = r !== 'pressure';
   $('#sWind').hidden = r !== 'wind';
