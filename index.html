@@ -213,7 +213,10 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
   <div class="thead">
     <div class="whead">
       <h1 id="todayTitle">Today</h1>
-      <button class="pill" id="todayReload">Refresh</button>
+      <div class="links">
+        <button class="pill" id="todayReload">Refresh</button>
+        <button class="pill" id="todaySettings" aria-label="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:block"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+      </div>
     </div>
     <div class="wsub" id="todayDate">Saltburn</div>
     <div class="status" id="todayStatus"></div>
@@ -230,7 +233,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div id="todayWind"></div>
     <div class="wlegend" aria-label="Colour key">
       <span><i class="sw off"></i>Offshore</span><span><i class="sw xoff"></i>Cross-offshore</span>
-      <span><i class="sw xon"></i>Cross-onshore</span><span><i class="sw on"></i>Onshore</span><span><i class="sw light"></i>Under 5 kn</span>
+      <span><i class="sw xon"></i>Cross-onshore</span><span><i class="sw on"></i>Onshore</span><span><i class="sw light"></i><span class="lightLabel">Under 5 kn</span></span>
     </div>
   </section>
   <p class="fine" id="todayFine"></p>
@@ -316,14 +319,13 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 
   <section class="sub panel" id="sWind" role="tabpanel" aria-label="Wind forecast" hidden>
     <div class="wtools">
-      <div class="seg" id="segUnit"></div>
+      <div class="status" id="windStatus"></div>
       <button class="pill" id="windReload">Refresh</button>
     </div>
-    <div class="status" id="windStatus"></div>
     <div id="windDays"></div>
     <div class="wlegend" aria-label="Colour key">
       <span><i class="sw off"></i>Offshore</span><span><i class="sw xoff"></i>Cross-offshore</span>
-      <span><i class="sw xon"></i>Cross-onshore</span><span><i class="sw on"></i>Onshore</span><span><i class="sw light"></i>Under 5 kn</span>
+      <span><i class="sw xon"></i>Cross-onshore</span><span><i class="sw on"></i>Onshore</span><span><i class="sw light"></i><span class="lightLabel">Under 5 kn</span></span>
     </div>
     <p class="fine" id="windFine"></p>
   </section>
@@ -348,13 +350,16 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 
 <div class="sheet" id="sheet" hidden>
   <div class="card" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
-    <h2 id="sheetTitle">Chart settings</h2>
+    <h2 id="sheetTitle">Settings</h2>
+    <div class="field"><span>Wind speed</span><div class="seg" id="segUnit"></div></div>
+    <div id="chartSettings">
     <div class="field"><span>Chart</span><div class="seg" id="segChart"></div></div>
     <div class="field"><span>Map</span><div class="seg" id="segRegion"></div></div>
     <div class="field"><span>Model run</span><div class="seg" id="segRun"></div></div>
     <div class="field"><span>How far ahead</span><div class="seg" id="segDays"></div></div>
     <div class="field"><span>Time between frames</span><div class="seg" id="segStep"></div></div>
     <div class="field"><span>Playback speed</span><div class="seg" id="segSpeed"></div></div>
+    </div>
     <div class="actions">
       <button class="pill" id="actAdjust">Adjust view</button>
       <button class="pill" id="actReload">Reload charts</button>
@@ -408,7 +413,7 @@ const STEPS = [[6, '6 hours'], [3, '3 hours']];
 const SPEEDS = [[700, 'Slow'], [420, 'Normal'], [220, 'Fast']];
 // Starting crop as a fraction of the source image: centre point and visible height.
 const DEFAULT_VIEWS = { EU: { cx: 0.53, cy: 0.34, span: 0.68 }, UK: { cx: 0.5, cy: 0.5, span: 1.02 } };
-const DEFAULTS = { chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, windUnit: 'kn' };
+const DEFAULTS = { chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
 
 const opts = Object.assign({}, DEFAULTS, store.get('nsv.opts', {}));
 const saveOpts = () => store.set('nsv.opts', opts);
@@ -886,7 +891,7 @@ function seg(el, key, items) {
 }
 function onOptChange(key) {
   if (key === 'speed') return;
-  if (key === 'windUnit') { renderLocal(); return; }
+  if (key === 'speedUnit') { renderLocal(); return; }
   if (key === 'region') { view = loadView(); natural = null; maybeHint(); }
   if (key !== 'runOffset') probeCache.clear();
   load({ keepValid: true }).then(renderFine);
@@ -919,6 +924,10 @@ const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
 const standalone = window.navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
 function openSheet() {
   stopPlay();
+  // Chart options only make sense on the charts; elsewhere it's just the wind unit.
+  const charts = route === 'pressure';
+  ['#chartSettings', '#actAdjust', '#actReload', '#fine'].forEach((q) => { $(q).hidden = !charts; });
+  seg($('#segUnit'), 'speedUnit', UNITS);
   seg($('#segChart'), 'chart', CHARTS);
   seg($('#segRegion'), 'region', REGIONS);
   seg($('#segRun'), 'runOffset', runItems());
@@ -972,7 +981,7 @@ const WIND = {
 const UNITS = [['kn', 'knots'], ['mph', 'mph'], ['kmh', 'km/h']];
 const UNIT_K = { kn: 1, mph: 1.15078, kmh: 1.852 };
 const UNIT_SHORT = { kn: 'kn', mph: 'mph', kmh: 'km/h' };
-const UNIT_S = () => UNIT_SHORT[opts.windUnit];
+const UNIT_S = () => UNIT_SHORT[opts.speedUnit];
 const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 const SIDE = { off: 'offshore', xoff: 'cross-offshore', xon: 'cross-onshore', on: 'onshore', light: 'light' };
 const fUkParts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -999,7 +1008,7 @@ function dayHeading(k, i) {
   h3.appendChild(small);
   return h3;
 }
-const speedIn = (kn) => Math.round(kn * UNIT_K[opts.windUnit]);
+const speedIn = (kn) => Math.round(kn * UNIT_K[opts.speedUnit]);
 const compass = (deg) => COMPASS[Math.round(deg / 22.5) % 16];
 function side(from, kn) {
   if (from == null || kn == null) return '';
@@ -1086,7 +1095,6 @@ function windCell(x, past) {
 
 function renderWind() {
   if (!showing('wind')) return;
-  seg($('#segUnit'), 'windUnit', UNITS);
   const sub = $('#windStatus');
   windDays.innerHTML = '';
   if (!wind) {
@@ -1418,7 +1426,10 @@ function renderToday() {
     'Tide heights are above chart datum, like tide tables. Arrows on the wind point the way it blows; the amber outline is this hour. ' +
     'Forecast has the coming days: pressure charts for the swell, then wind and tides.';
 }
-const renderLocal = () => { renderToday(); renderCam(); renderWind(); renderTides(); };
+function renderLocal() {
+  document.querySelectorAll('.lightLabel').forEach((el) => { el.textContent = `Under ${speedIn(WIND.light)} ${UNIT_S()}`; });
+  renderToday(); renderCam(); renderWind(); renderTides();
+}
 function refreshLocal(force) {
   const now = route === 'today' || route === 'cam';
   if (now || route === 'wind') refreshWind(force);
@@ -1477,6 +1488,7 @@ document.querySelectorAll('.tabbar button').forEach((b) => b.addEventListener('c
 }));
 document.querySelectorAll('.subnav button').forEach((b) => b.addEventListener('click', () => go(b.dataset.route)));
 $('#todayReload').addEventListener('click', () => refreshLocal(true));
+$('#todaySettings').addEventListener('click', openSheet);
 $('#windReload').addEventListener('click', () => refreshWind(true));
 $('#tideReload').addEventListener('click', () => refreshTides(true));
 
