@@ -192,6 +192,10 @@ body.adjust #stage{cursor:move}
 .wc.nowc{box-shadow:inset 0 0 0 2px var(--amber)}
 .wgrid+.wgrid{margin-top:3px}
 .status{font-size:14px;color:var(--slate);line-height:1.35}
+.cam{position:relative;aspect-ratio:16/9;margin-top:16px;border-radius:14px;overflow:hidden;background:#000}
+.cam iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.links{display:flex;flex-wrap:wrap;gap:8px}
+a.pill{display:inline-block;color:inherit;text-decoration:none}
 .wmsg{padding:28px 0;text-align:center;color:var(--slate);font-size:15px;line-height:1.45}
 @media (max-width:360px){.wc .s{font-size:18px}.wgrid{gap:2px}}
 
@@ -230,6 +234,25 @@ body.adjust #stage{cursor:move}
     </div>
   </section>
   <p class="fine" id="todayFine"></p>
+</main>
+
+<!-- Cam: the Saltburn Surf Shop's live YouTube stream, with conditions now -->
+<main class="view panel" id="vCam" aria-labelledby="camTitle" hidden>
+  <div class="thead">
+    <h1 id="camTitle">Cam</h1>
+    <div class="wsub">Saltburn, live from the Saltburn Surf Shop</div>
+  </div>
+  <div class="cam"><iframe id="camFrame" title="Saltburn live surf cam" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+  <div class="thero" id="camNow"></div>
+  <section class="wday" aria-labelledby="slH">
+    <h3 id="slH">Surfline cams</h3>
+    <div class="wsum">These open in the Surfline app or site, which needs a login and, for most cams, a subscription.</div>
+    <div class="links">
+      <a class="pill" href="https://www.surfline.com/surf-report/saltburn/5842041f4e65fad6a7708c99" target="_blank" rel="noopener">Saltburn</a>
+      <a class="pill" href="https://www.surfline.com/surf-report/sandsend/5842041f4e65fad6a7708c9c" target="_blank" rel="noopener">Sandsend</a>
+    </div>
+  </section>
+  <p class="fine">Cam stream from the <a href="https://saltburnsurfshop.co.uk/pages/surf-cam" target="_blank" rel="noopener">Saltburn Surf Shop</a> on YouTube. It only plays while this tab is open. If it shows as unavailable, the shop may have restarted the stream; their page will have the current one.</p>
 </main>
 
 <!-- Forecast: the coming days. Pressure charts for the swell being made, then local wind and tides. -->
@@ -317,6 +340,7 @@ body.adjust #stage{cursor:move}
 
 <nav class="tabbar" role="tablist" aria-label="Views">
   <button role="tab" data-route="today" aria-controls="vToday"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>Today</button>
+  <button role="tab" data-route="cam" aria-controls="vCam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="13.5" height="12" rx="2.5"/><path d="M16 10.5l5.5-3v9l-5.5-3z"/></svg>Cam</button>
   <button role="tab" data-route="forecast" aria-controls="vForecast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Forecast</button>
 </nav>
 
@@ -1317,22 +1341,9 @@ function todayStatus() {
   const oldest = Math.min(...have.map((x) => x.at));
   return (windFailed || tideFailed ? "Couldn't update, showing data from " : 'Updated ') + ago(oldest);
 }
-function renderToday() {
-  if (!showing('today')) return;
+// Now: one tile each for wind and tide, shared by Today and Cam.
+function nowTiles(hero, wDay, turns) {
   const now = Date.now(), uk = ukNow();
-  const [y, m, d] = uk.day.split('-').map(Number), dayMs = Date.UTC(y, m - 1, d);
-  let line = `${fWindWeekday.format(dayMs)} ${fWindDate.format(dayMs)} · Saltburn`;
-  const si = wind && wind.sun ? wind.sun.day.indexOf(uk.day) : -1;
-  if (si >= 0) line += ` · sunrise ${wind.sun.rise[si].slice(11, 16)}, sunset ${wind.sun.set[si].slice(11, 16)}`;
-  $('#todayDate').textContent = line;
-  $('#todayStatus').textContent = todayStatus();
-
-  const wDay = wind ? windDaysList().find((x) => x.k === uk.day) : null;
-  const tDay = tides ? tideDayList().find((x) => x.k === uk.day) : null;
-  const turns = tides ? tideTurns(tides.time, tides.level) : [];
-
-  // Now: one tile each for wind and tide.
-  const hero = $('#todayNow');
   hero.innerHTML = '';
   const wt = tile('Wind now'), x = wDay && wDay.hours.find((h) => h.h === uk.hour);
   if (x && x.kn != null && x.from != null) {
@@ -1348,6 +1359,28 @@ function renderToday() {
       `<div class="d">${next.hi ? 'Rising' : 'Falling'} · ${next.hi ? 'high' : 'low'} ${ukClock(next.ms)}<br>${relative(next.ms - now)}</div>`);
   } else tt.insertAdjacentHTML('beforeend', `<div class="d">${tideBusy ? 'Loading' : 'No tide data yet'}</div>`);
   hero.append(wt, tt);
+}
+function renderCam() {
+  if (!showing('cam')) return;
+  const uk = ukNow();
+  nowTiles($('#camNow'), wind ? windDaysList().find((x) => x.k === uk.day) : null, tides ? tideTurns(tides.time, tides.level) : []);
+}
+
+function renderToday() {
+  if (!showing('today')) return;
+  const now = Date.now(), uk = ukNow();
+  const [y, m, d] = uk.day.split('-').map(Number), dayMs = Date.UTC(y, m - 1, d);
+  let line = `${fWindWeekday.format(dayMs)} ${fWindDate.format(dayMs)} · Saltburn`;
+  const si = wind && wind.sun ? wind.sun.day.indexOf(uk.day) : -1;
+  if (si >= 0) line += ` · sunrise ${wind.sun.rise[si].slice(11, 16)}, sunset ${wind.sun.set[si].slice(11, 16)}`;
+  $('#todayDate').textContent = line;
+  $('#todayStatus').textContent = todayStatus();
+
+  const wDay = wind ? windDaysList().find((x) => x.k === uk.day) : null;
+  const tDay = tides ? tideDayList().find((x) => x.k === uk.day) : null;
+  const turns = tides ? tideTurns(tides.time, tides.level) : [];
+
+  nowTiles($('#todayNow'), wDay, turns);
 
   // Tides today: times, heights and the curve, scaled to today's own range.
   const tBox = $('#todayTide');
@@ -1382,17 +1415,21 @@ function renderToday() {
     'Tide heights are above chart datum, like tide tables. Arrows on the wind point the way it blows; the amber outline is this hour. ' +
     'Forecast has the coming days: pressure charts for the swell, then wind and tides.';
 }
-const renderLocal = () => { renderToday(); renderWind(); renderTides(); };
+const renderLocal = () => { renderToday(); renderCam(); renderWind(); renderTides(); };
 function refreshLocal(force) {
-  if (route === 'today' || route === 'wind') refreshWind(force);
-  if (route === 'today' || route === 'tides') refreshTides(force);
+  const now = route === 'today' || route === 'cam';
+  if (now || route === 'wind') refreshWind(force);
+  if (now || route === 'tides') refreshTides(force);
 }
 
 /* ---------------- Views ----------------
-   Today, or one of the Forecast tabs. The hash names the view so links and
+   Today, Cam, or one of the Forecast tabs. The hash names the view so links and
    home-screen bookmarks open in the right place; tab taps replace it rather
    than stacking history. The charts only start loading on first visit. */
-const ROUTES = ['today', 'pressure', 'wind', 'tides'];
+const ROUTES = ['today', 'cam', 'pressure', 'wind', 'tides'];
+// The shop's live stream: loaded only while Cam is open, so it costs no data otherwise.
+const CAM_SRC = 'https://www.youtube.com/embed/4BAG3xt3YQo?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1';
+const camFrame = $('#camFrame');
 let forecastTab = store.get('nsv.forecastTab', 'pressure');
 let chartsStarted = false;
 const routeFromHash = () => { const h = location.hash.slice(1); return ROUTES.includes(h) ? h : 'today'; };
@@ -1401,15 +1438,18 @@ function go(r) {
   syncRoute();
 }
 function syncRoute() {
-  const r = routeFromHash(), prev = route, forecast = r !== 'today';
+  const r = routeFromHash(), prev = route, top = r === 'today' || r === 'cam' ? r : 'forecast';
   route = r;
-  if (forecast) { forecastTab = r; store.set('nsv.forecastTab', r); }
-  $('#vToday').hidden = forecast;
-  $('#vForecast').hidden = !forecast;
+  if (top === 'forecast') { forecastTab = r; store.set('nsv.forecastTab', r); }
+  $('#vToday').hidden = top !== 'today';
+  $('#vCam').hidden = top !== 'cam';
+  $('#vForecast').hidden = top !== 'forecast';
+  if (r === 'cam' && camFrame.dataset.on !== '1') { camFrame.src = CAM_SRC; camFrame.dataset.on = '1'; }
+  if (r !== 'cam' && camFrame.dataset.on === '1') { camFrame.src = 'about:blank'; camFrame.dataset.on = ''; }
   $('#sPressure').hidden = r !== 'pressure';
   $('#sWind').hidden = r !== 'wind';
   $('#sTides').hidden = r !== 'tides';
-  document.querySelectorAll('.tabbar button').forEach((b) => b.setAttribute('aria-selected', String((b.dataset.route === 'forecast') === forecast)));
+  document.querySelectorAll('.tabbar button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.route === top)));
   document.querySelectorAll('.subnav button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.route === r)));
   if (r === 'pressure') {
     if (!chartsStarted) { chartsStarted = true; load({ keepValid: false }); }
@@ -1418,14 +1458,14 @@ function syncRoute() {
     stopPlay();
     if (adjusting) exitAdjust();
   }
-  if (r !== prev) { const pane = { today: '#vToday', wind: '#sWind', tides: '#sTides' }[r]; if (pane) $(pane).scrollTop = 0; }
+  if (r !== prev) { const pane = { today: '#vToday', cam: '#vCam', wind: '#sWind', tides: '#sTides' }[r]; if (pane) $(pane).scrollTop = 0; }
   refreshLocal();
 }
 window.addEventListener('popstate', syncRoute);
 window.addEventListener('hashchange', syncRoute);
 document.querySelectorAll('.tabbar button').forEach((b) => b.addEventListener('click', () => {
-  if (b.dataset.route === 'today') go('today');
-  else go(route === 'today' ? forecastTab : route);
+  if (b.dataset.route !== 'forecast') go(b.dataset.route);
+  else go(route === 'today' || route === 'cam' ? forecastTab : route);
 }));
 document.querySelectorAll('.subnav button').forEach((b) => b.addEventListener('click', () => go(b.dataset.route)));
 $('#todayReload').addEventListener('click', () => refreshLocal(true));
