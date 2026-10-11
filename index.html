@@ -1386,10 +1386,10 @@ function renderTides() {
 
 /* ---------------- Swell: latest measurements ----------------
    Measured data only, no model: the newest wave reading from each buoy and
-   platform around the North Sea that has reported recently, from EMODnet
-   Physics. A GitHub Action (scripts/fetch-waves.mjs) collects them every half
-   hour into waves.json on the repo's `data` branch, which is what we read:
-   quicker and more reliable than querying EMODnet from a phone. */
+   platform around the North Sea that has reported recently, as relayed by
+   NOAA's National Data Buoy Center. A GitHub Action (scripts/fetch-waves.mjs)
+   collects them every half hour into waves.json on the repo's `data` branch,
+   which is what we read. */
 const OBS = {
   url: 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/data/waves.json',
   maxAge: 10 * 60e3, // look for a newer file after 10 minutes
@@ -1536,7 +1536,7 @@ function renderSwell() {
     `<div class="ov">${s.d != null ? arrowSvg(s.d, 16) : ''}<b>${feet(s.h)}</b> ft${s.p != null ? ` · ${Math.round(s.p)} s` : ''}${s.d != null ? ` · ${compass(s.d)}` : ''}</div></div>`).join('');
 
   $('#swellFine').textContent = 'Measured, not forecast: the newest reading from each buoy and platform that had reported within 6 hours ' +
-    `when last collected (every half hour) from EMODnet Physics. Height is significant wave height in feet (the whole sea state, so local wind chop is included), ` +
+    `when last collected (every half hour), mostly North Sea oil and gas platforms, as relayed by NOAA's National Data Buoy Center. Height is significant wave height in feet (the whole sea state, so local wind chop is included), ` +
     'with the period in seconds and an arrow for the way the waves are travelling where the station measures them. ' +
     `Faded labels are over 3 hours old. ${shown < st.length ? 'Some nearby stations are only in the list, to keep the map readable. ' : ''}` +
     'There are almost no wave buoys north of Norway, so the map only covers the seas with stations reporting.';
