@@ -1,6 +1,8 @@
-// Collects the latest measured waves around the North Sea from EMODnet Physics
-// (Europe's near-real-time ocean observations) and writes them as JSON to the
-// path given as the first argument. Run every half hour by
+// Collects the latest measured waves around the North Sea and writes them as
+// JSON to the path given as the first argument. Sources: NOAA's NDBC, which
+// relays the latest report from buoys and platforms worldwide (including North
+// Sea and Norwegian ones on the WMO network) in one text file, and EMODnet
+// Physics (Europe's near-real-time ocean observations). Run every half hour by
 // .github/workflows/waves.yml; the app reads the result, which is quicker and
 // more reliable than querying EMODnet from a phone.
 //
@@ -94,25 +96,59 @@ if (process.argv.includes('--probe')) {
     const ds = await safe(`/categorize/standard_name/${enc(n)}/index.json`);
     console.log(`${n}: ${ds.length} datasets: ${ds.slice(0, 25).map((r) => r['Dataset ID']).join(', ')}`);
   }
-  console.log('\nDatasets whose ID or title mentions waves:');
-  const all = await safe('/tabledap/allDatasets.json?' + ['datasetID,title,cdm_data_type,minLatitude,maxLatitude,minLongitude,maxLongitude,maxTime',
-    'datasetID=~".*(VGHS|VHM0|VAVH|VTPK|VTZA|VMDR|VEMH|WAVE|Wave|wave|WAV).*"'].map(enc).join('&'));
-  all.slice(0, 60).forEach((r) => console.log(`  ${r.datasetID} | ${r.cdm_data_type} | lat ${r.minLatitude}..${r.maxLatitude} lon ${r.minLongitude}..${r.maxLongitude} | to ${r.maxTime} | ${String(r.title).slice(0, 80)}`));
-  console.log(`  (${all.length} in all)`);
-  for (const r of all.filter((x) => /EP_|INSTAC|TS_/i.test(x.datasetID)).slice(0, 4)) {
-    const info = await safe(`/info/${enc(r.datasetID)}/index.json`);
-    const vars = {};
-    info.forEach((x) => { const v = x['Variable Name']; vars[v] = vars[v] || []; if (/^(standard_name|cf_role|long_name|units)$/.test(x['Attribute Name'])) vars[v].push(`${x['Attribute Name']}=${x.Value}`); });
-    console.log(`\n${r.datasetID} columns:`);
-    Object.entries(vars).filter(([v]) => v !== 'NC_GLOBAL').forEach(([v, a]) => console.log(`  ${v}: ${a.join('; ')}`));
+  for (const base of [ERDDAP, 'https://erddap.emodnet-physics.eu/erddap']) {
+    const get = (p) => fetch(base + p, { signal: AbortSignal.timeout(90e3) }).then(async (r) => (r.ok ? (await r.json()).table : { rows: [], columnNames: [], status: r.status })).catch((e) => ({ rows: [], columnNames: [], error: e.message }));
+    const idx = await get('/info/index.json?page=1&itemsPerPage=5000');
+    const ci = idx.columnNames.indexOf('Dataset ID'), ti = idx.columnNames.indexOf('Title');
+    console.log(`\n${base}: ${idx.rows.length} datasets in all ${idx.status || idx.error || ''}`);
+    const hits = idx.rows.filter((r) => /wave|VHM0|VGHS|VAVH|VTPK|VMDR|INSTAC|_EP_|TS_/i.test(r[ci] + ' ' + r[ti]));
+    hits.slice(0, 80).forEach((r) => console.log(`  ${r[ci]} | ${String(r[ti]).slice(0, 90)}`));
+    const sr = await get('/search/index.json?page=1&itemsPerPage=50&searchFor=' + enc('significant wave height'));
+    console.log(`  full-text search "significant wave height": ${sr.rows.length} ${sr.status || sr.error || ''}`);
+    const si = sr.columnNames.indexOf('Dataset ID');
+    sr.rows.slice(0, 30).forEach((r) => console.log(`    ${r[si]}`));
   }
   process.exit(0);
+}
+
+// NDBC: latest_obs.txt has one line per station with its newest report.
+// Columns: STN LAT LON YYYY MM DD hh mm WDIR WSPD GST WVHT DPD APD MWD ...;
+// "MM" means missing. Station names come from activestations.xml.
+async function ndbc() {
+  const get = async (u) => { const r = await fetch(u, { signal: AbortSignal.timeout(60e3) }); if (!r.ok) throw new Error(`HTTP ${r.status} for ${u}`); return r.text(); };
+  const [txt, xml] = await Promise.all([get('https://www.ndbc.noaa.gov/data/latest_obs/latest_obs.txt'), get('https://www.ndbc.noaa.gov/activestations.xml').catch(() => '')]);
+  const names = {};
+  for (const m of xml.matchAll(/<station\s[^>]*id="([^"]+)"[^>]*name="([^"]*)"/g)) names[m[1].toUpperCase()] = m[2].replace(/&amp;/g, '&');
+  const lines = txt.split('\n'), head = lines[0].replace(/^#/, '').trim().split(/\s+/);
+  const col = (n) => head.indexOf(n);
+  console.log(`NDBC: ${lines.length - 2} stations worldwide; columns ${head.join(' ')}`);
+  const out = [];
+  for (const line of lines.slice(2)) {
+    const f = line.trim().split(/\s+/);
+    if (f.length < head.length) continue;
+    const num = (n) => (f[col(n)] === 'MM' ? null : +f[col(n)]);
+    const lat = num('LAT'), lon = num('LON'), h = num('WVHT');
+    if (lat == null || lat < BOX.s || lat > BOX.n || lon < BOX.w || lon > BOX.e) continue;
+    const ms = Date.UTC(+f[col('YYYY')], +f[col('MM')] - 1, +f[col('DD')], +f[col('hh')], +f[col('mm')]);
+    const id = f[col('STN')];
+    console.log(`  NDBC ${id} ${names[id.toUpperCase()] || ''} ${lat},${lon} WVHT=${h ?? 'MM'} DPD=${num('DPD') ?? 'MM'} MWD=${num('MWD') ?? 'MM'} ${new Date(ms).toISOString()}`);
+    if (h == null || Date.now() - ms > HOURS * 3600e3) continue;
+    out.push({ code: id, name: names[id.toUpperCase()] || `Station ${id}`, lat, lon, ms, h, p: num('DPD') ?? num('APD'), d: num('MWD') });
+  }
+  console.log(`NDBC: ${out.length} with a wave height in the last ${HOURS} h`);
+  return out;
 }
 
 const out = process.argv[2] || 'waves.json';
 const at = {}; // stations keyed by position, since one buoy can sit in several datasets
 const key = (x) => `${x.lat.toFixed(1)},${x.lon.toFixed(1)}`;
 const used = {};
+for (const x of await ndbc().catch((e) => { console.log('NDBC failed:', e.message); return []; })) {
+  const k = key(x);
+  at[k] = { lat: x.lat, lon: x.lon, name: x.name, code: x.code, h: { v: x.h, ms: x.ms } };
+  if (x.p != null) at[k].p = { v: x.p, ms: x.ms };
+  if (x.d != null) at[k].d = { v: x.d, ms: x.ms };
+}
 for (const [kind, names] of Object.entries(KINDS)) {
   const sets = await findDatasets(kind, names);
   used[kind] = sets.map((s) => s.id);
@@ -131,5 +167,5 @@ const stations = Object.values(at).filter((s) => s.h).map((s) => ({
 }));
 console.log(`\n${stations.length} stations with a wave height in the last ${HOURS} h:`);
 stations.forEach((s) => console.log(`  ${s.name} (${s.code}) ${s.lat},${s.lon}  ${s.h} m  ${s.p ?? '-'} s  ${s.d ?? '-'}°  ${new Date(s.ms).toISOString()}`));
-writeFileSync(out, JSON.stringify({ at: Date.now(), source: 'EMODnet Physics', hours: HOURS, datasets: used, stations }));
+writeFileSync(out, JSON.stringify({ at: Date.now(), source: 'NOAA NDBC and EMODnet Physics', hours: HOURS, datasets: used, stations }));
 console.log(`\nWrote ${out}`);
