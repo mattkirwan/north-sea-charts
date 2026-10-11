@@ -1492,6 +1492,25 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'End') { stopPlay(); show(frames.length - 1); }
 });
 
+/* ---------------- Staying up to date ----------------
+   GitHub Pages lets phones keep this page for up to 10 minutes, and home-screen
+   apps can hold it longer. On opening and on coming back to the app, compare the
+   copy we're running (from the browser cache) with a fresh one, and reload once
+   if the page has changed. The fresh fetch also refreshes the cache. */
+async function checkForUpdate() {
+  if (location.protocol === 'file:') return;
+  try {
+    const url = location.pathname + location.search;
+    const mine = await (await fetch(url, { cache: 'force-cache' })).text();
+    const fresh = await fetch(url, { cache: 'reload' });
+    if (!fresh.ok || (await fresh.text()) === mine) return;
+    if (Date.now() - (+sessionStorage.getItem('nsv.reloaded') || 0) < 60e3) return; // never loop
+    sessionStorage.setItem('nsv.reloaded', String(Date.now()));
+    location.reload();
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+
 /* ---------------- Periodic refresh ---------------- */
 async function checkForNewRun() {
   if (adjusting || !runMs) return;
@@ -1523,6 +1542,7 @@ window.addEventListener('resize', () => {
 view = loadView();
 maybeHint();
 syncRoute();
+checkForUpdate();
 })();
 </script>
 </body>
