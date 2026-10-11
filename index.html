@@ -118,6 +118,36 @@ body.adjust #stage{cursor:move}
 .fine{font-size:13px;color:var(--slate);line-height:1.5;margin:14px 0 0}
 .fine a{color:var(--paper)}
 
+/* Saltburn wind view */
+.wind{position:absolute;inset:0;background:var(--ink);overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;
+  -webkit-overflow-scrolling:touch;padding:calc(var(--st) + 14px) calc(var(--sr) + 16px) calc(var(--sb) + 24px) calc(var(--sl) + 16px)}
+.wind>*{max-width:560px;margin-left:auto;margin-right:auto}
+.whead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.whead h2{font-family:var(--f-cond);font-weight:600;font-size:30px;line-height:1.1;margin:0}
+.wsub{font-size:14px;color:var(--slate);margin-top:2px}
+.wtools{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:14px auto 4px}
+.wday{padding:14px 0 4px;border-top:1px solid var(--hair);margin-top:10px}
+.wday h3{font-family:var(--f-cond);font-weight:600;font-size:21px;line-height:1.15;margin:0}
+.wday h3 small{font-size:16px;color:var(--slate);font-weight:500;margin-left:6px}
+.wsum{font-size:14px;color:var(--slate);margin:2px 0 10px}
+.wgrid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px}
+.wc{border-radius:9px;padding:6px 0 7px;text-align:center;background:var(--w-none);font-variant-numeric:tabular-nums}
+.wc .t{font-size:12px;color:var(--slate)}
+.wc svg{display:block;width:20px;height:20px;margin:3px auto 0}
+.wc .c{font-size:11px;color:var(--slate);line-height:1.2}
+.wc .s{font-family:var(--f-cond);font-weight:600;font-size:21px;line-height:1.1}
+.wc .g{font-size:11px;color:var(--slate)}
+.wc.past{opacity:.35}
+:root{--w-none:rgba(232,238,241,.05);--w-light:rgba(232,238,241,.09);--w-off:rgba(126,214,195,.34);
+  --w-xoff:rgba(126,214,195,.15);--w-xon:rgba(255,194,61,.2);--w-on:rgba(255,112,82,.32)}
+.wc.light,.sw.light{background:var(--w-light)} .wc.off,.sw.off{background:var(--w-off)} .wc.xoff,.sw.xoff{background:var(--w-xoff)}
+.wc.xon,.sw.xon{background:var(--w-xon)} .wc.on,.sw.on{background:var(--w-on)}
+.wlegend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--slate);padding-top:14px;margin-top:14px;border-top:1px solid var(--hair)}
+.wlegend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:4px;display:inline-block}
+.wmsg{padding:28px 0;text-align:center;color:var(--slate);font-size:15px;line-height:1.45}
+@media (max-width:360px){.wc .s{font-size:18px}.wgrid{gap:2px}}
+
 @media (min-width:700px){
   .clock{font-size:64px}
   .top{padding-left:calc(var(--sl) + 28px);padding-right:calc(var(--sr) + 28px)}
@@ -165,6 +195,7 @@ body.adjust #stage{cursor:move}
     <button class="btn play" id="play" aria-label="Play"><svg viewBox="0 0 24 24" fill="currentColor"><path id="playIcon" d="M8 5.5v13l11-6.5z"/></svg></button>
     <button class="btn" id="next" aria-label="Next frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
     <div class="run" id="run">Finding the latest run</div>
+    <button class="btn" id="windBtn" aria-label="Saltburn wind"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9h10.5a2.5 2.5 0 1 0-2.5-2.5M3 13h15a2.5 2.5 0 1 1-2.5 2.5M3 17h7"/></svg></button>
     <button class="btn" id="more" aria-label="Chart settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
   </div>
 </footer>
@@ -174,6 +205,26 @@ body.adjust #stage{cursor:move}
   <button class="pill" id="adjReset">Reset</button>
   <button class="pill primary" id="adjDone">Done</button>
 </div>
+
+<section class="wind" id="wind" hidden aria-labelledby="windTitle">
+  <div class="whead">
+    <div>
+      <h2 id="windTitle">Saltburn wind</h2>
+      <div class="wsub" id="windSub">Today and the next 5 days</div>
+    </div>
+    <button class="pill primary" id="windBack">Charts</button>
+  </div>
+  <div class="wtools">
+    <div class="seg" id="segUnit"></div>
+    <button class="pill" id="windReload">Refresh</button>
+  </div>
+  <div id="windDays"></div>
+  <div class="wlegend" aria-label="Colour key">
+    <span><i class="sw off"></i>Offshore</span><span><i class="sw xoff"></i>Cross-offshore</span>
+    <span><i class="sw xon"></i>Cross-onshore</span><span><i class="sw on"></i>Onshore</span><span><i class="sw light"></i>Under 5 kn</span>
+  </div>
+  <p class="fine" id="windFine"></p>
+</section>
 
 <div class="sheet" id="sheet" hidden>
   <div class="card" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
@@ -237,7 +288,7 @@ const STEPS = [[6, '6 hours'], [3, '3 hours']];
 const SPEEDS = [[700, 'Slow'], [420, 'Normal'], [220, 'Fast']];
 // Starting crop as a fraction of the source image: centre point and visible height.
 const DEFAULT_VIEWS = { EU: { cx: 0.53, cy: 0.34, span: 0.68 }, UK: { cx: 0.5, cy: 0.5, span: 1.02 } };
-const DEFAULTS = { chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420 };
+const DEFAULTS = { chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, windUnit: 'kn' };
 
 const opts = Object.assign({}, DEFAULTS, store.get('nsv.opts', {}));
 const saveOpts = () => store.set('nsv.opts', opts);
@@ -715,6 +766,7 @@ function seg(el, key, items) {
 }
 function onOptChange(key) {
   if (key === 'speed') return;
+  if (key === 'windUnit') { renderWind(); return; }
   if (key === 'region') { view = loadView(); natural = null; maybeHint(); }
   if (key !== 'runOffset') probeCache.clear();
   load({ keepValid: true }).then(renderFine);
@@ -778,9 +830,190 @@ $('#actFull').addEventListener('click', async () => {
 });
 sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
 
+/* ---------------- Saltburn wind ----------------
+   A beach forecast that ignores the chart's run and frame time: the charts
+   show the swell being made days out, this shows the local wind that will
+   shape it on arrival. Open-Meteo serves the Met Office UKV (2 km) model for
+   the first couple of days, then the Met Office global model, with no key.
+   Times are UK local time, as returned for the Europe/London zone. */
+const WIND = {
+  name: 'Saltburn',
+  lat: 54.5838, lon: -0.9724, // the pier
+  facing: 30,                 // the beach faces NNE, so SSW–SW winds blow offshore
+  light: 5,                   // knots; below this the direction hardly matters
+  days: 6,                    // today plus five
+  maxAge: 30 * 60e3,
+  url(model) {
+    return `https://api.open-meteo.com/v1/forecast?latitude=${this.lat}&longitude=${this.lon}` +
+      '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=kn' +
+      `&timezone=Europe%2FLondon&forecast_days=${this.days}` + (model ? `&models=${model}` : '');
+  }
+};
+const UNITS = [['kn', 'knots'], ['mph', 'mph'], ['kmh', 'km/h']];
+const UNIT_K = { kn: 1, mph: 1.15078, kmh: 1.852 };
+const UNIT_SHORT = { kn: 'kn', mph: 'mph', kmh: 'km/h' };
+const UNIT_S = () => UNIT_SHORT[opts.windUnit];
+const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+const SIDE = { off: 'offshore', xoff: 'cross-offshore', xon: 'cross-onshore', on: 'onshore', light: 'light' };
+const fUkParts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' });
+const fWindWeekday = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'long' });
+const fWindDate = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', day: 'numeric', month: 'short' });
+const windEl = $('#wind'), windDays = $('#windDays');
+let wind = store.get('nsv.wind', null);
+let windBusy = false, windFailed = false;
+
+function ukNow() {
+  const p = Object.fromEntries(fUkParts.formatToParts(Date.now()).map((x) => [x.type, x.value]));
+  return { day: `${p.year}-${p.month}-${p.day}`, hour: +p.hour };
+}
+const speedIn = (kn) => Math.round(kn * UNIT_K[opts.windUnit]);
+const compass = (deg) => COMPASS[Math.round(deg / 22.5) % 16];
+function side(from, kn) {
+  if (from == null || kn == null) return '';
+  if (kn < WIND.light) return 'light';
+  const d = Math.abs(((from - WIND.facing - 180) % 360 + 540) % 360 - 180);
+  return d <= 45 ? 'off' : d <= 90 ? 'xoff' : d <= 135 ? 'xon' : 'on';
+}
+
+async function fetchWind() {
+  // Ask for the Met Office models first; fall back to Open-Meteo's own blend.
+  for (const model of ['ukmo_seamless', '']) {
+    try {
+      const r = await fetch(WIND.url(model), { cache: 'no-store' });
+      if (!r.ok) continue;
+      const h = (await r.json()).hourly;
+      if (!h || !h.time || !h.time.length || !h.wind_speed_10m) continue;
+      return { at: Date.now(), model, time: h.time, speed: h.wind_speed_10m, dir: h.wind_direction_10m, gust: h.wind_gusts_10m || [] };
+    } catch {}
+  }
+  throw new Error('No wind forecast');
+}
+async function refreshWind(force) {
+  const fresh = wind && Date.now() - wind.at < WIND.maxAge && wind.time[0].slice(0, 10) === ukNow().day;
+  if (windBusy || (fresh && !force)) { renderWind(); return; }
+  windBusy = true;
+  renderWind();
+  try { wind = await fetchWind(); windFailed = false; store.set('nsv.wind', wind); }
+  catch { windFailed = true; }
+  windBusy = false;
+  renderWind();
+}
+
+function windDaysList() {
+  const today = ukNow().day, days = [];
+  wind.time.forEach((t, i) => {
+    const k = t.slice(0, 10);
+    if (k < today) return;
+    let d = days[days.length - 1];
+    if (!d || d.k !== k) { if (days.length === WIND.days) return; d = { k, hours: [] }; days.push(d); }
+    d.hours.push({ h: +t.slice(11, 13), kn: wind.speed[i], from: wind.dir[i], gust: wind.gust[i] });
+  });
+  return days;
+}
+function daySummary(hours) {
+  // Daylight-ish hours only: what matters for getting in the water.
+  const day = hours.filter((x) => x.h >= 6 && x.h <= 18 && x.kn != null);
+  if (!day.length) return '';
+  const count = {};
+  day.forEach((x) => { const s = side(x.from, x.kn); count[s] = (count[s] || 0) + 1; });
+  const windy = Object.entries(count).filter(([s]) => s !== 'light').sort((a, b) => b[1] - a[1]);
+  const lo = speedIn(Math.min(...day.map((x) => x.kn))), hi = speedIn(Math.max(...day.map((x) => x.kn)));
+  const gusts = day.map((x) => x.gust).filter((x) => x != null);
+  const u = UNIT_S();
+  let txt = !windy.length ? 'Light all day' : (windy[0][1] >= day.length * 0.6 ? 'Mostly ' : 'Mixed, mainly ') + SIDE[windy[0][0]];
+  txt += ` · ${lo === hi ? lo : `${lo}–${hi}`} ${u}`;
+  if (gusts.length) txt += `, gusts to ${speedIn(Math.max(...gusts))}`;
+  return `Daytime: ${txt}`;
+}
+const ARROW = 'M12 4v15M6.5 13.5L12 19l5.5-5.5';
+
+function windCell(x, past) {
+  const el = document.createElement('div');
+  const s = side(x.from, x.kn);
+  el.className = 'wc' + (s ? ' ' + s : '') + (past ? ' past' : '');
+  const time = `${pad2(x.h)}:00`;
+  if (x.kn == null || x.from == null) {
+    el.innerHTML = `<div class="t">${pad2(x.h)}</div><div class="s" style="margin-top:22px">–</div>`;
+    el.setAttribute('aria-label', `${time}, no data`);
+    return el;
+  }
+  // The arrow points the way the wind is blowing.
+  el.innerHTML = `<div class="t">${pad2(x.h)}</div>` +
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(${Math.round(x.from)}deg)"><path d="${ARROW}"/></svg>` +
+    `<div class="c">${compass(x.from)}</div><div class="s">${speedIn(x.kn)}</div>` +
+    `<div class="g">${x.gust != null ? 'g' + speedIn(x.gust) : '&nbsp;'}</div>`;
+  el.setAttribute('role', 'img');
+  el.setAttribute('aria-label', `${time}, from ${compass(x.from)}, ${speedIn(x.kn)} ${UNIT_S()}` +
+    (x.gust != null ? `, gusting ${speedIn(x.gust)}` : '') + `, ${SIDE[s]}`);
+  return el;
+}
+
+function renderWind() {
+  if (windEl.hidden) return;
+  seg($('#segUnit'), 'windUnit', UNITS);
+  const sub = $('#windSub');
+  windDays.innerHTML = '';
+  if (!wind) {
+    sub.textContent = 'Today and the next 5 days';
+    const m = document.createElement('div');
+    m.className = 'wmsg';
+    m.textContent = windBusy ? 'Loading the wind forecast' : "Couldn't load the wind forecast from open-meteo.com. Check your connection and tap Refresh.";
+    windDays.appendChild(m);
+    return;
+  }
+  const status = windBusy ? 'updating' : windFailed ? `couldn't update, showing ${ago(wind.at)}` : `updated ${ago(wind.at)}`;
+  sub.textContent = `Today and the next 5 days · ${status}`;
+  const now = ukNow();
+  windDaysList().forEach((d, i) => {
+    const [y, m, dd] = d.k.split('-').map(Number), ms = Date.UTC(y, m - 1, dd);
+    const sec = document.createElement('section');
+    sec.className = 'wday';
+    const h3 = document.createElement('h3');
+    h3.textContent = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : fWindWeekday.format(ms);
+    const small = document.createElement('small');
+    small.textContent = (i < 2 ? fWindWeekday.format(ms).slice(0, 3) + ' ' : '') + fWindDate.format(ms);
+    h3.appendChild(small);
+    const sum = document.createElement('div');
+    sum.className = 'wsum';
+    sum.textContent = daySummary(d.hours);
+    const grid = document.createElement('div');
+    grid.className = 'wgrid';
+    d.hours.filter((x) => x.h % 3 === 0).forEach((x) => grid.appendChild(windCell(x, d.k === now.day && x.h + 3 <= now.hour)));
+    sec.append(h3, sum, grid);
+    windDays.appendChild(sec);
+  });
+  const src = wind.model ? 'the Met Office UKV (2 km) model for the first two days, then the Met Office global model' : "Open-Meteo's best available models";
+  $('#windFine').textContent = `Forecast wind at 10 m for ${WIND.name} pier from ${src}, via open-meteo.com. ` +
+    `Every 3 hours in UK time; speed in ${UNIT_S()}, with gusts underneath. Arrows point the way the wind blows. ` +
+    `${WIND.name} faces north-north-east, so south-westerlies blow offshore and north-easterlies onshore.`;
+}
+
+function syncWind() {
+  const show = location.hash === '#wind';
+  if (show === !windEl.hidden) return;
+  windEl.hidden = !show;
+  if (show) { stopPlay(); closeSheet(); windEl.scrollTop = 0; refreshWind(); $('#windBack').focus(); }
+  else $('#windBtn').focus();
+}
+function openWind() {
+  if (location.hash !== '#wind') history.pushState({ wind: true }, '', '#wind');
+  syncWind();
+}
+function closeWind() {
+  if (history.state && history.state.wind) { history.back(); return; }
+  history.replaceState(null, '', location.pathname + location.search);
+  syncWind();
+}
+window.addEventListener('popstate', syncWind);
+window.addEventListener('hashchange', syncWind);
+$('#windBtn').addEventListener('click', openWind);
+$('#windBack').addEventListener('click', closeWind);
+$('#windReload').addEventListener('click', () => refreshWind(true));
+
 /* ---------------- Keyboard ---------------- */
 document.addEventListener('keydown', (e) => {
   if (!sheet.hidden) { if (e.key === 'Escape') closeSheet(); return; }
+  if (!windEl.hidden) { if (e.key === 'Escape') closeWind(); return; }
   if (adjusting) { if (e.key === 'Escape' || e.key === 'Enter') exitAdjust(); return; }
   if (e.key === 'ArrowRight') { stopPlay(); step(1); e.preventDefault(); }
   else if (e.key === 'ArrowLeft') { stopPlay(); step(-1); e.preventDefault(); }
@@ -801,9 +1034,13 @@ async function checkForNewRun() {
   updateRunLine();
 }
 setInterval(checkForNewRun, 10 * 60e3);
-setInterval(() => { updateRunLine(); placeNow(); if (frames[idx]) renderMeta(frames[idx]); }, 30e3);
+setInterval(() => {
+  updateRunLine(); placeNow(); if (frames[idx]) renderMeta(frames[idx]);
+  if (!windEl.hidden) refreshWind();
+}, 30e3);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && Date.now() - lastCheck > 60e3) checkForNewRun();
+  if (!document.hidden && !windEl.hidden) refreshWind();
 });
 let resizeTimer = 0;
 window.addEventListener('resize', () => {
@@ -816,6 +1053,7 @@ window.addEventListener('resize', () => {
 view = loadView();
 maybeHint();
 load({ keepValid: false });
+syncWind();
 })();
 </script>
 </body>
