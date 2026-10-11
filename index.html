@@ -993,8 +993,8 @@ function renderFine() {
   const f = frames[idx];
   const p = $('#fine');
   if (SOURCE === SOURCES.ours) {
-    p.textContent = "Our own charts, drawn every hour from NOAA's GFS model data as soon as a new run is complete: isobars every 4 hPa, " +
-      'with the 500 hPa height as colour (blue for cold upper air, orange for warm) and the yellow dot at Saltburn. ' +
+    p.textContent = "Our own charts, drawn every hour from NOAA's GFS model data as soon as a new run is complete. " +
+      'Colour is sea-level pressure: blues and purples for low pressure, oranges and reds for high, with isobars every 4 hPa and the yellow dot at Saltburn. ' +
       'Before publishing, each run is checked for missing frames and impossible pressures. ';
   } else {
     const how = runHow === 'server'
