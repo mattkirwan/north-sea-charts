@@ -4,18 +4,22 @@ Two things for the chart job (gfs_charts.py), from the same GFS run:
 
 swell_window() casts rays out from just off Saltburn every half degree, along
 great circles (the paths swell takes), until each meets land: Natural Earth's
-1:10m coastline, so Orkney, Shetland and the Fraserburgh corner are all in
-the way where they should be. The result is how far open sea runs in each
-direction: the swell window. The app shades it, and the travel times only
-run where it's open.
+1:10m coastline, so the Fraserburgh corner and Norway are in the way where
+they should be. Islands under ISLAND_KM2 (Shetland, Orkney, the Faroes, Jan
+Mayen) are left out: a groundswell arrives spread over a range of
+directions, and its shadow behind a thin island hundreds of kilometres away
+mostly fills back in. The result is how far open sea runs in each direction:
+the swell window. The app shades it, and the travel times only run where
+it's open.
 
 storm_alerts() follows every low through the run and flags bombs (pressure
 falling at least 24 hPa in 24 hours, scaled for latitude, as forecasters
-define it) whose winds are aimed at Saltburn: straight down the window, or
-into the gaps north of Scotland (between Orkney and Shetland, and north of
-Shetland), which some swell gets through to come on down the North Sea. For
-those it works out when swell would arrive: the first long-period energy and
-the main pulse, from the deep-water group speed g*T/4pi.
+define it) whose winds are aimed straight down the window at Saltburn, and
+works out when that swell would arrive: the first long-period energy and the
+main pulses, from the deep-water group speed g*T/4pi. Swell doesn't bend far
+in deep water, so winds aimed elsewhere (round Scotland, at Norway) count
+for nothing here; the alert just notes where the storm's strongest winds
+were, if they missed.
 
 Standard library, numpy, scipy and shapely (all installed with cartopy).
 
@@ -41,13 +45,7 @@ SALTBURN = (54.5838, -0.9724)
 ORIGIN = (54.605, -0.955)     # rays start a little off the pier, in the sea
 LAND_URL = 'https://naturalearth.s3.amazonaws.com/10m_physical/ne_10m_land.zip'
 STEP_DEG, MAX_KM, RAY_KM = 0.5, 3500, 4
-# The ways in north of Scotland for swell from out west: the Fair Isle gap
-# (Orkney to Shetland) and north of Shetland. Swell through a gap has to turn
-# to come on down to Saltburn, by refraction over the shelf and spreading
-# round the islands; past about 90 degrees too little survives to count.
-GAPS = [dict(name='Fair Isle gap', lat=59.45, lon=-1.75), dict(name='north of Shetland', lat=61.0, lon=-0.4)]
-MAX_TURN = 90
-FEED = (255, 15)  # the gaps feed from out west round to the north; the rest of the North Sea sees Saltburn itself
+ISLAND_KM2 = 3000  # islands smaller than this don't block the window
 KN = 1.943844
 R = 6371.0
 
@@ -98,8 +96,13 @@ def land():
         parts = []
         for s in rd.shapes():
             g = shape(s.__geo_interface__)
-            if g.intersects(area):
-                parts.append(g.buffer(0).intersection(area))
+            if not g.intersects(area):
+                continue
+            for poly in getattr(g, 'geoms', [g]):
+                c = poly.centroid
+                km2 = poly.area * 111.2 ** 2 * np.cos(np.radians(c.y))
+                if km2 >= ISLAND_KM2:
+                    parts.append(poly.buffer(0).intersection(area))
         _land = unary_union(parts)
         shapely.prepare(_land)
     return _land
@@ -117,21 +120,8 @@ def rays(lat, lon, max_km):
 
 def swell_window():
     """Open sea from just off Saltburn: km to the first land along each
-    bearing (0, 0.5, ... 359.5 degrees), up to MAX_KM. Plus, for each gap
-    north of Scotland, the sea that can send swell through it: rays out from
-    the gap, only on bearings whose swell would turn no more than MAX_TURN
-    to head on down to Saltburn (0 elsewhere)."""
-    out = dict(origin=list(ORIGIN), step=STEP_DEG, maxKm=MAX_KM, reach=[int(v) for v in rays(*ORIGIN, MAX_KM)], gaps=[])
-    bearings = np.arange(0, 360, STEP_DEG)
-    for g in GAPS:
-        on = float(bearing(g['lat'], g['lon'], ORIGIN[0], ORIGIN[1]))      # onward, gap to Saltburn
-        km = float(gc_dist(g['lat'], g['lon'], ORIGIN[0], ORIGIN[1]))
-        travel = (bearings + 180) % 360                                     # swell from that way travels this way
-        turn = np.abs((travel - on + 540) % 360 - 180)
-        feeds = (bearings >= FEED[0]) | (bearings <= FEED[1])
-        reach = np.where((turn <= MAX_TURN) & feeds, rays(g['lat'], g['lon'], MAX_KM - km), 0)
-        out['gaps'].append(dict(name=g['name'], lat=g['lat'], lon=g['lon'], km=round(km), reach=[int(v) for v in reach]))
-    return out
+    bearing (0, 0.5, ... 359.5 degrees), up to MAX_KM."""
+    return dict(origin=list(ORIGIN), step=STEP_DEG, maxKm=MAX_KM, reach=[int(v) for v in rays(*ORIGIN, MAX_KM)])
 
 
 def open_sectors(window, min_km=600):
@@ -199,24 +189,14 @@ def track_lows(times, lows_by_time):
 
 def swell_path(window, la, lo):
     """For sea cells (2-D lat/lon): path length to Saltburn (km), the bearing
-    the swell must leave on, and whether it's straight in (True) or through a
-    gap north of Scotland (False). NaN where neither works."""
+    the swell must leave on, and whether Saltburn is in sight down the window.
+    NaN where it isn't."""
     reach, step = np.array(window['reach']), window['step']
-    idx = lambda b: (np.round(b / step).astype(int)) % len(reach)
     b_from_s = bearing(ORIGIN[0], ORIGIN[1], la, lo)
     d_direct = gc_dist(ORIGIN[0], ORIGIN[1], la, lo)
-    seen = reach[idx(b_from_s)] >= d_direct - 25
+    seen = reach[(np.round(b_from_s / step).astype(int)) % len(reach)] >= d_direct - 25
     best_d = np.where(seen, d_direct, np.inf)
     aim = np.where(seen, bearing(la, lo, ORIGIN[0], ORIGIN[1]), np.nan)
-    # Otherwise in through a gap (where the gap's window reaches), then on down.
-    for g in window.get('gaps', []):
-        gr = np.array(g['reach'])
-        d_gap = gc_dist(g['lat'], g['lon'], la, lo)
-        via = ~seen & (gr[idx(bearing(g['lat'], g['lon'], la, lo))] >= d_gap - 25)
-        dg = d_gap + g['km']
-        better = via & (dg < best_d)
-        best_d = np.where(better, dg, best_d)
-        aim = np.where(better, bearing(la, lo, g['lat'], g['lon']), aim)
     best_d = np.where(np.isfinite(best_d), best_d, np.nan)
     return best_d, aim, seen
 
@@ -252,12 +232,15 @@ def storm_alerts(run, steps, frames, window):
             continue
         # Winds near the low (within 1200 km) blowing along a path to Saltburn.
         aimed = []  # (time, km, kn, straight, lat, lon)
-        peak_wind = 0
+        peak_wind, peak_at = 0, None
         for t, la, lo, p in tr:
             i = times.index(t)
             near = gc_dist(la, lo, LA, LO) < 1200
             sp = np.hypot(U[i], V[i])
-            peak_wind = max(peak_wind, float(np.where(near & sea, sp, 0).max()))
+            m = np.where(near & sea, sp, 0)
+            if m.max() > peak_wind:
+                a, b = np.unravel_index(np.argmax(m), m.shape)
+                peak_wind, peak_at = float(m.max()), (t, float(lats[a]), float(lons[b]))
             towards = (np.degrees(np.arctan2(U[i], V[i])) + 360) % 360
             ok = near & sea & np.isfinite(dist) & (sp >= 34) & (np.cos(np.radians(towards - aim)) > np.cos(np.radians(30)))
             for a, b in np.argwhere(ok):
@@ -293,6 +276,8 @@ def storm_alerts(run, steps, frames, window):
             kind='bomb', at=ms(deepest[0]), hPa=round(deepest[3]), lat=round(deepest[1], 1), lon=round(deepest[2], 1),
             where=place(deepest[1], deepest[2]), drop24=round(best[1]), bergeron=round(best[0], 1), deepeningAt=ms(best[2]),
             windKn=round(peak_wind), first=ms(first), pulses=pulses,
+            # Its strongest winds, if they weren't aimed down our window (most of that swell goes elsewhere).
+            missed=None if max(x[2] for x in aimed) >= peak_wind - 5 else dict(at=ms(peak_at[0]), kn=round(peak_wind), where=place(peak_at[1], peak_at[2])),
             until=max(p['arriveTo'] for p in pulses)))
     alerts.sort(key=lambda a: a['first'])
     return alerts
@@ -310,9 +295,6 @@ if __name__ == '__main__':
               for i in range(len(z['steps']))]
     w = swell_window()
     print('Open sectors (1000 km+):', [(f'{a:.1f}', f'{b:.1f}') for a, b in open_sectors(w, 1000)])
-    for g in w['gaps']:
-        r = np.array(g['reach'])
-        print(f"  {g['name']}: {g['km']} km on to Saltburn; feeds from {[(f'{a:.1f}', f'{b:.1f}') for a, b in open_sectors(dict(reach=list(r), step=w['step']), 300)]}")
     for b in (340, 345, 348, 349, 350, 352, 355, 357, 358, 359, 0, 5, 10, 20, 30, 35, 40, 60, 80, 100, 110, 120):
         print(f'  {b:5.1f} deg: {w["reach"][int(b / w["step"])]} km of sea')
     print(json.dumps(storm_alerts(run, list(z['steps']), frames, w), indent=1))
