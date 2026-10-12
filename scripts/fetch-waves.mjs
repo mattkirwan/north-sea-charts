@@ -22,7 +22,7 @@ if (!CCO_KEY) console.log('No CCO_API_KEY secret: skipping the Coastal Monitorin
 const get = async (u) => {
   // The CCO API picks its format from Accept (it sends XML otherwise).
   const r = await fetch(u, { headers: { Referer: 'https://mattkirwan.github.io/', Accept: 'application/json, text/plain, */*' }, signal: AbortSignal.timeout(60e3) });
-  if (!r.ok) throw new Error(`HTTP ${r.status} for ${u}`);
+  if (!r.ok) throw new Error(`HTTP ${r.status} for ${u.replace(/key=[^&]+/, "key=***")}`);
   return r.text();
 };
 const unescape = (s) => s.replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
@@ -34,7 +34,10 @@ const fresh = (ms) => ms && Date.now() - ms <= HOURS * 3600e3;
 const irishSea = (lat, lon) => lat < 55.8 && lon < -2.2;
 
 // CCO: GeoJSON of every buoy's latest reading. Dates are "YYYYMMDD#HHMMSS" UTC;
-// hs is significant height (m), tp peak period (s), pdir peak direction (deg from).
+// hs is significant height (m), tp peak period (s), pdir peak direction (deg from),
+// hmax the biggest single wave (m), tz mean period (s), spread the directional
+// spread (deg) and sst the sea temperature (C). One set of figures per buoy:
+// the feed has no separate swell and wind-sea partitions.
 if (CCO_KEY) try {
   const geo = JSON.parse(await get(`https://coastalmonitoring.org/observations/waves/latest?key=${CCO_KEY}&format=json`));
   const n = (v) => (v == null || v === '' ? null : +v);
@@ -45,10 +48,30 @@ if (CCO_KEY) try {
     if (lat == null || lat < BOX.s || lat > BOX.n || lon < BOX.w || lon > BOX.e || irishSea(lat, lon)) continue;
     console.log(`  CCO ${p.sensor} ${lat},${lon} waves=${p.hs ?? '-'} m period=${p.tp ?? '-'} s dir=${p.pdir ?? '-'} ${p.date ?? '-'}`);
     if (n(p.hs) == null || !fresh(ms)) continue;
-    stations.push({ name: p.sensor, code: `cco-${p.id}`, lat: +(+lat).toFixed(3), lon: +(+lon).toFixed(3), ms, h: n(p.hs), p: n(p.tp), d: n(p.pdir) });
+    stations.push({ name: p.sensor, code: `cco-${p.id}`, kind: 'buoy', lat: +(+lat).toFixed(3), lon: +(+lon).toFixed(3), ms,
+      h: n(p.hs), p: n(p.tp), d: n(p.pdir), hmax: n(p.hmax), tz: n(p.tz), spread: n(p.spread), sst: n(p.sst) });
   }
   console.log(`CCO: ${stations.length} with a recent wave height`);
 } catch (e) { console.log('CCO failed:', e.message); }
+
+// The last 24 hours from the same buoys, for a trend line: every reading
+// (usually half-hourly) as [time, height, period, direction].
+if (CCO_KEY && stations.length) try {
+  const geo = JSON.parse(await get(`https://coastalmonitoring.org/observations/waves/latest?key=${CCO_KEY}&format=json&duration=24`));
+  const n = (v) => (v == null || v === '' ? null : +v), byId = {};
+  for (const f of geo.features || []) {
+    const p = f.properties || {}, m = /^(\d{4})(\d\d)(\d\d)#(\d\d)(\d\d)/.exec(p.date || '');
+    if (!m || n(p.hs) == null) continue;
+    (byId[`cco-${p.id}`] ||= []).push([Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]), n(p.hs), n(p.tp), n(p.pdir)]);
+  }
+  for (const s of stations) {
+    const h = byId[s.code];
+    if (!h) continue;
+    const seen = new Set();
+    s.hist = h.filter(([t]) => t > Date.now() - 25 * 3600e3 && !seen.has(t) && seen.add(t)).sort((x, y) => x[0] - y[0]);
+  }
+  console.log(`CCO history: ${(geo.features || []).length} readings; ${stations.filter((s) => s.hist).map((s) => `${s.name} ${s.hist.length}`).join(', ')}`);
+} catch (e) { console.log('CCO history failed:', e.message); }
 
 // latest_obs.txt: one line per station with its newest report. Columns:
 // STN LAT LON YYYY MM DD hh mm WDIR WSPD GST WVHT DPD APD MWD ...; "MM" is
@@ -71,10 +94,10 @@ for (const line of lines.slice(2)) {
   if (lat == null || lat < BOX.s || lat > BOX.n || lon < BOX.w || lon > BOX.e || irishSea(lat, lon)) continue;
   const id = f[col('STN')], name = names[id.toUpperCase()] || `Station ${id}`;
   const ms = Date.UTC(+f[col('YYYY')], +f[col('MM')] - 1, +f[col('DD')], +f[col('hh')], +f[col('mm')]);
-  const p = num('DPD') ?? num('APD'), d = num('MWD');
+  const p = num('DPD') ?? num('APD'), d = num('MWD'), ws = num('WSPD'), wd = num('WDIR');
   console.log(`  ${id} ${name} ${lat},${lon} waves=${h ?? '-'} m period=${p ?? '-'} s dir=${d ?? '-'} ${new Date(ms).toISOString()}`);
   if (h == null || !fresh(ms)) continue;
-  stations.push({ name: name.replace(/\s+AWS$/, ''), code: id, lat, lon, ms, h, p, d });
+  stations.push({ name: name.replace(/\s+AWS$/, ''), code: id, kind: 'platform', lat, lon, ms, h, p, d, ws, wd });
 }
 console.log(`${stations.length} stations in all with a wave height in the last ${HOURS} h`);
 writeFileSync(process.argv[2] || 'waves.json', JSON.stringify({ at: Date.now(), source: 'Coastal Monitoring network and NOAA NDBC', hours: HOURS, stations }));
