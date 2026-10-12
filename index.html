@@ -51,6 +51,7 @@ body.adjust .tabbar,body.adjust .subnav{pointer-events:none;opacity:.35}
 #layer img.on{opacity:1}
 #layer #imgWind{z-index:2;transition:none}
 #layer #imgIce{z-index:1;transition:none}
+body.mono #imgA,body.mono #imgB{filter:grayscale(1) contrast(1.1)}
 #travel{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
 #travel .arc{fill:none;stroke-width:2;stroke-dasharray:7 6;stroke-linecap:round}
 #travel .rule{fill:none;stroke-width:2.5;stroke-linecap:round}
@@ -365,7 +366,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
         <button class="btn play" id="play" aria-label="Play"><svg viewBox="0 0 24 24" fill="currentColor"><path id="playIcon" d="M8 5.5v13l11-6.5z"/></svg></button>
         <button class="btn" id="next" aria-label="Next frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
         <button class="btn" id="windBtn" aria-pressed="false" aria-label="Wind arrows" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10.5a2.5 2.5 0 1 0-2.5-2.5M3 12h15.5a2.5 2.5 0 1 1-2.5 2.5M3 16h7.5a2.5 2.5 0 1 1-2.5 2.5"/></svg></button>
-        <button class="btn" id="iceBtn" aria-pressed="false" aria-label="Sea ice" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9 4l3 2 3-2M9 20l3-2 3 2M3.6 10.4l2.6-1.6-.2-3M17.8 18.2l.2-3 2.6-1.6M3.6 13.6l2.6 1.6-.2 3M17.8 5.8l.2 3 2.6 1.6"/></svg></button>
         <button class="btn" id="travelBtn" aria-pressed="false" aria-label="Swell window and travel times" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 3v18M19 6h-3M19 10h-5M19 14h-3M19 18h-5"/><path d="M4 8c3-2 6-2 8 0M4 14c3-2 6-2 8 0" stroke-dasharray="2 2.5"/></svg></button>
         <div class="run" id="run">Finding the latest run</div>
       </div>
@@ -428,6 +428,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="field"><span>How far ahead</span><div class="seg" id="segDays"></div></div>
     <div class="field"><span>Time between frames</span><div class="seg" id="segStep"></div></div>
     <div class="field"><span>Wind arrows</span><div class="seg" id="segWind"></div></div>
+    <div class="field"><span>Chart colours</span><div class="seg" id="segMono"></div></div>
     <div class="field"><span>Sea ice</span><div class="seg" id="segIce"></div></div>
     <div class="field"><span>Swell window &amp; travel times</span><div class="seg" id="segTravel"></div></div>
     <div class="field"><span>Swell period for travel times</span><div class="seg" id="segPeriod"></div></div>
@@ -532,6 +533,7 @@ const STEPS = [[6, '6 hours'], [3, '3 hours']];
 const SPEEDS = [[700, 'Slow'], [420, 'Normal'], [220, 'Fast']];
 const WIND_LAYER = [[false, 'Off'], [true, 'On']];
 const ICE_LAYER = WIND_LAYER;
+const MONO = [[false, 'Colour'], [true, 'Black & white']];
 const TRAVEL_LAYER = WIND_LAYER;
 const PERIODS = [[8, '8 s'], [10, '10 s'], [12, '12 s'], [14, '14 s']];
 // Starting crop as a fraction of the source image: centre point and visible height.
@@ -548,7 +550,7 @@ function homeFrom(home) {
   if (SOURCE === SOURCES.ours && !exploring) { view = loadView(); applyView(); }
 }
 const SRCS = [['ours', 'Ours'], ['wz', 'Wetterzentrale']];
-const DEFAULTS = { src: 'ours', windLayer: false, iceLayer: false, travelLayer: false, swellPeriod: 10, chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
+const DEFAULTS = { src: 'ours', windLayer: false, seaIce: true, chartMono: false, travelLayer: false, swellPeriod: 10, chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
 
 const opts = Object.assign({}, DEFAULTS, store.get('nsv.opts', {}));
 const saveOpts = () => store.set('nsv.opts', opts);
@@ -912,13 +914,12 @@ travelBtn.addEventListener('click', async () => {
   toast(!opts.travelLayer ? 'Swell window off' : travelGrid ? `Swell window, and travel times for a ${opts.swellPeriod} s swell` : "Couldn't load the swell window; check your connection");
 });
 
-/* Sea ice: one layer for the whole run, from the latest ice chart. */
-const iceImg = $('#imgIce'), iceBtn = $('#iceBtn');
+/* Sea ice: one layer for the whole run, from the latest ice chart. On unless
+   turned off in Settings. */
+const iceImg = $('#imgIce');
 function updateIce() {
   const ours = SOURCE === SOURCES.ours, ice = SOURCES.ours.ice;
-  iceBtn.hidden = !ours;
-  iceBtn.setAttribute('aria-pressed', String(!!opts.iceLayer));
-  if (!ours || !opts.iceLayer || !ice || !runMs) { iceImg.classList.remove('on'); return; }
+  if (!ours || !opts.seaIce || !ice || !runMs) { iceImg.classList.remove('on'); return; }
   const url = SOURCES.ours.iceUrl(runMs);
   if (iceImg.dataset.url !== url) {
     iceImg.dataset.url = url;
@@ -926,15 +927,9 @@ function updateIce() {
     iceImg.decode().then(() => { if (iceImg.dataset.url === url) iceImg.classList.add('on'); }).catch(() => {});
   } else iceImg.classList.add('on');
 }
-iceBtn.addEventListener('click', async () => {
-  opts.iceLayer = !opts.iceLayer;
-  saveOpts();
-  if (opts.iceLayer && !SOURCES.ours.ice) await freshManifest();
-  updateIce();
-  const ice = SOURCES.ours.ice;
-  toast(!opts.iceLayer ? 'Sea ice off' : ice ? `Sea ice from the ${iceDay(ice.date)} ice chart` : 'No ice chart with this run');
-});
 const iceDay = (d) => { const [y, m, dd] = d.split('-').map(Number); return new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }).format(Date.UTC(y, m - 1, dd)); };
+// Black and white for our charts (the layers over them keep their colour).
+function applyMono() { document.body.classList.toggle('mono', !!opts.chartMono && SOURCE === SOURCES.ours); }
 function updateWind() {
   // Always offered on our charts; a run drawn before the layer existed just has none.
   windBtn.hidden = SOURCE !== SOURCES.ours;
@@ -962,6 +957,7 @@ function renderMeta(f) {
 }
 
 function updateRunLine() {
+  applyMono();
   updateWind();
   updateIce();
   updateTravel();
@@ -1275,7 +1271,8 @@ function onOptChange(key) {
   if (key === 'speed') return;
   if (key === 'speedUnit') { renderLocal(); return; }
   if (key === 'windLayer') { updateWind(); return; }
-  if (key === 'iceLayer') { updateIce(); return; }
+  if (key === 'seaIce') { updateIce(); return; }
+  if (key === 'chartMono') { applyMono(); return; }
   if (key === 'travelLayer' || key === 'swellPeriod') { updateTravel(); return; }
   if (key === 'src') { SOURCE = SOURCES[opts.src] || SOURCES.ours; showSourceFields(); }
   if (key === 'region' || key === 'src') { view = loadView(); natural = null; maybeHint(); }
@@ -1327,7 +1324,10 @@ function renderSettings() {
   seg($('#segStep'), 'step', STEPS);
   seg($('#segSpeed'), 'speed', SPEEDS);
   seg($('#segWind'), 'windLayer', WIND_LAYER);
-  seg($('#segIce'), 'iceLayer', ICE_LAYER);
+  seg($('#segIce'), 'seaIce', ICE_LAYER);
+  seg($('#segMono'), 'chartMono', MONO);
+  const ice = SOURCES.ours.ice;
+  $('#segIce').previousElementSibling.textContent = ice ? `Sea ice (${iceDay(ice.date)} ice chart)` : 'Sea ice';
   seg($('#segTravel'), 'travelLayer', TRAVEL_LAYER);
   seg($('#segPeriod'), 'swellPeriod', PERIODS);
   $('#actFull').hidden = !document.fullscreenEnabled;
@@ -1338,7 +1338,7 @@ function renderSettings() {
 function showSourceFields() {
   ['#segChart', '#segRegion', '#segRun', '#segDays', '#segStep'].forEach((q) => { $(q).closest('.field').hidden = SOURCE === SOURCES.ours; });
   $('#segWind').closest('.field').hidden = SOURCE !== SOURCES.ours;
-  $('#segIce').closest('.field').hidden = SOURCE !== SOURCES.ours;
+  ['#segIce', '#segMono'].forEach((q) => { $(q).closest('.field').hidden = SOURCE !== SOURCES.ours; });
   ['#segTravel', '#segPeriod'].forEach((q) => { $(q).closest('.field').hidden = SOURCE !== SOURCES.ours; });
 }
 $('#actAdjust').addEventListener('click', enterAdjust);
