@@ -297,7 +297,7 @@ def storm_alerts(run, steps, frames, window):
         ms = lambda d: int(d.replace(tzinfo=dt.timezone.utc).timestamp() * 1000)
         # First signs: the fastest (20 s) energy from its strongest aimed winds.
         top = max(x[2] for x in aimed)
-        strong = [x for x in aimed if x[2] >= max(45, top - 10)]
+        strong = [x for x in aimed if x[2] >= max(min(45, top), top - 10)]  # always includes the strongest
         first = min(x[0] + dt.timedelta(hours=x[1] / cg_kmh(20)) for x in strong)
         # Pulses: the frame with the strongest aimed wind, and the one with the
         # most aimed wind overall if that's a separate burst (12 h or more apart).
@@ -312,7 +312,7 @@ def storm_alerts(run, steps, frames, window):
         for t in sorted(picks):
             cells = [x for x in aimed if x[0] == t]
             lead = max(cells, key=lambda x: x[2])
-            cells = [x for x in cells if x[2] >= max(40, lead[2] - 8)]  # the core of the burst
+            cells = [x for x in cells if x[2] >= max(min(40, lead[2]), lead[2] - 8)]  # the core of the burst
             pulses.append(dict(
                 genAt=ms(t), where=place(lead[4], lead[5]), kn=round(lead[2]),
                 arriveFrom=ms(min(t + dt.timedelta(hours=x[1] / cg_kmh(17)) for x in cells)),
