@@ -6,6 +6,8 @@ data on AWS, using the .idx files to fetch just those two fields, and draws a
 chart per hour: sea-level pressure as bright colour (blues and purples for
 lows, oranges and reds for highs) with isobars every 4 hPa, H/L centres and
 coastlines. (500 hPa height is downloaded for the checks but not drawn.) Writes PNGs and manifest.json into the output folder,
+plus a matching transparent wind layer per hour (w000.png...): 10 m wind as
+arrows the way it blows, longer for stronger, which the app can lay over the chart;
 plus fields.npz: the run's numbers themselves for the charted area, so we
 keep the data as well as the pictures (see save_fields).
 
@@ -48,7 +50,8 @@ VIEW = [-40, 35, 42, 82]
 HOME = [-20, 20, 49, 78]                       # the app's default framing: the North Sea, as the map used to be
 SALTBURN = (54.583, -0.973)
 PROJ = ccrs.LambertConformal(central_longitude=5, central_latitude=62, standard_parallels=(55, 70))
-FIELDS = {'PRMSL:mean sea level': 'prmsl', 'HGT:500 mb': 'gh'}
+FIELDS = {'PRMSL:mean sea level': 'prmsl', 'HGT:500 mb': 'gh', 'UGRD:10 m above ground': 'u10', 'VGRD:10 m above ground': 'v10'}
+KN = 1.943844                                  # knots per m/s
 
 INK, PAPER, COAST = '#173242', '#E8EEF1', '#0F2230'
 # Sea-level pressure, in the same 4 hPa steps as the isobars: deep purple and
@@ -94,15 +97,17 @@ def fetch_fields(run, step):
 
 def save_fields(run, steps, frames, path):
     """The run's sea-level pressure and 500 hPa height on the 0.25° grid over
-    STORE, every frame, as whole numbers: pressure in tenths of a hPa and
-    height in metres (int16, compressed; about 2 MB)."""
+    STORE, every frame, as whole numbers: pressure in tenths of a hPa, height
+    in metres and 10 m wind (u east, v north) in tenths of a m/s (int16, compressed)."""
     crop = lambda v: v.sel(latitude=slice(STORE['n'], STORE['s']), longitude=slice(STORE['w'], STORE['e']))
     first = crop(frames[0]['prmsl'])
     np.savez_compressed(
         path, run=run.strftime('%Y-%m-%dT%HZ'), steps=np.array(steps, dtype=np.int16),
         lat=first.latitude.values.astype(np.float32), lon=first.longitude.values.astype(np.float32),
         mslp_dhpa=np.stack([np.rint(crop(f['prmsl']).values / 10) for f in frames]).astype(np.int16),
-        z500_m=np.stack([np.rint(crop(f['gh']).values) for f in frames]).astype(np.int16))
+        z500_m=np.stack([np.rint(crop(f['gh']).values) for f in frames]).astype(np.int16),
+        u10_dms=np.stack([np.rint(crop(f['u10']).values * 10) for f in frames]).astype(np.int16),
+        v10_dms=np.stack([np.rint(crop(f['v10']).values * 10) for f in frames]).astype(np.int16))
 
 
 def map_box(box):
@@ -142,18 +147,32 @@ def extrema(field, lons, lats, size, kind):
     return out
 
 
-def draw(run, step, f, path):
-    p = f['prmsl'].values / 100.0                  # Pa -> hPa
-    h = f['gh'].values / 10.0                      # gpm -> dam
-    lons, lats = f['prmsl'].longitude.values, f['prmsl'].latitude.values
-    # Size the image to the map's own shape so there are no empty margins.
+def map_figure():
+    """A figure exactly the map's shape (no empty margins). 11 in at 155 dpi:
+    about 1700 px across, so the North Sea framing the app opens on is as
+    sharp as the old North Sea-only chart. The wind layer uses the same, so
+    the two line up pixel for pixel."""
     x0, x1, y0, y1 = map_box(VIEW)
-    # 11 in at 155 dpi: about 1700 px across, so the North Sea framing the app
-    # opens on is as sharp as the old North Sea-only chart.
     width = 11.0
     fig = plt.figure(figsize=(width, width * (y1 - y0) / (x1 - x0)), dpi=155)
     ax = fig.add_axes([0, 0, 1, 1], projection=PROJ)
     ax.set_extent(VIEW, crs=ccrs.PlateCarree())
+    return fig, ax
+
+
+def save_png(fig, path, **kw):
+    fig.savefig(path, **kw)
+    plt.close(fig)
+    # 256 colours is plenty for these flat bands, lines and arrows, at about a third of the size.
+    im = Image.open(path)
+    im = im.convert('RGBA' if im.mode in ('RGBA', 'LA') else 'RGB')
+    im.quantize(256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).save(path, optimize=True)
+
+
+def draw(run, step, f, path):
+    p = f['prmsl'].values / 100.0                  # Pa -> hPa
+    lons, lats = f['prmsl'].longitude.values, f['prmsl'].latitude.values
+    fig, ax = map_figure()
     ax.set_facecolor(INK)
     ps = gaussian_filter(p, 1.0)
     cf = ax.contourf(lons, lats, ps, levels=P_LEVELS, cmap=P_CMAP, extend='both', transform=ccrs.PlateCarree(), zorder=2, antialiased=False)
@@ -176,16 +195,38 @@ def draw(run, step, f, path):
     ax.text(0.012, 0.008, f'Run {run:%Hz %d %b} +{step}h · valid {valid:%a %d %b %H}z', transform=ax.transAxes,
             color=COAST, fontsize=9, zorder=6)
     ax.axis('off')
-    fig.savefig(path, facecolor=INK)
-    plt.close(fig)
-    # 256 colours is plenty for these flat bands and lines, at about a third of the size.
-    Image.open(path).convert('RGB').quantize(256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).save(path, optimize=True)
+    save_png(fig, path, facecolor=INK)
     return p, lons, lats
+
+
+def draw_wind(step, f, path):
+    """10 m wind as arrows on a transparent layer the size of the chart: evenly
+    spaced across the map, pointing the way the wind blows, length in
+    proportion to speed (a key arrow shows 30 kn). Calm spots get none."""
+    u, v = f['u10'].values * KN, f['v10'].values * KN
+    lons, lats = f['u10'].longitude.values, f['u10'].latitude.values
+    speed = np.hypot(u, v)
+    if np.isnan(speed).any() or speed.max() > 200:
+        raise RuntimeError(f'f{step:03d}: implausible wind, max {np.nanmax(speed):.0f} kn')
+    calm = speed < 4
+    u, v = np.where(calm, np.nan, u), np.where(calm, np.nan, v)
+    fig, ax = map_figure()
+    fig.patch.set_alpha(0)
+    ax.set_facecolor((0, 0, 0, 0))
+    q = ax.quiver(lons, lats, u, v, transform=ccrs.PlateCarree(), regrid_shape=30, pivot='middle',
+                  scale=75, scale_units='inches', width=0.0026, headwidth=3.6, headlength=4.2, headaxislength=3.8,
+                  color='white', edgecolor='#0F2230', linewidth=0.7, zorder=5)
+    k = ax.quiverkey(q, 0.955, 0.035, 30, '30 kn', labelpos='W', coordinates='axes', color='white',
+                     fontproperties=dict(size=10, weight='bold'), labelcolor='#0F2230')
+    k.text.set_path_effects([pe.withStroke(linewidth=3, foreground='white')])
+    ax.axis('off')
+    save_png(fig, path, transparent=True)
+    return float(np.nanmax(speed))
 
 
 def sanity(step, p):
     lo, hi = float(np.nanmin(p)), float(np.nanmax(p))
-    if np.isnan(p).any() or lo < 930 or hi > 1070:
+    if np.isnan(p).any() or lo < 900 or hi > 1070:
         raise RuntimeError(f'f{step:03d}: implausible pressures {lo:.0f}-{hi:.0f} hPa')
     return lo, hi
 
@@ -239,17 +280,19 @@ def main():
         p, lons, lats = draw(run, step, f, path)
         lo, hi = sanity(step, p)
         lows.append(lo); highs.append(hi)
-        print(f'  f{step:03d}: {lo:.0f}-{hi:.0f} hPa, {os.path.getsize(path) // 1024} KB')
+        wpath = os.path.join(outdir, f'w{step:03d}.png')
+        top = draw_wind(step, f, wpath)
+        print(f'  f{step:03d}: {lo:.0f}-{hi:.0f} hPa, {os.path.getsize(path) // 1024} KB; wind to {top:.0f} kn, {os.path.getsize(wpath) // 1024} KB')
         if do_check and step in (0, 24, 72, 120):
             check(run, step, p, lons, lats, path, outdir)
     save_fields(run, steps, frames, os.path.join(outdir, 'fields.npz'))
     print(f'  fields.npz: {os.path.getsize(os.path.join(outdir, "fields.npz")) // 1024} KB')
-    manifest = dict(run=int(run.timestamp() * 1000), runLabel=label(run), steps=steps, file='f%03d.png', data='fields.npz', home=home_view(),
+    manifest = dict(run=int(run.timestamp() * 1000), runLabel=label(run), steps=steps, file='f%03d.png', wind='w%03d.png', data='fields.npz', home=home_view(),
                     generated=int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000), source='NOAA GFS 0.25°',
                     pressure=dict(min=round(min(lows)), max=round(max(highs))))
     with open(os.path.join(outdir, 'manifest.json'), 'w') as fh:
         json.dump(manifest, fh)
-    print(f'Wrote {len(steps)} charts and manifest.json')
+    print(f'Wrote {len(steps)} charts, wind layers and manifest.json')
 
 
 if __name__ == '__main__':
