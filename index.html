@@ -59,6 +59,8 @@ body.adjust .tabbar,body.adjust .subnav{pointer-events:none;opacity:.35}
 #travel text{font:700 12px var(--f-body);fill:#0F2230}
 #travel .win{fill:rgba(255,194,61,.13);stroke:rgba(255,194,61,.7);stroke-width:1.2;stroke-linejoin:round}
 #travel .gap rect{fill:var(--amber);stroke:rgba(15,34,48,.6)}
+#travel .vwin{fill:rgba(255,194,61,.06);stroke:rgba(255,194,61,.55);stroke-width:1;stroke-dasharray:4 4;stroke-linejoin:round}
+#travel .arc.ink.via{fill:none;stroke-dasharray:2 5;stroke-width:2}
 #travel .tag rect{fill:#fff;stroke:rgba(15,34,48,.6)}
 #travel .key rect{fill:rgba(15,34,48,.85)}
 #travel .key text{fill:#fff;font-weight:600}
@@ -790,6 +792,18 @@ function destination(km, bearing) {
   const l2 = l1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(f1), Math.cos(d) - Math.sin(f1) * Math.sin(f2));
   return [f2 / r, l2 / r];
 }
+function destFrom(lat, lon, km, bearing) {
+  const r = Math.PI / 180, d = km / 6371, b = bearing * r, f1 = lat * r, l1 = lon * r;
+  const f2 = Math.asin(Math.sin(f1) * Math.cos(d) + Math.cos(f1) * Math.sin(d) * Math.cos(b));
+  const l2 = l1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(f1), Math.cos(d) - Math.sin(f1) * Math.sin(f2));
+  return [f2 / r, l2 / r];
+}
+function distBearing(lat1, lon1, lat2, lon2) {
+  const r = Math.PI / 180, f1 = lat1 * r, f2 = lat2 * r, dl = (lon2 - lon1) * r;
+  const d = 2 * 6371 * Math.asin(Math.sqrt(Math.sin((f2 - f1) / 2) ** 2 + Math.cos(f1) * Math.cos(f2) * Math.sin(dl / 2) ** 2));
+  const b = (Math.atan2(Math.sin(dl) * Math.cos(f2), Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl)) / r + 360) % 360;
+  return [d, b];
+}
 // Latitude and longitude to a fraction of the chart, between the grid's points.
 function onChart(lat, lon) {
   const g = travelGrid, i = (lon - g.lon0) / g.step, j = (lat - g.lat0) / g.step;
@@ -828,6 +842,14 @@ function drawTravel() {
     const w = travelWindow, pts = [];
     for (let i = 0; i < w.reach.length; i++) pts.push(pt(scr(...destination(Math.min(w.reach[i], TRAVEL.maxKm), i * w.step))));
     shade = `<path class="win" d="M${pts.join('L')}Z"/>`;
+    // Through the gaps north of Scotland: the sea out west and north that can
+    // send swell in through each, to turn and come on down. Fainter, as only
+    // part of it makes the turn.
+    (w.gaps || []).forEach((g) => {
+      const n = g.reach.length, poly = [];
+      for (let i = 0; i < n; i++) if (g.reach[i] > 0) poly.push(pt(scr(...destFrom(g.lat, g.lon, Math.min(g.reach[i], TRAVEL.maxKm - g.km), i * w.step))));
+      if (poly.length) shade += `<path class="vwin" d="M${pt(scr(g.lat, g.lon))}L${poly.join('L')}Z"/>`;
+    });
     windowSectors(1000).forEach(([from, to]) => {
       const span = (to - from + 360) % 360, mid = (from + span / 2) % 360;
       const [x, y] = scr(...destination(Math.min(900, reachAt(mid) - 100), mid));
@@ -851,6 +873,26 @@ function drawTravel() {
       for (let b = TRAVEL.from; b <= end; b += 2) d += (b === TRAVEL.from ? 'M' : 'L') + pt(scr(...destination(km, b % 360)));
     }
     if (d) arcs += `<path class="arc halo" d="${d}"/><path class="arc ink" d="${d}"/>`;
+    // The same time through each gap: a circle round the gap, dotted, wherever
+    // that sea can't see Saltburn straight (then the straight path is quicker).
+    if (travelWindow) (travelWindow.gaps || []).forEach((g) => {
+      const rest = km - g.km, step = travelWindow.step;
+      if (rest <= 20) return;
+      let dv = '', onv = false;
+      for (let i = 0; i <= g.reach.length; i++) {
+        const k = i % g.reach.length;
+        const p = destFrom(g.lat, g.lon, rest, k * step), [dd, bb] = distBearing(WIND.lat, WIND.lon, p[0], p[1]);
+        // ...and only where this gap is the quicker way in (one line, not two).
+        const quicker = (travelWindow.gaps || []).every((h) => {
+          if (h === g) return true;
+          const [dh, bh] = distBearing(h.lat, h.lon, p[0], p[1]);
+          return h.reach[Math.round(bh / step) % h.reach.length] < dh - 25 || dh + h.km >= km;
+        });
+        const open = g.reach[k] >= rest && reachAt(bb) < dd - 25 && quicker;
+        if (open) { dv += (onv ? 'L' : 'M') + pt(scr(...p)); onv = true; } else onv = false;
+      }
+      if (dv) arcs += `<path class="arc halo" d="${dv}"/><path class="arc ink via" d="${dv}"/>`;
+    });
     const [x, y] = scr(...destination(km, TRAVEL.rule)), label = hoursLabel(h), lw = 8 + label.length * 7.4;
     tags += `<g class="tag" transform="translate(${(x + 6).toFixed(1)},${(y - 10).toFixed(1)})"><rect width="${lw.toFixed(0)}" height="20" rx="6"/><text x="${(lw / 2).toFixed(1)}" y="14.5" text-anchor="middle">${label}</text></g>`;
   }
