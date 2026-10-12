@@ -2252,7 +2252,7 @@ async function refreshHeld(force) {
       const list = (d.swells || []).filter((sw) => sw.status === 'coming' || sw.held.peak > keep);
       heldSwells = { at: Date.now(), updated: d.updated, list };
       store.set('nsv.held', heldSwells);
-    }
+    } else if (r.status === 404) heldSwells = { at: Date.now(), updated: null, list: [] }; // nothing held yet
   } catch {}
   heldBusy = false;
   renderPredict();
@@ -2294,7 +2294,7 @@ function renderSwells() {
   // Coming first, soonest first; then those that have been, latest first.
   list.sort((a, b) => (b.status === 'coming') - (a.status === 'coming') || (a.status === 'coming' ? lastSeen(a).peak - lastSeen(b).peak : lastSeen(b).peak - lastSeen(a).peak));
   if (!list.length) {
-    box.innerHTML = `<div class="d" style="color:var(--slate);font-size:14px">${heldSwells ? 'Nothing knee high or more on its way in the latest runs.' : heldBusy ? 'Loading the coming swells' : "Couldn't load the coming swells."}</div>`;
+    box.innerHTML = `<div class="d" style="color:var(--slate);font-size:14px">${heldSwells ? (heldSwells.updated ? 'Nothing knee high or more on its way in the latest runs.' : 'No swells held yet: the first come with the next model run.') : heldBusy ? 'Loading the coming swells' : "Couldn't load the coming swells. Check you're online."}</div>`;
     return;
   }
   const whitby = obs && obs.stations.find((s) => s.name === 'Whitby');
