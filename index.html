@@ -460,23 +460,25 @@ SOURCES.wz = {
     return `https://wetterzentrale.de/en/topkarten.php?map=${map}&model=gfs&var=${o.chart}&time=${step}&run=${new Date(runMs).getUTCHours()}&lid=OP&h=0&mv=0&tr=${o.step}`;
   }
 };
-// Our own charts, drawn from NOAA's GFS data every hour by a GitHub Action
+// Our own charts, drawn from NOAA's GFS data after each run by a GitHub Action
 // (scripts/gfs_charts.py) onto the repo's `charts` branch. Only the newest run
-// is kept, every 6 hours out to +168 h; manifest.json says which run it is.
+// is kept, every 6 hours out to +168 h; manifest.json says which run it is and
+// where the North Sea sits in the (much wider) map, which is where we start.
 SOURCES.ours = {
   name: 'NOAA GFS, drawn by this app',
   model: 'GFS',
   cycleH: 6,
   maxStep: 168,
   only: { step: 6, runOffset: 0, days: 7 }, // options this source can't vary
-  region: 'GFS',
+  region: 'WIDE', // the wide map, from the Atlantic to Svalbard (was 'GFS', the North Sea only)
   base: 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/charts/',
-  url(runMs, step) { return `${this.base}f${String(step).padStart(3, '0')}.png?run=${runKey(runMs)}${cacheBust ? '&v=' + cacheBust : ''}`; },
+  url(runMs, step) { return `${this.base}f${String(step).padStart(3, '0')}.png?run=${runKey(runMs)}&map=wide${cacheBust ? '&v=' + cacheBust : ''}`; },
   page() { return 'https://github.com/mattkirwan/north-sea-charts/tree/charts'; },
   async latest() {
     const r = await fetchT(`${this.base}manifest.json?t=${Math.floor(Date.now() / 300e3)}`, { cache: 'no-store' }, 15e3);
     if (!r.ok) throw new Error(`manifest ${r.status}`);
     const m = await r.json();
+    if (m.home) homeFrom(m.home);
     return { ms: m.run, how: 'manifest' };
   }
 };
@@ -487,7 +489,18 @@ const DAYS = [[5, '5 days'], [7, '7 days'], [10, '10 days'], [16, '16 days']];
 const STEPS = [[6, '6 hours'], [3, '3 hours']];
 const SPEEDS = [[700, 'Slow'], [420, 'Normal'], [220, 'Fast']];
 // Starting crop as a fraction of the source image: centre point and visible height.
-const DEFAULT_VIEWS = { EU: { cx: 0.53, cy: 0.34, span: 0.68 }, UK: { cx: 0.5, cy: 0.5, span: 1.02 }, GFS: { cx: 0.5, cy: 0.5, span: 1.0 } };
+const DEFAULT_VIEWS = { EU: { cx: 0.53, cy: 0.34, span: 0.68 }, UK: { cx: 0.5, cy: 0.5, span: 1.02 }, WIDE: { cx: 0.5309, cy: 0.4806, span: 0.705 } };
+// Our wide map's North Sea framing, from its manifest. A crop saved on the old
+// North Sea-only map is moved onto the wide one, so it frames the same area.
+function homeFrom(home) {
+  DEFAULT_VIEWS.WIDE = { cx: home.cx, cy: home.cy, span: home.span };
+  const old = store.get('nsv.view.GFS', null);
+  if (old && home.w && !store.get('nsv.view.WIDE', null)) {
+    store.set('nsv.view.WIDE', { cx: home.cx + (old.cx - 0.5) * home.w, cy: home.cy + (old.cy - 0.5) * home.span, span: old.span * home.span });
+  }
+  if (old) store.set('nsv.view.GFS', null);
+  if (SOURCE === SOURCES.ours && !exploring) { view = loadView(); applyView(); }
+}
 const SRCS = [['ours', 'Ours'], ['wz', 'Wetterzentrale']];
 const DEFAULTS = { src: 'ours', chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
 
@@ -837,12 +850,20 @@ function applyView() {
   layer.style.height = natural.h + 'px';
   layer.style.transform = `translate(${t.tx}px, ${t.ty}px) scale(${t.s})`;
 }
-let saveTimer = 0;
+// Pinching and dragging the chart explores without changing the saved framing;
+// only Adjust view saves one. A double tap goes back to it.
+let saveTimer = 0, exploring = false;
 function setT(t) {
   view = tToView(t);
   applyView();
+  if (!adjusting) { exploring = true; return; }
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveView, 400);
+}
+function homeView() {
+  exploring = false;
+  view = loadView();
+  applyView();
 }
 function saveView() {
   store.set(viewKey(), view);
@@ -852,9 +873,11 @@ function saveView() {
 
 /* Gestures on the chart:
    one finger sideways = move through time, tap = hide/show controls,
-   two fingers = pan and zoom the crop (saved). In Adjust view, one finger pans. */
+   two fingers (or the mouse wheel) = pan and zoom around the map,
+   double tap = back to the saved framing. In Adjust view, one finger pans and
+   the result is saved as the framing. */
 const pointers = new Map();
-let g = null;
+let g = null, lastTap = 0;
 function baseline() {
   const pts = [...pointers.values()];
   if (!natural || !pts.length) return null;
@@ -915,7 +938,16 @@ function pointerEnd(e) {
     return;
   }
   if (g.mode === 'pending' && e.type === 'pointerup' && performance.now() - g.t0 < 350) {
-    document.body.classList.toggle('bare');
+    const now = performance.now();
+    if (now - lastTap < 320) {
+      // Second tap: undo the first tap's toggle and go back to the framing.
+      document.body.classList.toggle('bare');
+      homeView();
+      lastTap = 0;
+    } else {
+      document.body.classList.toggle('bare');
+      lastTap = now;
+    }
   }
   g = null;
 }
@@ -931,6 +963,7 @@ stage.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 function enterAdjust() {
+  exploring = false;
   if (route !== 'pressure') go('pressure');
   hint.hidden = true;
   stopPlay();

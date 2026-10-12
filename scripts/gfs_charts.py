@@ -35,13 +35,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from matplotlib.colors import LinearSegmentedColormap
+from PIL import Image
 from scipy.ndimage import gaussian_filter, maximum_filter, minimum_filter
 
 from gfs_latest import STEPS, grib_url, label, latest_run
 
 AREA = dict(w=-90, e=90, s=20, n=90)          # data we draw: well beyond the map, so colour fills it
-STORE = dict(w=-30, e=30, s=45, n=80)         # data we save: the map with a margin
-VIEW = [-20, 20, 49, 78]                       # map extent: lon W, lon E, lat S, lat N
+STORE = dict(w=-55, e=50, s=35, n=85)         # data we save: the map with a margin
+# Map extent (lon W, lon E, lat S, lat N): out west over Iceland into the
+# Atlantic for lows on their way, all of Svalbard, and down to Biscay.
+VIEW = [-40, 35, 42, 82]
+HOME = [-20, 20, 49, 78]                       # the app's default framing: the North Sea, as the map used to be
 SALTBURN = (54.583, -0.973)
 PROJ = ccrs.LambertConformal(central_longitude=5, central_latitude=62, standard_parallels=(55, 70))
 FIELDS = {'PRMSL:mean sea level': 'prmsl', 'HGT:500 mb': 'gh'}
@@ -101,17 +105,39 @@ def save_fields(run, steps, frames, path):
         z500_m=np.stack([np.rint(crop(f['gh']).values) for f in frames]).astype(np.int16))
 
 
+def map_box(box):
+    """The projected rectangle that set_extent(box) shows."""
+    probe = plt.figure()
+    ax = probe.add_axes([0, 0, 1, 1], projection=PROJ)
+    ax.set_extent(box, crs=ccrs.PlateCarree())
+    ext = ax.get_extent()
+    plt.close(probe)
+    return ext
+
+
+def home_view():
+    """Where HOME sits in the map, as the app's crop: centre (fractions of
+    width and height from the top left), visible height, and its width."""
+    x0, x1, y0, y1 = map_box(VIEW)
+    h0, h1, k0, k1 = map_box(HOME)
+    return dict(cx=round(((h0 + h1) / 2 - x0) / (x1 - x0), 4), cy=round((y1 - (k0 + k1) / 2) / (y1 - y0), 4),
+                span=round((k1 - k0) / (y1 - y0), 4), w=round((h1 - h0) / (x1 - x0), 4))
+
+
 def extrema(field, lons, lats, size, kind):
     """Local highs or lows in a smoothed field, away from the edges."""
     sm = gaussian_filter(field, 3)
     filt = maximum_filter if kind == 'H' else minimum_filter
     peaks = np.argwhere(sm == filt(sm, size=size, mode='nearest'))
     wide = filt(sm, size=size * 2, mode='nearest')  # keep only centres that dominate a wider area
+    x0, x1, y0, y1 = map_box(VIEW)
+    mx, my = (x1 - x0) * 0.03, (y1 - y0) * 0.04  # and more at the bottom, clear of the caption
     out = []
     for y, x in peaks:
         if 8 < y < field.shape[0] - 8 and 8 < x < field.shape[1] - 8 and abs(sm[y, x] - wide[y, x]) < 0.6:
             lo, la = float(lons[x]), float(lats[y])
-            if VIEW[0] + 1.5 <= lo <= VIEW[1] - 1.5 and VIEW[2] + 1 <= la <= VIEW[3] - 1:  # whole label inside the map
+            px, py = PROJ.transform_point(lo, la, ccrs.PlateCarree())
+            if x0 + mx <= px <= x1 - mx and y0 + 2.5 * my <= py <= y1 - my:  # whole label inside the map
                 out.append((lo, la, float(field[y, x])))
     return out
 
@@ -121,13 +147,11 @@ def draw(run, step, f, path):
     h = f['gh'].values / 10.0                      # gpm -> dam
     lons, lats = f['prmsl'].longitude.values, f['prmsl'].latitude.values
     # Size the image to the map's own shape so there are no empty margins.
-    probe = plt.figure()
-    pax = probe.add_axes([0, 0, 1, 1], projection=PROJ)
-    pax.set_extent(VIEW, crs=ccrs.PlateCarree())
-    x0, x1, y0, y1 = pax.get_extent()
-    plt.close(probe)
-    width = 9.0
-    fig = plt.figure(figsize=(width, width * (y1 - y0) / (x1 - x0)), dpi=100)
+    x0, x1, y0, y1 = map_box(VIEW)
+    # 11 in at 155 dpi: about 1700 px across, so the North Sea framing the app
+    # opens on is as sharp as the old North Sea-only chart.
+    width = 11.0
+    fig = plt.figure(figsize=(width, width * (y1 - y0) / (x1 - x0)), dpi=155)
     ax = fig.add_axes([0, 0, 1, 1], projection=PROJ)
     ax.set_extent(VIEW, crs=ccrs.PlateCarree())
     ax.set_facecolor(INK)
@@ -149,11 +173,13 @@ def draw(run, step, f, path):
             ax.text(lo, la - 0.9, f'{v:.0f}', color=colour, fontsize=11, fontweight='bold', ha='center', va='top', transform=ccrs.PlateCarree(), zorder=5, path_effects=white)
     ax.plot(SALTBURN[1], SALTBURN[0], 'o', ms=6, color='#FFC23D', mec=COAST, mew=1, transform=ccrs.PlateCarree(), zorder=6)
     valid = run + dt.timedelta(hours=step)
-    ax.text(0.012, 0.008, f'GFS {run:%Hz %d %b} +{step}h · valid {valid:%a %d %b %H}z · NOAA data', transform=ax.transAxes,
+    ax.text(0.012, 0.008, f'Run {run:%Hz %d %b} +{step}h · valid {valid:%a %d %b %H}z', transform=ax.transAxes,
             color=COAST, fontsize=9, zorder=6)
     ax.axis('off')
     fig.savefig(path, facecolor=INK)
     plt.close(fig)
+    # 256 colours is plenty for these flat bands and lines, at about a third of the size.
+    Image.open(path).convert('RGB').quantize(256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).save(path, optimize=True)
     return p, lons, lats
 
 
@@ -200,7 +226,7 @@ def main():
     os.makedirs(outdir, exist_ok=True)
     steps = [0, 24, 72] if os.environ.get('QUICK') else STEPS  # QUICK: a preview of the look
     run = latest_run()
-    print(f'GFS run {run:%Y-%m-%d %H}z')
+    print(f'GFS run {run:%Y-%m-%d %H}z; home view {home_view()}')
     # The workflow passes the run already published; nothing to do if it's this one.
     if os.environ.get('PUBLISHED_RUN') == label(run) and not do_check and not os.environ.get('FORCE'):
         print('Already published; nothing to do.')
@@ -218,7 +244,7 @@ def main():
             check(run, step, p, lons, lats, path, outdir)
     save_fields(run, steps, frames, os.path.join(outdir, 'fields.npz'))
     print(f'  fields.npz: {os.path.getsize(os.path.join(outdir, "fields.npz")) // 1024} KB')
-    manifest = dict(run=int(run.timestamp() * 1000), runLabel=label(run), steps=steps, file='f%03d.png', data='fields.npz',
+    manifest = dict(run=int(run.timestamp() * 1000), runLabel=label(run), steps=steps, file='f%03d.png', data='fields.npz', home=home_view(),
                     generated=int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000), source='NOAA GFS 0.25°',
                     pressure=dict(min=round(min(lows)), max=round(max(highs))))
     with open(os.path.join(outdir, 'manifest.json'), 'w') as fh:
