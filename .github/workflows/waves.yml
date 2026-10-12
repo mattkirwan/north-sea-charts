@@ -8,11 +8,6 @@ on:
   schedule:
     - cron: '7,37 * * * *'
   workflow_dispatch:
-    inputs:
-      probe_cco:
-        description: 'Temporary: show what the Coastal Monitoring API returns, instead of collecting'
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -30,14 +25,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Look at the Coastal Monitoring API
-        if: ${{ inputs.probe_cco }}
-        run: node scripts/probe-cco.mjs
-      - name: Fetch from NOAA NDBC
-        if: ${{ !inputs.probe_cco }}
+      - name: Fetch from the Coastal Monitoring network and NOAA NDBC
         run: node scripts/fetch-waves.mjs "$RUNNER_TEMP/waves.json"
       - name: Publish to the data branch
-        if: ${{ !inputs.probe_cco }}
         env:
           TOKEN: ${{ github.token }}
         run: |
