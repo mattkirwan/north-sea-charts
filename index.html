@@ -287,7 +287,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
   <nav class="subnav">
     <div class="tabs" role="tablist" aria-label="Forecast">
       <button role="tab" data-route="pressure" aria-controls="sPressure">Pressure</button>
-      <button role="tab" data-route="swell" aria-controls="sSwell">Swell</button>
+      <button role="tab" data-route="buoys" aria-controls="sSwell">Buoys</button>
       <button role="tab" data-route="wind" aria-controls="sWind">Wind</button>
       <button role="tab" data-route="tides" aria-controls="sTides">Tides</button>
     </div>
@@ -1429,7 +1429,7 @@ function renderTides() {
     'Touch the curve to read the level at any time; the amber line is now.';
 }
 
-/* ---------------- Swell: latest measurements ----------------
+/* ---------------- Buoys: latest measurements ----------------
    Measured data only, no model: the newest wave reading from each buoy and
    platform around the North Sea that has reported recently: wave buoys from
    the Coastal Monitoring network (Whitby and others, with period and
@@ -1524,7 +1524,7 @@ const feet = (m) => (m * FT < 1 ? '<1' : String(Math.round(m * FT)));
 const arrowSvg = (deg, size) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(${Math.round(deg)}deg)"><path d="${ARROW}"/></svg>`;
 
 function renderSwell() {
-  if (!showing('swell')) return;
+  if (!showing('buoys')) return;
   const status = $('#swellStatus'), head = $('#swellHead'), mapEl = $('#swellMap'), list = $('#swellList');
   head.hidden = true;
   list.innerHTML = '';
@@ -1708,7 +1708,7 @@ function renderWaits() {
   if (showing('cam')) waitBanner('#waitCam', [W, T]);
   if (showing('wind')) waitBanner('#waitWind', [W]);
   if (showing('tides')) waitBanner('#waitTides', [T]);
-  if (showing('swell')) {
+  if (showing('buoys')) {
     waitBanner('#waitSwell', [O]);
     // The collector runs every half hour; flag it if the readings are well behind.
     const w = $('#waitSwell');
@@ -1726,7 +1726,7 @@ function renderLocal() {
 }
 function refreshLocal(force) {
   const now = route === 'today' || route === 'cam';
-  if (route === 'swell') refreshSwell(force);
+  if (route === 'buoys') refreshSwell(force);
   if (now || route === 'wind') refreshWind(force);
   if (now || route === 'tides') refreshTides(force);
 }
@@ -1735,19 +1735,23 @@ function refreshLocal(force) {
    Today, Cam, or one of the Forecast tabs. The hash names the view so links and
    home-screen bookmarks open in the right place; tab taps replace it rather
    than stacking history. The charts only start loading on first visit. */
-const ROUTES = ['today', 'cam', 'pressure', 'swell', 'wind', 'tides'];
+const ROUTES = ['today', 'cam', 'pressure', 'buoys', 'wind', 'tides'];
+// Buoys was called Swell: keep old links and the remembered tab working.
+const RENAMED = { swell: 'buoys' };
 // The shop's live stream: loaded only while Cam is open, so it costs no data otherwise.
 const CAM_SRC = 'https://www.youtube.com/embed/4BAG3xt3YQo?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1';
 const camFrame = $('#camFrame');
 let forecastTab = store.get('nsv.forecastTab', 'pressure');
+forecastTab = RENAMED[forecastTab] || forecastTab;
 let chartsStarted = false;
-const routeFromHash = () => { const h = location.hash.slice(1); return ROUTES.includes(h) ? h : 'today'; };
+const routeFromHash = () => { const h = location.hash.slice(1); const r = RENAMED[h] || h; return ROUTES.includes(r) ? r : 'today'; };
 function go(r) {
   history.replaceState(null, '', r === 'today' ? location.pathname + location.search : '#' + r);
   syncRoute();
 }
 function syncRoute() {
   const r = routeFromHash(), prev = route, top = r === 'today' || r === 'cam' ? r : 'forecast';
+  if (RENAMED[location.hash.slice(1)]) history.replaceState(null, '', '#' + r);
   route = r;
   if (top === 'forecast') { forecastTab = r; store.set('nsv.forecastTab', r); }
   $('#vToday').hidden = top !== 'today';
@@ -1761,7 +1765,7 @@ function syncRoute() {
   }
   if (r !== 'cam' && camFrame.dataset.on === '1') { camFrame.src = 'about:blank'; camFrame.dataset.on = ''; }
   $('#sPressure').hidden = r !== 'pressure';
-  $('#sSwell').hidden = r !== 'swell';
+  $('#sSwell').hidden = r !== 'buoys';
   $('#sWind').hidden = r !== 'wind';
   $('#sTides').hidden = r !== 'tides';
   document.querySelectorAll('.tabbar button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.route === top)));
@@ -1774,7 +1778,7 @@ function syncRoute() {
     stopPlay();
     if (adjusting) exitAdjust();
   }
-  if (r !== prev) { const pane = { today: '#vToday', cam: '#vCam', swell: '#sSwell', wind: '#sWind', tides: '#sTides' }[r]; if (pane) $(pane).scrollTop = 0; }
+  if (r !== prev) { const pane = { today: '#vToday', cam: '#vCam', buoys: '#sSwell', wind: '#sWind', tides: '#sTides' }[r]; if (pane) $(pane).scrollTop = 0; }
   refreshLocal();
 }
 window.addEventListener('popstate', syncRoute);
