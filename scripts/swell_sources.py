@@ -17,9 +17,18 @@ falling at least 24 hPa in 24 hours, scaled for latitude, as forecasters
 define it) whose winds are aimed straight down the window at Saltburn, and
 works out when that swell would arrive: the first long-period energy and the
 main pulses, from the deep-water group speed g*T/4pi. Swell doesn't bend far
-in deep water, so winds aimed elsewhere (round Scotland, at Norway) count
+in deep water, so winds aimed well away (south of Iceland, at Norway) count
 for nothing here; the alert just notes where the storm's strongest winds
 were, if they missed.
+
+Two bends are allowed for, at the window's edges, and come out smaller:
+- North-west, round the Aberdeenshire corner: up to NW_FAN degrees, which
+  reaches the sea off east Iceland and the Faroes (a groundswell's spread of
+  directions, and diffraction round the corner).
+- South-east, along the Yorkshire coast: SE swell from the southern North
+  Sea bends in round the headlands in the shallows. Rays ignore land in the
+  first SE_SHORE_KM (out past Flamborough Head) for up to SE_FAN degrees
+  past the window's edge.
 
 Standard library, numpy, scipy and shapely (all installed with cartopy).
 
@@ -46,6 +55,7 @@ ORIGIN = (54.605, -0.955)     # rays start a little off the pier, in the sea
 LAND_URL = 'https://naturalearth.s3.amazonaws.com/10m_physical/ne_10m_land.zip'
 STEP_DEG, MAX_KM, RAY_KM = 0.5, 3500, 4
 ISLAND_KM2 = 3000  # islands smaller than this don't block the window
+NW_FAN, SE_FAN, SE_SHORE_KM = 30, 45, 85
 KN = 1.943844
 R = 6371.0
 
@@ -108,20 +118,46 @@ def land():
     return _land
 
 
-def rays(lat, lon, max_km):
-    """km of open sea from (lat, lon) along each bearing, to the first land."""
+def rays(lat, lon, max_km, skip_km=0):
+    """km of open sea from (lat, lon) along each bearing, to the first land
+    (ignoring any in the first skip_km)."""
     bearings = np.arange(0, 360, STEP_DEG)
     dists = np.arange(RAY_KM, max_km + RAY_KM, RAY_KM)
     B, D = np.meshgrid(bearings, dists, indexing='ij')
     la, lo = destination(lat, lon, B, D)
-    hit = shapely.contains_xy(land(), lo, la)
+    hit = shapely.contains_xy(land(), lo, la) & (D > skip_km)
     return np.where(hit.any(axis=1), dists[np.argmax(hit, axis=1)] - RAY_KM, max_km).astype(float)
 
 
 def swell_window():
     """Open sea from just off Saltburn: km to the first land along each
-    bearing (0, 0.5, ... 359.5 degrees), up to MAX_KM."""
-    return dict(origin=list(ORIGIN), step=STEP_DEG, maxKm=MAX_KM, reach=[int(v) for v in rays(*ORIGIN, MAX_KM)])
+    bearing (0, 0.5, ... 359.5 degrees), up to MAX_KM. And the two bends: for
+    each, the point the swell bends round, its distance on to Saltburn, and
+    the sea that can reach it in the fan (km per bearing from that point, 0
+    outside the fan)."""
+    reach = rays(*ORIGIN, MAX_KM)
+    n, step = len(reach), STEP_DEG
+    bearings = np.arange(0, 360, step)
+    bends = []
+    # North-west: the last bearing (looking anticlockwise from north) that hits
+    # the Scottish coast before the window opens out.
+    edge = next(i for i in range(int(340 / step), int(360 / step)) if reach[i] < 600 and reach[(i + 1) % n] >= 1000)
+    # The swell bends round just past the headland: on the first open bearing,
+    # a little beyond the land that stops the one before.
+    corner = destination(ORIGIN[0], ORIGIN[1], (edge + 1) * step, reach[edge] + 20)
+    out = float(bearing(corner[0], corner[1], *destination(ORIGIN[0], ORIGIN[1], (edge + 1) * step, reach[edge] + 400)))
+    fan = ((out - bearings + 360) % 360 <= NW_FAN)
+    r = rays(float(corner[0]), float(corner[1]), MAX_KM)
+    bends.append(dict(name='round the Aberdeenshire coast', lat=round(float(corner[0]), 4), lon=round(float(corner[1]), 4),
+                      km=int(gc_dist(corner[0], corner[1], ORIGIN[0], ORIGIN[1])), start=0, reach=[int(v) for v in np.where(fan, r, 0)]))
+    # South-east: past the last open bearing before the Yorkshire coast closes it.
+    edge = next(i for i in range(int(90 / step), int(150 / step)) if reach[i] >= 300 and reach[i + 1] < 50)
+    fan = ((bearings - edge * step + 360) % 360 <= SE_FAN) & ((bearings - edge * step + 360) % 360 > 0)
+    r = rays(*ORIGIN, MAX_KM, SE_SHORE_KM)
+    r = np.where(r > SE_SHORE_KM, r, 0)
+    bends.append(dict(name='along the Yorkshire coast', lat=ORIGIN[0], lon=ORIGIN[1], km=0, start=SE_SHORE_KM,
+                      reach=[int(v) for v in np.where(fan, r, 0)]))
+    return dict(origin=list(ORIGIN), step=step, maxKm=MAX_KM, reach=[int(v) for v in reach], bends=bends)
 
 
 def open_sectors(window, min_km=600):
@@ -194,9 +230,19 @@ def swell_path(window, la, lo):
     reach, step = np.array(window['reach']), window['step']
     b_from_s = bearing(ORIGIN[0], ORIGIN[1], la, lo)
     d_direct = gc_dist(ORIGIN[0], ORIGIN[1], la, lo)
-    seen = reach[(np.round(b_from_s / step).astype(int)) % len(reach)] >= d_direct - 25
+    idx = lambda b: (np.round(b / step).astype(int)) % len(reach)
+    seen = reach[idx(b_from_s)] >= d_direct - 25
     best_d = np.where(seen, d_direct, np.inf)
     aim = np.where(seen, bearing(la, lo, ORIGIN[0], ORIGIN[1]), np.nan)
+    # Or bending in at one of the window's edges.
+    for g in window.get('bends', []):
+        gr = np.array(g['reach'])
+        d_b = gc_dist(g['lat'], g['lon'], la, lo)
+        via = ~seen & (gr[idx(bearing(g['lat'], g['lon'], la, lo))] >= np.maximum(d_b - 25, 1))
+        dv = d_b + g['km']
+        better = via & (dv < best_d)
+        best_d = np.where(better, dv, best_d)
+        aim = np.where(better, bearing(la, lo, g['lat'], g['lon']), aim)
     best_d = np.where(np.isfinite(best_d), best_d, np.nan)
     return best_d, aim, seen
 
@@ -271,7 +317,7 @@ def storm_alerts(run, steps, frames, window):
                 genAt=ms(t), where=place(lead[4], lead[5]), kn=round(lead[2]),
                 arriveFrom=ms(min(t + dt.timedelta(hours=x[1] / cg_kmh(17)) for x in cells)),
                 arriveTo=ms(max(t + dt.timedelta(hours=x[1] / cg_kmh(14)) for x in cells)),
-                path='straight' if sum(x[3] for x in cells) >= len(cells) / 2 else 'gaps'))
+                path='straight' if sum(x[3] for x in cells) >= len(cells) / 2 else 'bend'))
         alerts.append(dict(
             kind='bomb', at=ms(deepest[0]), hPa=round(deepest[3]), lat=round(deepest[1], 1), lon=round(deepest[2], 1),
             where=place(deepest[1], deepest[2]), drop24=round(best[1]), bergeron=round(best[0], 1), deepeningAt=ms(best[2]),
@@ -295,6 +341,9 @@ if __name__ == '__main__':
               for i in range(len(z['steps']))]
     w = swell_window()
     print('Open sectors (1000 km+):', [(f'{a:.1f}', f'{b:.1f}') for a, b in open_sectors(w, 1000)])
+    for g in w['bends']:
+        on = [i * w['step'] for i, v in enumerate(g['reach']) if v > 0]
+        print(f"  bend {g['name']} at {g['lat']},{g['lon']} ({g['km']} km on): {len(on)} bearings, {min(on) if on else '-'}..{max(on) if on else '-'}, reach up to {max(g['reach'])} km")
     for b in (340, 345, 348, 349, 350, 352, 355, 357, 358, 359, 0, 5, 10, 20, 30, 35, 40, 60, 80, 100, 110, 120):
         print(f'  {b:5.1f} deg: {w["reach"][int(b / w["step"])]} km of sea')
     print(json.dumps(storm_alerts(run, list(z['steps']), frames, w), indent=1))
