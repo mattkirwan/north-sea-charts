@@ -12,7 +12,9 @@ arrows the way it blows, longer for stronger, which the app can lay over the cha
 plus fields.npz: the run's numbers themselves for the charted area, so we
 keep the data as well as the pictures (see save_fields).
 
-We don't forecast anything here: these are NOAA's numbers, drawn. Checks
+The charts are NOAA's numbers, drawn. From the same numbers (see
+swell_sources.py) come the swell window (window.json), bomb low alerts (in
+the manifest) and our own swell forecast for Saltburn (forecast.json). Checks
 before publishing: every frame present, pressures within physical limits.
 
   python scripts/gfs_charts.py OUT_DIR [--check]
@@ -249,29 +251,15 @@ def draw_wind(step, f, path):
     return float(np.nanmax(speed))
 
 
-def ice_tenths(ct):
-    """Total concentration from a SIGRID-3 CT code, in tenths: 01 ice free and
-    02 open water (under a tenth) are None; 13 is 1-3 tenths, 46 4-6, 79 7-9,
-    91 9-10, 92 10, 10..90 that many tenths; 98 (icebergs only) None."""
-    try:
-        v = int(str(ct).strip())
-    except ValueError:
-        return None
-    if v < 10 or v > 92:
-        return None
-    if v == 91:
-        return 9.5
-    if v == 92:
-        return 10.0
-    lo, hi = divmod(v, 10)
-    return float(lo) if hi == 0 else (lo + hi) / 2
+ice_tenths = swell_sources.ice_tenths
 
 
 def draw_ice(outdir):
     """The sea ice as a transparent layer the size of the charts: white,
     more solid where the ice is closer packed, with the ice edge outlined.
-    Waves can't build over it. Returns the chart's date, or None if the
-    chart couldn't be had (the charts publish without it)."""
+    Waves can't build over it. Returns the chart's date and the close-packed
+    ice (for the swell forecast), or None, None if the chart couldn't be had
+    (the charts publish without it)."""
     try:
         data = get(ICE_URL, timeout=120)
         zpath = os.path.join(outdir, 'ice.zip')
@@ -290,7 +278,7 @@ def draw_ice(outdir):
         area = box(-60, 55, 90, 90)
         land = unary_union([g.buffer(0) for g in shpreader.Reader(shpreader.natural_earth('50m', 'physical', 'land')).geometries()
                             if g.intersects(area)]).intersection(area)
-        ice, counts = [], {}
+        ice, dense, counts = [], [], {}
         for rec in shpreader.Reader(shp).records():
             tenths = ice_tenths(rec.attributes.get('CT'))
             name = str(rec.attributes.get('NIS_CLASS', '')).strip() or str(rec.attributes.get('CT'))
@@ -301,6 +289,8 @@ def draw_ice(outdir):
             if g.is_empty:
                 continue
             ice.append(g)
+            if tenths >= swell_sources.ICE_TENTHS:
+                dense.append(g)
             ax.add_geometries([g], ccrs.PlateCarree(), facecolor=(1, 1, 1, 0.3 + 0.6 * tenths / 10),
                               edgecolor='none', zorder=3)
         if not ice:
@@ -311,13 +301,13 @@ def draw_ice(outdir):
         ax.axis('off')
         save_png(fig, os.path.join(outdir, 'ice.png'), transparent=True)
         print(f'  ice.png: chart of {date}, {len(ice)} ice areas; classes {counts}')
-        return f'{date[:4]}-{date[4:6]}-{date[6:]}'
+        return f'{date[:4]}-{date[4:6]}-{date[6:]}', unary_union(dense) if dense else None
     except Exception as e:  # the ice is a nice-to-have; never hold the charts up for it
         print(f'  No ice layer this run: {e}')
         for n in ('ice.zip', 'ice.png'):
             if os.path.exists(os.path.join(outdir, n)):
                 os.unlink(os.path.join(outdir, n))
-        return None
+        return None, None
 
 
 def sanity(step, p):
@@ -382,11 +372,11 @@ def main():
         if do_check and step in (0, 24, 72, 120):
             check(run, step, p, lons, lats, path, outdir)
     save_fields(run, steps, frames, os.path.join(outdir, 'fields.npz'))
-    ice_date = draw_ice(outdir)
+    ice_date, dense_ice = draw_ice(outdir)
     write_grid(os.path.join(outdir, 'grid.json'))
-    # Saltburn's swell window, and bomb lows sending swell our way. Neither
-    # ever holds the charts up.
-    window, alerts = None, []
+    # Saltburn's swell window, bomb lows sending swell our way, and our swell
+    # forecast. None of them ever holds the charts up.
+    window, alerts, forecast = None, [], None
     try:
         window = swell_sources.swell_window()
         with open(os.path.join(outdir, 'window.json'), 'w') as fh:
@@ -397,9 +387,19 @@ def main():
             print(f"  alert: {a['hPa']} hPa {a['where']}, {a['drop24']} hPa in 24 h; pulses {[(p['where'], p['kn']) for p in a['pulses']]}")
     except Exception as e:
         print(f'  No swell window or alerts this run: {e}')
+    try:
+        if window and len(steps) > 4:
+            series, events = swell_sources.swell_forecast(run, steps, frames, window, dense_ice)
+            with open(os.path.join(outdir, 'forecast.json'), 'w') as fh:
+                json.dump(swell_sources.forecast_json(run, series, events), fh)
+            forecast = 'forecast.json'
+            for e in events:
+                print(f"  swell: peak {e['peak']:%a %d %H}z {e['ft']:.1f} ft ({e['h']:.1f} m {e['p']:.0f} s from {e['d']}) from {e['where']}")
+    except Exception as e:
+        print(f'  No swell forecast this run: {e}')
     print(f'  fields.npz: {os.path.getsize(os.path.join(outdir, "fields.npz")) // 1024} KB')
     manifest = dict(run=int(run.timestamp() * 1000), runLabel=label(run), steps=steps, file='f%03d.png', wind='w%03d.png', data='fields.npz', home=home_view(), grid='grid.json',
-                    window='window.json' if window else None, alerts=alerts,
+                    window='window.json' if window else None, alerts=alerts, forecast=forecast,
                     ice=dict(file='ice.png', date=ice_date) if ice_date else None,
                     generated=int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000), source='NOAA GFS 0.25°',
                     pressure=dict(min=round(min(lows)), max=round(max(highs))))

@@ -30,6 +30,18 @@ Two bends are allowed for, at the window's edges, and come out smaller:
   first SE_SHORE_KM (out past Flamborough Head) for up to SE_FAN degrees
   past the window's edge.
 
+swell_forecast() is our own swell forecast for Saltburn from the run's winds:
+for every path swell can take in (the window, and the two bends), it finds
+stretches of wind blowing along the path towards us, grows waves from the
+wind speed, the stretch's length (fetch) and how long it has blown (the
+standard deep-water growth curves; none over close-packed sea ice), and
+sends that swell on to Saltburn at the group speed for its period, smaller
+with distance (fitted to Bretschneider's swell decay curves). Hour by hour, the
+biggest arriving swell is turned into a breaking size at Saltburn (Komar and
+Gaughan, less at an angle to the beach), and each rise to knee-high or more
+(a peak standing out from the hours around it) is a swell event. Simple on purpose: a starting point to check against
+the buoys and what we see, and tune.
+
 Standard library, numpy, scipy and shapely (all installed with cartopy).
 
   python scripts/swell_sources.py fields.npz   # try it on a saved run
@@ -46,7 +58,8 @@ import zipfile
 import numpy as np
 import shapefile  # pyshp, comes with cartopy
 import shapely
-from scipy.ndimage import gaussian_filter, minimum_filter
+from scipy.ndimage import gaussian_filter, maximum_filter1d, minimum_filter
+from scipy.signal import find_peaks
 from shapely.geometry import box, shape
 from shapely.ops import unary_union
 
@@ -329,6 +342,179 @@ def storm_alerts(run, steps, frames, window):
     return alerts
 
 
+G = 9.81
+BEACH_FACES = 30            # Saltburn's beach faces NNE
+WIND_MIN = 8.0              # m/s along the path (about 16 kn) to grow swell
+DECAY = 0.7                 # swell height falls as (fetch / (fetch + distance)) ** DECAY
+ICE_TENTHS = 4              # no waves grow over ice this close packed
+RAY_STEP_KM, RAY_EVERY = 20, 2.0
+EVENT_FT, EVENT_HOURS = 1.5, 3   # knee-high or more, for at least 3 hours
+EVENT_APART, EVENT_RISE = 18, 1.0  # peaks at least 18 h apart, standing 1 ft above the dip between
+
+
+def grow(u, fetch_m, hours):
+    """Significant height (m) and peak period (s) from the 10 m wind u (m/s)
+    over a fetch (m) for a duration (h): the JONSWAP deep-water curves, fetch-
+    or duration-limited, capped at a fully developed sea."""
+    x = G * fetch_m / u ** 2
+    x = min(x, (G * hours * 3600 / (68.8 * u)) ** 1.5)    # or as far as it's had time to grow
+    h = min(1.6e-3 * np.sqrt(x), 0.2433) * u ** 2 / G
+    t = min(0.2857 * x ** (1 / 3), 8.134) * u / G
+    return h, t
+
+
+def ice_tenths(ct):
+    """Total concentration from a SIGRID-3 CT code, in tenths: 01 ice free and
+    02 open water (under a tenth) are None; 13 is 1-3 tenths, 46 4-6, 79 7-9,
+    91 9-10, 92 10, 10..90 that many tenths; 98 (icebergs only) None."""
+    try:
+        v = int(str(ct).strip())
+    except ValueError:
+        return None
+    if v < 10 or v > 92:
+        return None
+    if v == 91:
+        return 9.5
+    if v == 92:
+        return 10.0
+    lo, hi = divmod(v, 10)
+    return float(lo) if hi == 0 else (lo + hi) / 2
+
+
+def ice_from_shp(path):
+    """The close-packed ice (ICE_TENTHS or more) in an ice chart shapefile."""
+    r = shapefile.Reader(path)
+    names = [f[0] for f in r.fields[1:]]
+    out = []
+    for sr in r.iterShapeRecords():
+        t = ice_tenths(dict(zip(names, sr.record)).get('CT'))
+        if t is not None and t >= ICE_TENTHS and sr.shape.points:
+            out.append(shape(sr.shape.__geo_interface__).buffer(0))
+    return unary_union(out) if out else None
+
+
+def break_ft(h0, t, from_deg):
+    """Breaking size at Saltburn (ft) from offshore swell height (m), period
+    (s) and the direction it comes from: Komar and Gaughan, times the square
+    root of the cosine of its angle to the beach."""
+    off = abs(((from_deg - BEACH_FACES) % 360 + 540) % 360 - 180)
+    if off >= 90 or h0 <= 0:
+        return 0.0
+    hb = 0.39 * G ** 0.2 * (t * h0 * h0) ** 0.4
+    return hb * np.sqrt(np.cos(np.radians(off))) * 3.281
+
+
+def _paths(window):
+    """The rays swell comes in along: from Saltburn out down the window, and
+    out from each bend (with the distance on to Saltburn, a share for the
+    swell lost in the bend, and the way it finally arrives from)."""
+    reach, step = np.array(window['reach']), window['step']
+    out = []
+    for b in np.arange(0, 360, RAY_EVERY):
+        r = reach[int(round(b / step)) % len(reach)]
+        if r >= 60:
+            out.append(dict(lat=ORIGIN[0], lon=ORIGIN[1], b=b, start=0, end=min(r, MAX_KM), km=0, share=1.0, arrive=b))
+    for g in window.get('bends', []):
+        gr = np.array(g['reach'])
+        arrive = float(bearing(ORIGIN[0], ORIGIN[1], g['lat'], g['lon'])) if g['km'] else None
+        for b in np.arange(0, 360, RAY_EVERY):
+            r = gr[int(round(b / step)) % len(gr)]
+            if r > max(g['start'], 60):
+                out.append(dict(lat=g['lat'], lon=g['lon'], b=b, start=g['start'], end=min(r, MAX_KM - g['km']), km=g['km'],
+                                share=0.5, arrive=arrive if arrive is not None else b))
+    return out
+
+
+def swell_forecast(run, steps, frames, window, ice=None, days=8):
+    """Hourly swell forecast for Saltburn from this run, and its swell events.
+    ice: the close-packed sea ice (a shapely geometry), if known."""
+    lat_all, lon_all = frames[0]['u10'].latitude.values, frames[0]['u10'].longitude.values
+    dlat, dlon = float(lat_all[1] - lat_all[0]), float(lon_all[1] - lon_all[0])
+    times = [run + dt.timedelta(hours=int(s)) for s in steps]
+    paths = _paths(window)
+    pts = []
+    for pth in paths:
+        d = np.arange(pth['start'] + RAY_STEP_KM / 2, pth['end'], RAY_STEP_KM)
+        la, lo = destination(pth['lat'], pth['lon'], pth['b'], d)
+        toward = bearing(la, lo, pth['lat'], pth['lon'])          # the way swell must travel to get in
+        i = np.clip(np.round((la - lat_all[0]) / dlat).astype(int), 0, len(lat_all) - 1)
+        j = np.clip(np.round((lo - lon_all[0]) / dlon).astype(int), 0, len(lon_all) - 1)
+        open_sea = ~shapely.contains_xy(ice, lo, la) if ice is not None else np.ones(len(d), bool)
+        pts.append(dict(d=d, la=la, lo=lo, toward=toward, i=i, j=j, sea=open_sea, hours=np.zeros(len(d))))
+    packets = []  # (arrival, height m, period s, from deg, share, src lat, src lon, made at)
+    for k, t in enumerate(times):
+        u, v = frames[k]['u10'].values, frames[k]['v10'].values
+        gap = 6 if k == 0 else (t - times[k - 1]).total_seconds() / 3600
+        for pth, pt in zip(paths, pts):
+            uu, vv = u[pt['i'], pt['j']], v[pt['i'], pt['j']]
+            sp = np.hypot(uu, vv)
+            ang = np.abs(((np.degrees(np.arctan2(uu, vv)) - pt['toward']) % 360 + 540) % 360 - 180)
+            along = np.where(ang < 45, sp * np.cos(np.radians(ang)), 0)
+            windy = (along >= WIND_MIN) & pt['sea']
+            pt['hours'] = np.where(windy, pt['hours'] + gap, 0)
+            if not windy.any():
+                continue
+            # Each stretch of wind along the path, from its far end in to its near end.
+            edges = np.flatnonzero(np.diff(np.concatenate(([0], windy.astype(int), [0]))))
+            for a, b in zip(edges[::2], edges[1::2]):
+                fetch = (pt['d'][b - 1] - pt['d'][a] + RAY_STEP_KM) * 1000
+                h, per = grow(float(along[a:b].mean()), fetch, float(np.median(pt['hours'][a:b])))
+                near = pt['d'][a] + pth['km']                          # km on to Saltburn from the stretch's near end
+                h_arr = h * (fetch / (fetch + near * 1000)) ** DECAY * pth['share']
+                if h_arr < 0.05:
+                    continue
+                arrive = t + dt.timedelta(hours=near / cg_kmh(per))
+                m = (a + b) // 2
+                packets.append((arrive, h_arr, per, pth['arrive'], float(pt['la'][m]), float(pt['lo'][m]), t))
+    # Hour by hour: the biggest swell arriving (each frame's swell spread over its 6 hours).
+    start = run.replace(minute=0, second=0, microsecond=0)
+    hours = [start + dt.timedelta(hours=h) for h in range(24 * days)]
+    series = []
+    for hr in hours:
+        best = None
+        for pk in packets:
+            if abs((pk[0] - hr).total_seconds()) <= 3 * 3600:
+                ft = break_ft(pk[1], pk[2], pk[3])
+                if best is None or ft > best[0]:
+                    best = (ft, pk)
+        if best:
+            ft, pk = best
+            series.append(dict(t=hr, ft=round(ft, 2), h=round(pk[1], 2), p=round(pk[2], 1), d=round(pk[3]), src=(pk[4], pk[5]), made=pk[6]))
+        else:
+            series.append(dict(t=hr, ft=0.0, h=0.0, p=None, d=None, src=None, made=None))
+    # Swell events: each peak, out to where it falls under EVENT_FT (or under
+    # 40% of the peak, or the dip before the next one). The hourly sizes are
+    # smoothed a little first: neighbouring paths take turns being biggest.
+    ft = maximum_filter1d(np.array([r['ft'] for r in series]), 3)
+    peaks, _ = find_peaks(np.concatenate(([0], ft, [0])), height=EVENT_FT, distance=EVENT_APART, prominence=EVENT_RISE)
+    peaks = list(peaks - 1)
+    events = []
+    for n, k in enumerate(peaks):
+        floor = max(EVENT_FT, 0.4 * ft[k])
+        lo = peaks[n - 1] + int(np.argmin(ft[peaks[n - 1]:k])) if n else 0
+        hi = k + int(np.argmin(ft[k:peaks[n + 1] + 1])) if n + 1 < len(peaks) else len(ft) - 1
+        a, b = k, k
+        while a > lo and ft[a - 1] >= floor:
+            a -= 1
+        while b < hi and ft[b + 1] >= floor:
+            b += 1
+        if b - a + 1 < EVENT_HOURS:
+            continue
+        pk = max(series[a:b + 1], key=lambda r: r['ft'])
+        events.append(dict(start=series[a]['t'], end=series[b]['t'], peak=pk['t'], ft=pk['ft'], h=pk['h'], p=pk['p'], d=pk['d'],
+                           where=place(*pk['src']), made=pk['made']))
+    return series, events
+
+
+def forecast_json(run, series, events):
+    ms = lambda d: int(d.replace(tzinfo=dt.timezone.utc).timestamp() * 1000)
+    return dict(
+        run=ms(run), model='v0',
+        hourly=[[ms(r['t']), r['ft'], r['h'], r['p'], r['d']] for r in series],
+        events=[dict(start=ms(e['start']), end=ms(e['end']), peak=ms(e['peak']), ft=e['ft'], h=e['h'], p=e['p'], d=e['d'],
+                     where=e['where'], made=ms(e['made'])) for e in events])
+
+
 if __name__ == '__main__':
     # Try it on a saved run's fields.npz (from the charts branch).
     class F:  # a tiny stand-in for the xarray fields
@@ -347,3 +533,10 @@ if __name__ == '__main__':
     for b in (340, 345, 348, 349, 350, 352, 355, 357, 358, 359, 0, 5, 10, 20, 30, 35, 40, 60, 80, 100, 110, 120):
         print(f'  {b:5.1f} deg: {w["reach"][int(b / w["step"])]} km of sea')
     print(json.dumps(storm_alerts(run, list(z['steps']), frames, w), indent=1))
+    ice = ice_from_shp(sys.argv[2]) if len(sys.argv) > 2 else None
+    series, events = swell_forecast(run, list(z['steps']), frames, w, ice)
+    print('Forecast events:')
+    for e in events:
+        print(f"  {e['start']:%a %d %H}z - {e['end']:%a %d %H}z, peak {e['peak']:%a %d %H}z {e['ft']:.1f} ft ({e['h']:.2f} m {e['p']:.0f} s from {e['d']}) from {e['where']}")
+    for r in series[::6]:
+        print(f"    {r['t']:%a %d %H}z {r['ft']:4.1f} ft  {r['h']:.2f} m {r['p'] or 0:4.1f} s {r['d'] if r['d'] is not None else '-'}")
