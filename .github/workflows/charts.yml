@@ -1,12 +1,19 @@
-# Every hour, draw our own pressure charts from the newest complete NOAA GFS run
-# (scripts/gfs_charts.py) and publish them on the `charts` branch, which the app
-# reads. Skips quickly when that run is already published. The branch holds a
-# single commit replaced each time, so the repo doesn't grow.
+# Draw our own pressure charts from each new NOAA GFS run (scripts/gfs_charts.py)
+# and publish them, with the run's data (fields.npz), on the `charts` branch,
+# which the app reads. The branch holds a single commit replaced each time, so
+# the repo doesn't grow.
+#
+# Timed to NOAA: a run starts at 00, 06, 12 and 18 UTC and its last frame we
+# draw (hour 168) reaches their bucket 4 h 15-35 min later. So we look at
+# 4 h 40 after each start, with two later tries in case NOAA or GitHub's
+# scheduler runs late. A try that finds nothing new stops before installing.
 name: Draw GFS charts
 
 on:
   schedule:
-    - cron: '23 * * * *'
+    - cron: '40 4,10,16,22 * * *'
+    - cron: '10 5,11,17,23 * * *'
+    - cron: '50 5,11,17,23 * * *'
   workflow_dispatch:
     inputs:
       check:
@@ -31,26 +38,37 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq libeccodes-dev > /dev/null
-          pip install -q cfgrib eccodes xarray matplotlib cartopy scipy
-      - name: Which run is published
+      - name: Is there a new run
         id: pub
         run: |
           run=$(curl -fsS "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/charts/manifest.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["runLabel"])' || true)
-          echo "Published: ${run:-none}"
+          latest=$(python3 scripts/gfs_latest.py)
+          echo "Published: ${run:-none}. Newest complete on NOAA: $latest"
           echo "run=$run" >> "$GITHUB_OUTPUT"
+          if [ "$run" = "$latest" ] && [ "$GITHUB_EVENT_NAME" != workflow_dispatch ]; then
+            echo 'Already published; nothing to do.'
+            echo "go=" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=1" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.pub.outputs.go
+        with:
+          python-version: '3.12'
+      - name: Install
+        if: steps.pub.outputs.go
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libeccodes-dev > /dev/null
+          pip install -q cfgrib eccodes xarray matplotlib cartopy scipy
       - name: Draw
+        if: steps.pub.outputs.go
         env:
           PUBLISHED_RUN: ${{ steps.pub.outputs.run }}
           FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
           QUICK: ${{ inputs.quick && '1' || '' }}
         run: python scripts/gfs_charts.py "$RUNNER_TEMP/charts" ${{ inputs.check && '--check' || '' }}
       - name: Publish to the charts branch
+        if: steps.pub.outputs.go
         env:
           TOKEN: ${{ github.token }}
         run: |
