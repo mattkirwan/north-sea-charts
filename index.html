@@ -51,6 +51,15 @@ body.adjust .tabbar,body.adjust .subnav{pointer-events:none;opacity:.35}
 #layer img.on{opacity:1}
 #layer #imgWind{z-index:2;transition:none}
 #layer #imgIce{z-index:1;transition:none}
+#travel{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+#travel .arc{fill:none;stroke-width:2;stroke-dasharray:7 6;stroke-linecap:round}
+#travel .rule{fill:none;stroke-width:2.5;stroke-linecap:round}
+#travel .halo{stroke:rgba(15,34,48,.75);stroke-width:4.5}
+#travel .ink{stroke:#fff}
+#travel text{font:700 12px var(--f-body);fill:#0F2230}
+#travel .tag rect{fill:#fff;stroke:rgba(15,34,48,.6)}
+#travel .key rect{fill:rgba(15,34,48,.85)}
+#travel .key text{fill:#fff;font-weight:600}
 
 /* Valid time, the main read-out */
 .top{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
@@ -311,6 +320,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
         <img id="imgIce" alt="" referrerpolicy="no-referrer" draggable="false">
         <img id="imgWind" alt="" referrerpolicy="no-referrer" draggable="false">
       </div>
+      <svg id="travel" aria-hidden="true"></svg>
     </div>
     <div class="reticle" aria-hidden="true"><span>Put the UK here</span></div>
 
@@ -344,6 +354,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
         <button class="btn" id="next" aria-label="Next frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
         <button class="btn" id="windBtn" aria-pressed="false" aria-label="Wind arrows" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10.5a2.5 2.5 0 1 0-2.5-2.5M3 12h15.5a2.5 2.5 0 1 1-2.5 2.5M3 16h7.5a2.5 2.5 0 1 1-2.5 2.5"/></svg></button>
         <button class="btn" id="iceBtn" aria-pressed="false" aria-label="Sea ice" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9 4l3 2 3-2M9 20l3-2 3 2M3.6 10.4l2.6-1.6-.2-3M17.8 18.2l.2-3 2.6-1.6M3.6 13.6l2.6 1.6-.2 3M17.8 5.8l.2 3 2.6 1.6"/></svg></button>
+        <button class="btn" id="travelBtn" aria-pressed="false" aria-label="Swell travel times" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 3v18M19 6h-3M19 10h-5M19 14h-3M19 18h-5"/><path d="M4 8c3-2 6-2 8 0M4 14c3-2 6-2 8 0" stroke-dasharray="2 2.5"/></svg></button>
         <div class="run" id="run">Finding the latest run</div>
       </div>
     </footer>
@@ -406,6 +417,8 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="field"><span>Time between frames</span><div class="seg" id="segStep"></div></div>
     <div class="field"><span>Wind arrows</span><div class="seg" id="segWind"></div></div>
     <div class="field"><span>Sea ice</span><div class="seg" id="segIce"></div></div>
+    <div class="field"><span>Swell travel times</span><div class="seg" id="segTravel"></div></div>
+    <div class="field"><span>Swell period for travel times</span><div class="seg" id="segPeriod"></div></div>
     <div class="field"><span>Playback speed</span><div class="seg" id="segSpeed"></div></div>
     <div class="actions">
       <button class="pill" id="actAdjust">Adjust view</button>
@@ -495,6 +508,7 @@ SOURCES.ours = {
     if (m.home) homeFrom(m.home);
     this.hasWind = !!m.wind;
     this.ice = m.ice || null;
+    this.gridFile = m.grid || null;
     return { ms: m.run, how: 'manifest' };
   }
 };
@@ -506,6 +520,8 @@ const STEPS = [[6, '6 hours'], [3, '3 hours']];
 const SPEEDS = [[700, 'Slow'], [420, 'Normal'], [220, 'Fast']];
 const WIND_LAYER = [[false, 'Off'], [true, 'On']];
 const ICE_LAYER = WIND_LAYER;
+const TRAVEL_LAYER = WIND_LAYER;
+const PERIODS = [[8, '8 s'], [10, '10 s'], [12, '12 s'], [14, '14 s']];
 // Starting crop as a fraction of the source image: centre point and visible height.
 const DEFAULT_VIEWS = { EU: { cx: 0.53, cy: 0.34, span: 0.68 }, UK: { cx: 0.5, cy: 0.5, span: 1.02 }, WIDE: { cx: 0.5309, cy: 0.4806, span: 0.705 } };
 // Our wide map's North Sea framing, from its manifest. A crop saved on the old
@@ -520,7 +536,7 @@ function homeFrom(home) {
   if (SOURCE === SOURCES.ours && !exploring) { view = loadView(); applyView(); }
 }
 const SRCS = [['ours', 'Ours'], ['wz', 'Wetterzentrale']];
-const DEFAULTS = { src: 'ours', windLayer: false, iceLayer: false, chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
+const DEFAULTS = { src: 'ours', windLayer: false, iceLayer: false, travelLayer: false, swellPeriod: 10, chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
 
 const opts = Object.assign({}, DEFAULTS, store.get('nsv.opts', {}));
 const saveOpts = () => store.set('nsv.opts', opts);
@@ -736,6 +752,85 @@ function fetchWindAhead() {
   if (!windOn() || windAhead.key === key) return;
   windAhead = { key, imgs: frames.map((f) => { const im = new Image(); im.referrerPolicy = 'no-referrer'; im.src = SOURCES.ours.windUrl(runMs, f.step); return im; }) };
 }
+/* Swell travel times to Saltburn: dashed arcs of equal travel time across
+   the sea, every 12 hours, and a measure up through Norway and Sweden
+   labelling them. Swell runs out from where it's made in near-straight
+   lines (great circles), so equal times are circles round Saltburn. Its
+   energy travels at the deep-water group speed, g·T/4π: about 0.78 m/s per
+   second of period, so 2.8 km/h per second (10 s: 28 km/h, 675 km a day).
+   The period comes from Settings. The chart job publishes grid.json, where
+   each 2° of latitude and longitude lands on the chart, so the lines sit
+   exactly on the map wherever it's panned or zoomed. */
+// Arcs run from past Scotland's north-east tip (west of that, Scotland is in
+// the way) round to the measure; close in, where there's sea to the east too,
+// on round to the east. Beyond about 520 km east of the measure is land.
+const TRAVEL = { rule: 35, from: 345, to: 100, openKm: 520, stepH: 12, maxKm: 2600 };
+const travelSvg = $('#travel'), travelBtn = $('#travelBtn');
+let travelGrid = null, travelGridKey = '';
+const travelOn = () => opts.travelLayer && SOURCE === SOURCES.ours && !!SOURCES.ours.gridFile;
+const swellKmH = (T) => 9.81 * T / (4 * Math.PI) * 3.6;
+// The point a given distance and bearing from Saltburn (spherical Earth).
+function destination(km, bearing) {
+  const r = Math.PI / 180, d = km / 6371, b = bearing * r, f1 = WIND.lat * r, l1 = WIND.lon * r;
+  const f2 = Math.asin(Math.sin(f1) * Math.cos(d) + Math.cos(f1) * Math.sin(d) * Math.cos(b));
+  const l2 = l1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(f1), Math.cos(d) - Math.sin(f1) * Math.sin(f2));
+  return [f2 / r, l2 / r];
+}
+// Latitude and longitude to a fraction of the chart, between the grid's points.
+function onChart(lat, lon) {
+  const g = travelGrid, i = (lon - g.lon0) / g.step, j = (lat - g.lat0) / g.step;
+  const i0 = Math.max(0, Math.min(g.nlon - 2, Math.floor(i))), j0 = Math.max(0, Math.min(g.nlat - 2, Math.floor(j)));
+  const u = i - i0, v = j - j0, at = (a, jj, ii) => a[jj * g.nlon + ii];
+  const mix = (a) => (1 - v) * ((1 - u) * at(a, j0, i0) + u * at(a, j0, i0 + 1)) + v * ((1 - u) * at(a, j0 + 1, i0) + u * at(a, j0 + 1, i0 + 1));
+  return [mix(g.fx), mix(g.fy)];
+}
+const hoursLabel = (h) => { const d = Math.floor(h / 24), r = h % 24; return d ? `${d}d${r ? ' ' + r + 'h' : ''}` : `${r}h`; };
+function drawTravel() {
+  if (!travelOn() || !travelGrid || !natural || !view) { travelSvg.innerHTML = ''; return; }
+  const t = viewToT(view), W = natural.w, Hh = natural.h;
+  const scr = (lat, lon) => { const [fx, fy] = onChart(lat, lon); return [fx * W * t.s + t.tx, fy * Hh * t.s + t.ty]; };
+  const pt = (p) => p.map((v) => v.toFixed(1)).join(',');
+  const kmh = swellKmH(opts.swellPeriod);
+  let arcs = '', tags = '';
+  const ruleEnd = Math.min(TRAVEL.maxKm, kmh * 24 * 4);
+  for (let h = TRAVEL.stepH; kmh * h <= ruleEnd; h += TRAVEL.stepH) {
+    const km = kmh * h, pts = [];
+    const end = (km < TRAVEL.openKm ? TRAVEL.to : TRAVEL.rule) + 360;
+    for (let b = TRAVEL.from; b <= end; b += 2) pts.push(pt(scr(...destination(km, b % 360))));
+    const d = 'M' + pts.join('L');
+    arcs += `<path class="arc halo" d="${d}"/><path class="arc ink" d="${d}"/>`;
+    const [x, y] = scr(...destination(km, TRAVEL.rule)), label = hoursLabel(h), w = 8 + label.length * 7.4;
+    tags += `<g class="tag" transform="translate(${(x + 6).toFixed(1)},${(y - 10).toFixed(1)})"><rect width="${w.toFixed(0)}" height="20" rx="6"/><text x="${(w / 2).toFixed(1)}" y="14.5" text-anchor="middle">${label}</text></g>`;
+  }
+  const r0 = scr(WIND.lat, WIND.lon), r1 = scr(...destination(ruleEnd, TRAVEL.rule));
+  const rule = `M${pt(r0)}L${pt(r1)}`;
+  const key = `<g class="key" transform="translate(${(r1[0] - 98).toFixed(1)},${(r1[1] - 26).toFixed(1)})"><rect width="92" height="20" rx="6"/><text x="46" y="14.5" text-anchor="middle">${opts.swellPeriod} s swell</text></g>`;
+  travelSvg.innerHTML = arcs + `<path class="rule halo" d="${rule}"/><path class="rule ink" d="${rule}"/>` + tags + key;
+}
+async function updateTravel() {
+  const ours = SOURCE === SOURCES.ours;
+  travelBtn.hidden = !ours;
+  travelBtn.setAttribute('aria-pressed', String(!!opts.travelLayer));
+  if (travelOn()) {
+    const key = SOURCES.ours.base + SOURCES.ours.gridFile;
+    if (travelGridKey !== key) {
+      travelGridKey = key;
+      try {
+        const r = await fetchT(`${key}?run=${runKey(runMs)}`, {}, 15e3);
+        travelGrid = r.ok ? await r.json() : null;
+      } catch { travelGrid = null; }
+      if (!travelGrid) travelGridKey = '';
+    }
+  }
+  drawTravel();
+}
+travelBtn.addEventListener('click', () => {
+  opts.travelLayer = !opts.travelLayer;
+  saveOpts();
+  updateTravel();
+  toast(!opts.travelLayer ? 'Swell travel times off' : SOURCES.ours.gridFile ? `Travel times to Saltburn for a ${opts.swellPeriod} s swell` : 'Travel times come with the next run');
+});
+
 /* Sea ice: one layer for the whole run, from the latest ice chart. */
 const iceImg = $('#imgIce'), iceBtn = $('#iceBtn');
 function updateIce() {
@@ -786,6 +881,7 @@ function renderMeta(f) {
 function updateRunLine() {
   updateWind();
   updateIce();
+  updateTravel();
   // Banner until the first chart is on screen, or if none could be loaded.
   const wait = $('#waitPressure'), ok = frames.some((f) => f.status === 'ok');
   const pending = !runMs || frames.some((f) => f.status === 'pending');
@@ -928,6 +1024,7 @@ function applyView() {
   layer.style.width = natural.w + 'px';
   layer.style.height = natural.h + 'px';
   layer.style.transform = `translate(${t.tx}px, ${t.ty}px) scale(${t.s})`;
+  if (opts.travelLayer) drawTravel();
 }
 // Pinching and dragging the chart explores without changing the saved framing;
 // only Adjust view saves one. A double tap goes back to it.
@@ -1096,6 +1193,7 @@ function onOptChange(key) {
   if (key === 'speedUnit') { renderLocal(); return; }
   if (key === 'windLayer') { updateWind(); return; }
   if (key === 'iceLayer') { updateIce(); return; }
+  if (key === 'travelLayer' || key === 'swellPeriod') { updateTravel(); return; }
   if (key === 'src') { SOURCE = SOURCES[opts.src] || SOURCES.ours; showSourceFields(); }
   if (key === 'region' || key === 'src') { view = loadView(); natural = null; maybeHint(); }
   if (key !== 'runOffset') probeCache.clear();
@@ -1147,6 +1245,8 @@ function renderSettings() {
   seg($('#segSpeed'), 'speed', SPEEDS);
   seg($('#segWind'), 'windLayer', WIND_LAYER);
   seg($('#segIce'), 'iceLayer', ICE_LAYER);
+  seg($('#segTravel'), 'travelLayer', TRAVEL_LAYER);
+  seg($('#segPeriod'), 'swellPeriod', PERIODS);
   $('#actFull').hidden = !document.fullscreenEnabled;
   $('#actFull').textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
   renderFine();
@@ -1156,6 +1256,7 @@ function showSourceFields() {
   ['#segChart', '#segRegion', '#segRun', '#segDays', '#segStep'].forEach((q) => { $(q).closest('.field').hidden = SOURCE === SOURCES.ours; });
   $('#segWind').closest('.field').hidden = SOURCE !== SOURCES.ours;
   $('#segIce').closest('.field').hidden = SOURCE !== SOURCES.ours;
+  ['#segTravel', '#segPeriod'].forEach((q) => { $(q).closest('.field').hidden = SOURCE !== SOURCES.ours; });
 }
 $('#actAdjust').addEventListener('click', enterAdjust);
 $('#actReload').addEventListener('click', () => {
