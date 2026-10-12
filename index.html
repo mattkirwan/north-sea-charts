@@ -57,6 +57,8 @@ body.adjust .tabbar,body.adjust .subnav{pointer-events:none;opacity:.35}
 #travel .halo{stroke:rgba(15,34,48,.75);stroke-width:4.5}
 #travel .ink{stroke:#fff}
 #travel text{font:700 12px var(--f-body);fill:#0F2230}
+#travel .win{fill:rgba(255,194,61,.13);stroke:rgba(255,194,61,.7);stroke-width:1.2;stroke-linejoin:round}
+#travel .gap rect{fill:var(--amber);stroke:rgba(15,34,48,.6)}
 #travel .tag rect{fill:#fff;stroke:rgba(15,34,48,.6)}
 #travel .key rect{fill:rgba(15,34,48,.85)}
 #travel .key text{fill:#fff;font-weight:600}
@@ -207,6 +209,14 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 .bfacts dd{margin:2px 0 0;font-size:16px;font-weight:500;font-variant-numeric:tabular-nums}
 .bcard{margin-top:12px}
 .tsun{margin-top:14px}
+.alert{display:block;width:100%;text-align:left;margin-top:14px;border-radius:14px;padding:12px 14px 13px;background:rgba(255,194,61,.1);box-shadow:inset 3px 0 0 var(--amber);color:inherit;font:inherit}
+.alert .k{font-size:13px;color:var(--amber);font-weight:600}
+.alert .ah{font-family:var(--f-cond);font-weight:700;font-size:26px;line-height:1.1;margin-top:4px}
+.alert .d{font-size:14px;color:var(--slate);margin-top:6px;line-height:1.4}
+.alert ul{list-style:none;margin:10px 0 0;padding:0}
+.alert li{font-size:14px;line-height:1.4;padding:6px 0;border-top:1px solid var(--hair)}
+.alert li b{color:var(--paper);font-weight:600}
+.alert .go{font-size:13px;color:var(--amber);margin-top:8px}
 .tsun .big{font-size:34px}
 .tsun .big svg{color:var(--amber);width:26px;height:26px}
 .tsun .edge{font-weight:500;color:var(--paper)}
@@ -262,6 +272,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="wsub" id="todayDate">Saltburn</div>
     <div class="status" id="todayStatus"></div>
   </div>
+  <div id="todayAlerts"></div>
   <div class="thero" id="todayNow"></div>
   <section class="wday" aria-labelledby="todayWaveH">
     <h3 id="todayWaveH">Waves <small id="todayWaveSub">latest measured</small></h3>
@@ -354,7 +365,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
         <button class="btn" id="next" aria-label="Next frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
         <button class="btn" id="windBtn" aria-pressed="false" aria-label="Wind arrows" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10.5a2.5 2.5 0 1 0-2.5-2.5M3 12h15.5a2.5 2.5 0 1 1-2.5 2.5M3 16h7.5a2.5 2.5 0 1 1-2.5 2.5"/></svg></button>
         <button class="btn" id="iceBtn" aria-pressed="false" aria-label="Sea ice" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9 4l3 2 3-2M9 20l3-2 3 2M3.6 10.4l2.6-1.6-.2-3M17.8 18.2l.2-3 2.6-1.6M3.6 13.6l2.6 1.6-.2 3M17.8 5.8l.2 3 2.6 1.6"/></svg></button>
-        <button class="btn" id="travelBtn" aria-pressed="false" aria-label="Swell travel times" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 3v18M19 6h-3M19 10h-5M19 14h-3M19 18h-5"/><path d="M4 8c3-2 6-2 8 0M4 14c3-2 6-2 8 0" stroke-dasharray="2 2.5"/></svg></button>
+        <button class="btn" id="travelBtn" aria-pressed="false" aria-label="Swell window and travel times" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 3v18M19 6h-3M19 10h-5M19 14h-3M19 18h-5"/><path d="M4 8c3-2 6-2 8 0M4 14c3-2 6-2 8 0" stroke-dasharray="2 2.5"/></svg></button>
         <div class="run" id="run">Finding the latest run</div>
       </div>
     </footer>
@@ -417,7 +428,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="field"><span>Time between frames</span><div class="seg" id="segStep"></div></div>
     <div class="field"><span>Wind arrows</span><div class="seg" id="segWind"></div></div>
     <div class="field"><span>Sea ice</span><div class="seg" id="segIce"></div></div>
-    <div class="field"><span>Swell travel times</span><div class="seg" id="segTravel"></div></div>
+    <div class="field"><span>Swell window &amp; travel times</span><div class="seg" id="segTravel"></div></div>
     <div class="field"><span>Swell period for travel times</span><div class="seg" id="segPeriod"></div></div>
     <div class="field"><span>Playback speed</span><div class="seg" id="segSpeed"></div></div>
     <div class="actions">
@@ -652,7 +663,8 @@ async function load({ keepValid = true, latest = null } = {}) {
   for (let h = 0; h <= maxStep; h += opt('step')) {
     frames.push({ step: h, valid: runMs + h * H, url: SOURCE.url(runMs, h, opts), status: 'pending', img: null });
   }
-  idx = nearestIndex(keepValid && prevValid ? prevValid : Date.now());
+  idx = nearestIndex(jumpTo || (keepValid && prevValid ? prevValid : Date.now()));
+  jumpTo = null;
   front.dataset.url = '';
   buildTimeline();
   show(idx);
@@ -752,7 +764,9 @@ function fetchWindAhead() {
   if (!windOn() || windAhead.key === key) return;
   windAhead = { key, imgs: frames.map((f) => { const im = new Image(); im.referrerPolicy = 'no-referrer'; im.src = SOURCES.ours.windUrl(runMs, f.step); return im; }) };
 }
-/* Swell travel times to Saltburn: dashed arcs of equal travel time across
+/* The swell window and travel times to Saltburn. The window is the open sea
+   swell can cross to reach us in a straight line (see window.json above).
+   Travel times: dashed arcs of equal travel time across
    the sea, every 12 hours, and a measure up through Norway and Sweden
    labelling them. Swell runs out from where it's made in near-straight
    lines (great circles), so equal times are circles round Saltburn. Its
@@ -785,27 +799,65 @@ function onChart(lat, lon) {
   return [mix(g.fx), mix(g.fy)];
 }
 const hoursLabel = (h) => { const d = Math.floor(h / 24), r = h % 24; return d ? `${d}d${r ? ' ' + r + 'h' : ''}` : `${r}h`; };
+// The swell window (window.json, from the chart job): km of open sea along
+// each bearing from just off Saltburn before the first land. Shaded, with
+// each long-range gap labelled by its bearings.
+let travelWindow = null;
+const reachAt = (b) => { const w = travelWindow; return w ? w.reach[Math.round(((b % 360) + 360) % 360 / w.step) % w.reach.length] : Infinity; };
+function windowSectors(minKm) {
+  const w = travelWindow, n = w.reach.length, ok = w.reach.map((r) => r >= minKm);
+  if (ok.every(Boolean)) return [[0, 360]];
+  const start = ok.indexOf(false), out = [];
+  let run = null;
+  for (let k = 0; k <= n; k++) {
+    const i = (start + k) % n;
+    if (ok[i] && run === null) run = k;
+    else if (!ok[i] && run !== null) { out.push([(start + run) * w.step % 360, (start + k - 1) * w.step % 360]); run = null; }
+  }
+  return out;
+}
 function drawTravel() {
   if (!travelOn() || !travelGrid || !natural || !view) { travelSvg.innerHTML = ''; return; }
   const t = viewToT(view), W = natural.w, Hh = natural.h;
   const scr = (lat, lon) => { const [fx, fy] = onChart(lat, lon); return [fx * W * t.s + t.tx, fy * Hh * t.s + t.ty]; };
   const pt = (p) => p.map((v) => v.toFixed(1)).join(',');
   const kmh = swellKmH(opts.swellPeriod);
-  let arcs = '', tags = '';
   const ruleEnd = Math.min(TRAVEL.maxKm, kmh * 24 * 4);
+  let shade = '', arcs = '', tags = '', gaps = '';
+  if (travelWindow) {
+    const w = travelWindow, pts = [];
+    for (let i = 0; i < w.reach.length; i++) pts.push(pt(scr(...destination(Math.min(w.reach[i], TRAVEL.maxKm), i * w.step))));
+    shade = `<path class="win" d="M${pts.join('L')}Z"/>`;
+    windowSectors(1000).forEach(([from, to]) => {
+      const span = (to - from + 360) % 360, mid = (from + span / 2) % 360;
+      const [x, y] = scr(...destination(Math.min(900, reachAt(mid) - 100), mid));
+      const label = `${Math.round(from)}–${Math.round(to)}°`, lw = 10 + label.length * 7;
+      gaps += `<g class="gap" transform="translate(${(x - lw / 2).toFixed(1)},${(y - 10).toFixed(1)})"><rect width="${lw.toFixed(0)}" height="20" rx="6"/><text x="${(lw / 2).toFixed(1)}" y="14.5" text-anchor="middle">${label}</text></g>`;
+    });
+  }
   for (let h = TRAVEL.stepH; kmh * h <= ruleEnd; h += TRAVEL.stepH) {
-    const km = kmh * h, pts = [];
-    const end = (km < TRAVEL.openKm ? TRAVEL.to : TRAVEL.rule) + 360;
-    for (let b = TRAVEL.from; b <= end; b += 2) pts.push(pt(scr(...destination(km, b % 360))));
-    const d = 'M' + pts.join('L');
-    arcs += `<path class="arc halo" d="${d}"/><path class="arc ink" d="${d}"/>`;
-    const [x, y] = scr(...destination(km, TRAVEL.rule)), label = hoursLabel(h), w = 8 + label.length * 7.4;
-    tags += `<g class="tag" transform="translate(${(x + 6).toFixed(1)},${(y - 10).toFixed(1)})"><rect width="${w.toFixed(0)}" height="20" rx="6"/><text x="${(w / 2).toFixed(1)}" y="14.5" text-anchor="middle">${label}</text></g>`;
+    const km = kmh * h;
+    // The arc, broken wherever land stands between that distance and Saltburn.
+    let d = '', on = false;
+    if (travelWindow) {
+      const step = travelWindow.step, n = travelWindow.reach.length;
+      const start = travelWindow.reach.findIndex((r) => r < km);
+      for (let k = 0; k <= n; k++) {
+        const i = ((start < 0 ? 0 : start) + k) % n, open = travelWindow.reach[i] >= km;
+        if (open) { d += (on ? 'L' : 'M') + pt(scr(...destination(km, i * step))); on = true; } else on = false;
+      }
+    } else {
+      const end = (km < TRAVEL.openKm ? TRAVEL.to : TRAVEL.rule) + 360;
+      for (let b = TRAVEL.from; b <= end; b += 2) d += (b === TRAVEL.from ? 'M' : 'L') + pt(scr(...destination(km, b % 360)));
+    }
+    if (d) arcs += `<path class="arc halo" d="${d}"/><path class="arc ink" d="${d}"/>`;
+    const [x, y] = scr(...destination(km, TRAVEL.rule)), label = hoursLabel(h), lw = 8 + label.length * 7.4;
+    tags += `<g class="tag" transform="translate(${(x + 6).toFixed(1)},${(y - 10).toFixed(1)})"><rect width="${lw.toFixed(0)}" height="20" rx="6"/><text x="${(lw / 2).toFixed(1)}" y="14.5" text-anchor="middle">${label}</text></g>`;
   }
   const r0 = scr(WIND.lat, WIND.lon), r1 = scr(...destination(ruleEnd, TRAVEL.rule));
   const rule = `M${pt(r0)}L${pt(r1)}`;
   const key = `<g class="key" transform="translate(${(r1[0] - 98).toFixed(1)},${(r1[1] - 26).toFixed(1)})"><rect width="92" height="20" rx="6"/><text x="46" y="14.5" text-anchor="middle">${opts.swellPeriod} s swell</text></g>`;
-  travelSvg.innerHTML = arcs + `<path class="rule halo" d="${rule}"/><path class="rule ink" d="${rule}"/>` + tags + key;
+  travelSvg.innerHTML = shade + arcs + `<path class="rule halo" d="${rule}"/><path class="rule ink" d="${rule}"/>` + gaps + tags + key;
 }
 async function updateTravel() {
   const ours = SOURCE === SOURCES.ours;
@@ -821,6 +873,10 @@ async function updateTravel() {
         travelGrid = r.ok ? await r.json() : null;
       } catch { travelGrid = null; }
       if (!travelGrid) travelGridKey = '';
+      try {
+        const r = await fetchT(`${SOURCES.ours.base}window.json?run=${runKey(runMs)}`, {}, 15e3);
+        travelWindow = r.ok ? await r.json() : null;
+      } catch { travelWindow = null; }
     }
   }
   drawTravel();
@@ -833,7 +889,7 @@ travelBtn.addEventListener('click', async () => {
   saveOpts();
   if (opts.travelLayer && !travelGrid) travelGridKey = '';
   await updateTravel();
-  toast(!opts.travelLayer ? 'Swell travel times off' : travelGrid ? `Travel times to Saltburn for a ${opts.swellPeriod} s swell` : "Couldn't load the travel times; check your connection");
+  toast(!opts.travelLayer ? 'Swell window off' : travelGrid ? `Swell window, and travel times for a ${opts.swellPeriod} s swell` : "Couldn't load the swell window; check your connection");
 });
 
 /* Sea ice: one layer for the whole run, from the latest ice chart. */
@@ -1972,6 +2028,63 @@ function renderSwell() {
 }
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+/* ---------------- Storm alerts ----------------
+   The chart job looks through each model run for bomb lows (falling 24 hPa
+   or more in 24 hours) whose winds are aimed at us, and works out when their
+   swell would arrive (scripts/swell_sources.py). They come with our charts'
+   manifest; Today shows any whose swell is still to come. */
+let stormAlerts = store.get('nsv.alerts', null), alertsBusy = false;
+async function refreshAlerts(force) {
+  if (alertsBusy || (!force && stormAlerts && Date.now() - stormAlerts.at < 20 * 60e3)) return;
+  alertsBusy = true;
+  try {
+    const r = await fetchT(`${SOURCES.ours.base}manifest.json?t=${Math.floor(Date.now() / 300e3)}`, { cache: 'no-store' }, 15e3);
+    if (r.ok) {
+      const m = await r.json();
+      stormAlerts = { at: Date.now(), run: m.run, runLabel: m.runLabel, list: m.alerts || [] };
+      store.set('nsv.alerts', stormAlerts);
+    }
+  } catch {}
+  alertsBusy = false;
+  renderToday();
+}
+const fUkDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'short' });
+const fUkHour = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: 'numeric', hourCycle: 'h23' });
+function whenUk(ms) {
+  const h = +fUkHour.format(ms), day = fUkDay.format(ms);
+  return `${day} ${h % 12 || 12}${h < 12 ? 'am' : 'pm'}`;
+}
+function partOfDay(ms) {
+  const h = +fUkHour.format(ms), day = fUkDay.format(ms);
+  return `${day} ${h < 5 ? 'night' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : h < 21 ? 'evening' : 'night'}`;
+}
+function renderAlerts() {
+  const box = $('#todayAlerts');
+  const list = stormAlerts && stormAlerts.list ? stormAlerts.list.filter((a) => a.until > Date.now()) : [];
+  box.innerHTML = '';
+  list.forEach((a) => {
+    const el = document.createElement('button');
+    el.className = 'alert';
+    const pulses = a.pulses.map((p) => `<li><b>${whenUk(p.arriveFrom)} – ${whenUk(p.arriveTo)}</b> · 14–17 s · from ${escapeHtml(p.where)}` +
+      (p.path === 'gaps' ? ', via the gaps north of Scotland' : ', straight down the North Sea') + '</li>').join('');
+    const gaps = a.pulses.some((p) => p.path === 'gaps') ? 'Swell squeezing in through the gaps arrives smaller than swell coming straight down the North Sea. ' : '';
+    el.innerHTML = `<div class="k">Bomb low · deepest ${whenUk(a.at)}</div>` +
+      `<div class="ah">${a.hPa} hPa ${escapeHtml(a.where)}</div>` +
+      `<div class="d">Deepening ${a.drop24} hPa in 24 hours, with winds to ${a.windKn} kn.</div>` +
+      `<ul><li><b>First signs ${partOfDay(a.first)}</b> · 20 s and over, barely there</li>${pulses}</ul>` +
+      `<div class="d">${gaps}From the ${stormAlerts.runLabel.slice(11)} model run; storms this far ahead change from run to run.</div>` +
+      '<div class="go">See it on the charts ›</div>';
+    el.addEventListener('click', () => {
+      // Open the charts at the storm's deepest: now if they're loaded, or as they load.
+      const loaded = chartsStarted && frames.length;
+      jumpTo = loaded ? null : a.at;
+      go('pressure');
+      if (loaded) { stopPlay(); show(nearestIndex(a.at)); }
+    });
+    box.appendChild(el);
+  });
+}
+
 /* ---------------- Today ----------------
    Saltburn right now and for the rest of today, from the same wind and tide
    data as the Forecast tabs. */
@@ -2067,6 +2180,7 @@ function renderToday() {
   const turns = tides ? tideTurns(tides.time, tides.level) : [];
 
   nowTiles($('#todayNow'), wDay, turns);
+  renderAlerts();
 
   // Waves: the latest reading from the nearest buoy (Whitby, usually).
   const wave = $('#todayWave'), near = obs && obs.stations[0];
@@ -2148,6 +2262,7 @@ function renderLocal() {
 function refreshLocal(force) {
   const now = route === 'today' || route === 'cam';
   if (route === 'buoys' || route === 'today') refreshSwell(force);
+  if (route === 'today') refreshAlerts(force);
   if (now || route === 'wind') refreshWind(force);
   if (now || route === 'tides') refreshTides(force);
 }
@@ -2166,6 +2281,7 @@ const camFrame = $('#camFrame');
 let forecastTab = store.get('nsv.forecastTab', 'pressure');
 forecastTab = RENAMED[forecastTab] || forecastTab;
 let chartsStarted = false;
+let jumpTo = null; // a time to show when the charts next load (from an alert)
 const routeFromHash = () => { const h = location.hash.slice(1); const r = RENAMED[h] || h; return ROUTES.includes(r) ? r : 'today'; };
 function go(r) {
   history.replaceState(null, '', r === 'today' ? location.pathname + location.search : '#' + r);
