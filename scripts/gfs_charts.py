@@ -35,6 +35,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from matplotlib.colors import LinearSegmentedColormap
+from PIL import Image
 from scipy.ndimage import gaussian_filter, maximum_filter, minimum_filter
 
 from gfs_latest import STEPS, grib_url, label, latest_run
@@ -116,11 +117,11 @@ def map_box(box):
 
 def home_view():
     """Where HOME sits in the map, as the app's crop: centre (fractions of
-    width and height from the top left) and visible height."""
+    width and height from the top left), visible height, and its width."""
     x0, x1, y0, y1 = map_box(VIEW)
     h0, h1, k0, k1 = map_box(HOME)
     return dict(cx=round(((h0 + h1) / 2 - x0) / (x1 - x0), 4), cy=round((y1 - (k0 + k1) / 2) / (y1 - y0), 4),
-                span=round((k1 - k0) / (y1 - y0), 4))
+                span=round((k1 - k0) / (y1 - y0), 4), w=round((h1 - h0) / (x1 - x0), 4))
 
 
 def extrema(field, lons, lats, size, kind):
@@ -130,13 +131,13 @@ def extrema(field, lons, lats, size, kind):
     peaks = np.argwhere(sm == filt(sm, size=size, mode='nearest'))
     wide = filt(sm, size=size * 2, mode='nearest')  # keep only centres that dominate a wider area
     x0, x1, y0, y1 = map_box(VIEW)
-    mx, my = (x1 - x0) * 0.03, (y1 - y0) * 0.04
+    mx, my = (x1 - x0) * 0.03, (y1 - y0) * 0.04  # and more at the bottom, clear of the caption
     out = []
     for y, x in peaks:
         if 8 < y < field.shape[0] - 8 and 8 < x < field.shape[1] - 8 and abs(sm[y, x] - wide[y, x]) < 0.6:
             lo, la = float(lons[x]), float(lats[y])
             px, py = PROJ.transform_point(lo, la, ccrs.PlateCarree())
-            if x0 + mx <= px <= x1 - mx and y0 + my <= py <= y1 - my:  # whole label inside the map
+            if x0 + mx <= px <= x1 - mx and y0 + 2.5 * my <= py <= y1 - my:  # whole label inside the map
                 out.append((lo, la, float(field[y, x])))
     return out
 
@@ -147,8 +148,10 @@ def draw(run, step, f, path):
     lons, lats = f['prmsl'].longitude.values, f['prmsl'].latitude.values
     # Size the image to the map's own shape so there are no empty margins.
     x0, x1, y0, y1 = map_box(VIEW)
+    # 11 in at 155 dpi: about 1700 px across, so the North Sea framing the app
+    # opens on is as sharp as the old North Sea-only chart.
     width = 11.0
-    fig = plt.figure(figsize=(width, width * (y1 - y0) / (x1 - x0)), dpi=100)
+    fig = plt.figure(figsize=(width, width * (y1 - y0) / (x1 - x0)), dpi=155)
     ax = fig.add_axes([0, 0, 1, 1], projection=PROJ)
     ax.set_extent(VIEW, crs=ccrs.PlateCarree())
     ax.set_facecolor(INK)
@@ -175,6 +178,8 @@ def draw(run, step, f, path):
     ax.axis('off')
     fig.savefig(path, facecolor=INK)
     plt.close(fig)
+    # 256 colours is plenty for these flat bands and lines, at about a third of the size.
+    Image.open(path).convert('RGB').quantize(256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).save(path, optimize=True)
     return p, lons, lats
 
 
