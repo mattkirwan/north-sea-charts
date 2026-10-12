@@ -235,9 +235,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 .alert li b{color:var(--paper);font-weight:600}
 .alert .go{font-size:13px;color:var(--amber);margin-top:8px}
 .swc{margin-top:12px;border-radius:14px;padding:12px 14px 13px;background:rgba(126,214,195,.08);box-shadow:inset 3px 0 0 var(--glass)}
-.swc.past{box-shadow:inset 3px 0 0 var(--slate);background:rgba(232,238,241,.05)}
 .swc .k{font-size:13px;color:var(--glass);font-weight:600}
-.swc.past .k{color:var(--slate)}
 .swc .ah{font-family:var(--f-cond);font-weight:700;font-size:26px;line-height:1.1;margin-top:4px}
 .swc .ah small{font-size:15px;color:var(--slate);font-weight:600}
 .swc .d{font-size:14px;color:var(--slate);margin-top:6px;line-height:1.4}
@@ -249,6 +247,18 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 .swc ul{list-style:none;margin:10px 0 0;padding:0}
 .swc li{font-size:13px;line-height:1.4;padding:5px 0;border-top:1px solid var(--hair);color:var(--slate);font-variant-numeric:tabular-nums}
 .swc li b{color:var(--paper);font-weight:600}
+.swc li.day{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.swc li.day .r{white-space:nowrap;font-size:12px}
+.ladder{margin:4px 0 12px}
+.ladder .k{font-size:12px;color:var(--slate)}
+.ladder .d{font-size:13px;color:var(--slate);margin-top:4px}
+.ladder ul{list-style:none;margin:4px 0 0;padding:0}
+.ladder li{font-size:13px;line-height:1.4;padding:3px 0;color:var(--slate);font-variant-numeric:tabular-nums}
+.ladder li b{color:var(--paper);font-weight:600}
+.acc{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.acc th{font-weight:500;color:var(--slate);text-align:left;padding:0 0 6px}
+.acc td{padding:5px 0;border-top:1px solid var(--hair)}
+.acc td small{display:block;color:var(--slate);font-size:12px}
 .tsun .big{font-size:34px}
 .tsun .big svg{color:var(--amber);width:26px;height:26px}
 .tsun .edge{font-weight:500;color:var(--paper)}
@@ -431,9 +441,10 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
   </section>
 </div>
 
-<!-- Predictions (beta): storm alerts, coming swells held as first predicted,
-     the state of things now with our own size estimate, and reports of what it
-     was really like, to build a history to check and tune them against. -->
+<!-- Predictions (beta): storm alerts, our rolling swell forecast, the state of
+     things now with our own size estimate, and reports of what it was really
+     like, each with every prediction made for its hour, to build a history to
+     check and tune the forecast against. -->
 <main class="view panel" id="vPredict" aria-labelledby="predTitle" hidden>
   <div class="thead">
     <div class="whead">
@@ -443,9 +454,9 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="wsub">Beta · Saltburn</div>
   </div>
   <div id="predAlerts"></div>
-  <section class="wday" aria-labelledby="predSwH">
-    <h3 id="predSwH">Coming swells <small id="predSwNote"></small></h3>
-    <div id="predSwells"></div>
+  <section class="wday" aria-labelledby="predRollH">
+    <h3 id="predRollH">Next 7 days <small id="predRollNote"></small></h3>
+    <div id="predRoll"></div>
   </section>
   <section class="wday" aria-labelledby="predNowH">
     <h3 id="predNowH">Now <small>what we know, and our estimate</small></h3>
@@ -455,6 +466,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="k">What's it like?</div>
     <div class="field"><span>Where</span><div class="seg" id="repSpot"></div></div>
     <div class="field"><span>When</span><input type="datetime-local" id="repWhen"></div>
+    <div class="ladder" id="repLadder"></div>
     <div class="field"><span>Size</span><div class="seg" id="repSize"></div></div>
     <div class="field"><span>Quality</span><div class="seg" id="repQual"></div></div>
     <div class="field"><span>Surface</span><div class="seg" id="repSurf"></div></div>
@@ -467,8 +479,12 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div id="predHist"></div>
     <div class="links" style="margin-top:12px"><button class="pill" id="repExport">Export all</button><button class="pill" id="repPull">Sync with GitHub</button></div>
   </section>
-  <p class="fine">Coming swells are our own forecast from each model run's winds: swell grown wherever the wind blows down our window towards Saltburn, sent on at the speed for its period and smaller with distance. The first run to see a swell coming (a day or more ahead) fixes its prediction, which never changes; every run after adds its own view, then the Whitby buoy and your reports say what really came.</p>
-  <p class="fine">The estimate now is breaking height from the nearest buoy's height and period (Komar and Gaughan), less for swell arriving at an angle to Saltburn's beach. Each report keeps the readings, the estimate and the coming swells from the moment it was made, so we can see how far out they are and tune them.</p>
+  <section class="wday" aria-labelledby="predAccH">
+    <h3 id="predAccH">How far out <small>by how far ahead</small></h3>
+    <div class="tile" id="predAcc"></div>
+  </section>
+  <p class="fine">The forecast is our own, from each model run's winds: swell grown wherever the wind blows down our window towards Saltburn, sent on at the speed for its period and smaller with distance, as breaking size at Saltburn. Every run forecasts every hour of the next 8 days, and every prediction is kept, so each hour ends up with around 30, made from a week ahead down to the day itself. A report saves all of them for its time, and "How far out" compares them with what you saw and with the Whitby buoy, by how far ahead they were made.</p>
+  <p class="fine">The estimate now is breaking height from the nearest buoy's height and period (Komar and Gaughan), less for swell arriving at an angle to Saltburn's beach. Each report also keeps the readings and this estimate from the moment it was made.</p>
 </main>
 
 <!-- Settings: wind units and the pressure charts' options -->
@@ -2230,105 +2246,165 @@ function snapshot() {
     tide: level != null ? { m: +level.toFixed(2), rising: next ? next.hi : null, next: next ? { hi: next.hi, ms: next.ms, m: +next.m.toFixed(2) } : null } : null,
     alerts: stormAlerts && stormAlerts.list ? stormAlerts.list.map((a) => ({ hPa: a.hPa, where: a.where, at: a.at, pulses: a.pulses })) : [],
     run: stormAlerts ? stormAlerts.runLabel : null,
-    swells: comingSwells().map((sw) => ({ id: sw.id, held: { ft: sw.held.ft, peak: sw.held.peak, p: sw.held.p, d: sw.held.d }, latest: latestView(sw) }))
+    forecast: rollNow()
   };
 }
 
-/* Coming swells. After each model run the chart job forecasts the swell for
-   Saltburn from its winds, and keeps every swell it sees coming on the
-   `history` branch (scripts/history.py, held.json): its prediction as first
-   made, held unchanged; each later run's view of it; and once it's been, the
-   Whitby buoy's readings. Each card lays those over each other with any
-   reports from the time, so we can see how the forecast moved and what came. */
-let heldSwells = store.get('nsv.held', null), heldBusy = false;
-async function refreshHeld(force) {
-  if (heldBusy || (!force && heldSwells && Date.now() - heldSwells.at < 20 * 60e3)) return;
-  heldBusy = true;
+/* Rolling forecast. After each model run the chart job forecasts the swell
+   at Saltburn for every hour of the next 8 days from its winds, and files
+   every hour's prediction from every run on the `history` branch
+   (scripts/history.py). So any hour has predictions made from 8 days ahead
+   down to the hour itself. The chart shows how the last two days' runs have
+   moved; a report saves every prediction made for its hour; and "How far out"
+   compares them with reports and the Whitby buoy, by how far ahead. */
+const HIST = `https://raw.githubusercontent.com/${REPO}/history/`;
+const DAY = 24 * H, ROLL_RUNS = 8;
+const runFile = (ms) => new Date(ms).toISOString().slice(0, 13).replace('T', '-') + 'z';
+const runName = (ms) => `${fUkDay.format(ms)} ${String(new Date(ms).getUTCHours()).padStart(2, '0')}z`;
+const fUkDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' });
+let roll = store.get('nsv.roll', null), rollBusy = false;
+async function refreshRoll(force) {
+  const run = stormAlerts && stormAlerts.run;
+  if (rollBusy || !run || (!force && roll && roll.run === run && Date.now() - roll.at < 20 * 60e3)) return;
+  rollBusy = true;
+  renderPredict();
+  const keep = Date.now() - 2 * DAY, runs = {};
+  await Promise.all(Array.from({ length: ROLL_RUNS }, (_, k) => run - k * 6 * H).map(async (ms) => {
+    const had = roll && roll.runs && roll.runs[ms];
+    if (had) { runs[ms] = had.filter((r) => r[0] >= keep); return; } // a run's forecast never changes
+    try {
+      const r = await fetchT(`${HIST}forecasts/${runFile(ms)}.json`, {}, 15e3);
+      if (r.ok) runs[ms] = (await r.json()).hourly.filter((x) => x[0] >= keep);
+    } catch {}
+  }));
+  let verify = roll ? roll.verify : null;
   try {
-    const r = await fetchT(`https://raw.githubusercontent.com/${REPO}/history/held.json?t=${Math.floor(Date.now() / 300e3)}`, { cache: 'no-store' }, 15e3);
-    if (r.ok) {
-      const d = await r.json(), keep = Date.now() - 10 * 24 * H;
-      // Only what's shown: swells still coming, and the last ten days' worth.
-      const list = (d.swells || []).filter((sw) => sw.status === 'coming' || sw.held.peak > keep);
-      heldSwells = { at: Date.now(), updated: d.updated, list };
-      store.set('nsv.held', heldSwells);
-    } else if (r.status === 404) heldSwells = { at: Date.now(), updated: null, list: [] }; // nothing held yet
+    const r = await fetchT(`${HIST}verify.json?t=${Math.floor(Date.now() / 300e3)}`, { cache: 'no-store' }, 15e3);
+    if (r.ok) verify = await r.json();
   } catch {}
-  heldBusy = false;
+  roll = { at: Date.now(), run, runs, verify };
+  store.set('nsv.roll', roll);
+  rollBusy = false;
   renderPredict();
 }
-const latestView = (sw) => { const v = sw.views.at(-1); return v.gone ? { gone: true, run: v.run } : { run: v.run, ft: v.ft, peak: v.peak, p: v.p, d: v.d }; };
-const lastSeen = (sw) => sw.views.filter((v) => !v.gone).at(-1);
-const comingSwells = () => (heldSwells ? heldSwells.list.filter((sw) => sw.status === 'coming') : []);
-const runName = (ms) => `${fUkDay.format(ms)} ${String(new Date(ms).getUTCHours()).padStart(2, '0')}z`;
-const signed = (v, unit) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(v)}${unit}`;
+const rollRuns = () => (roll ? Object.keys(roll.runs).map(Number).sort((a, b) => b - a) : []);
+function rollNow() {
+  const k = rollRuns()[0], hr = Math.round(Date.now() / H) * H, r = k && roll.runs[k].find((x) => x[0] === hr);
+  return r ? { run: k, ft: r[1], h: r[2], p: r[3], d: r[4] } : null;
+}
+const swellText = (ft, p, d) => (ft < 0.5 || p == null ? 'flat' : `${ft.toFixed(1)} ft, ${Math.round(p)} s from ${compass(d)}`);
 
-// Held (dashed), latest run (solid), Whitby (dots), reports (triangles), over the swell's time.
-function swellPlot(sw, buoyRows, reps) {
-  const pts = [...sw.heldHourly, ...sw.latestHourly];
-  if (pts.length < 2) return '';
-  const t0 = Math.min(...pts.map((r) => r[0])), t1 = Math.max(...pts.map((r) => r[0]));
-  const rows = buoyRows.filter((r) => r[0] >= t0 && r[0] <= t1 && r[1] != null && r[2] != null && r[3] != null).map((r) => [r[0], breakFt(r[1], r[2], r[3])]);
-  const rp = reps.filter((r) => r.at >= t0 && r.at <= t1);
-  const top = Math.max(2, ...pts.map((r) => r[1]), ...rows.map((r) => r[1]), ...rp.map((r) => r.sizeFt || 0)) * 1.12;
-  const W = 320, Hh = 110, x = (t) => ((t - t0) / (t1 - t0)) * W, y = (ft) => Hh - 16 - (ft / top) * (Hh - 24);
-  const line = (list) => list.map((r, i) => `${i ? 'L' : 'M'}${x(r[0]).toFixed(1)},${y(r[1]).toFixed(1)}`).join('');
+// The latest run (amber), the runs before it (fading), Whitby (dots), reports (triangles).
+function rollPlot(ks) {
+  const now = Date.now(), t0 = now - 36 * H, t1 = now + 7 * DAY;
+  const lines = ks.map((k) => roll.runs[k].filter((r) => r[0] >= t0 && r[0] <= t1)).filter((l) => l.length > 1);
+  const whitby = obs && obs.stations.find((s) => s.name === 'Whitby');
+  const rows = ((whitby && whitby.hist) || []).filter((r) => r[0] >= t0 && r[1] != null && r[2] != null && r[3] != null).map((r) => [r[0], breakFt(r[1], r[2], r[3])]);
+  const rp = reports.filter((r) => r.at >= t0 && r.at <= t1);
+  const top = Math.max(2, ...lines.flat().map((r) => r[1]), ...rows.map((r) => r[1]), ...rp.map((r) => r.sizeFt || 0)) * 1.12;
+  const W = 320, Hh = 120, x = (t) => ((t - t0) / (t1 - t0)) * W, y = (ft) => Hh - 16 - (ft / top) * (Hh - 24);
+  const path = (l) => l.map((r, i) => `${i ? 'L' : 'M'}${x(r[0]).toFixed(1)},${y(r[1]).toFixed(1)}`).join('');
   let g = `<line x1="0" x2="${W}" y1="${Hh - 16}" y2="${Hh - 16}" stroke="var(--hair)"/>`;
   for (let f = 2; f < top; f += top > 12 ? 4 : 2) g += `<line x1="0" x2="${W}" y1="${y(f)}" y2="${y(f)}" stroke="var(--hair)" stroke-dasharray="2 4"/><text x="0" y="${y(f) - 2}" class="sx">${f} ft</text>`;
   for (let t = Math.ceil(t0 / H) * H; t <= t1; t += H) if (+fUkHour.format(t) === 12) g += `<text x="${x(t).toFixed(1)}" y="${Hh - 3}" class="sx" text-anchor="middle">${fUkDay.format(t)}</text>`;
-  const now = Date.now();
-  if (now > t0 && now < t1) g += `<line x1="${x(now)}" x2="${x(now)}" y1="4" y2="${Hh - 16}" stroke="var(--paper)" stroke-opacity=".5"/><text x="${x(now) + 3}" y="10" class="sx">now</text>`;
-  if (sw.views.length > 1) g += `<path d="${line(sw.latestHourly)}" fill="none" stroke="var(--glass)" stroke-width="2"/>`;
-  g += `<path d="${line(sw.heldHourly)}" fill="none" stroke="var(--amber)" stroke-width="2" stroke-dasharray="5 4"/>`;
+  g += `<line x1="${x(now)}" x2="${x(now)}" y1="4" y2="${Hh - 16}" stroke="var(--paper)" stroke-opacity=".5"/><text x="${x(now) + 3}" y="10" class="sx">now</text>`;
+  for (let i = lines.length - 1; i > 0; i--) g += `<path d="${path(lines[i])}" fill="none" stroke="var(--glass)" stroke-opacity="${(0.15 + 0.45 * (1 - i / lines.length)).toFixed(2)}" stroke-width="1.2"/>`;
+  if (lines.length) g += `<path d="${path(lines[0])}" fill="none" stroke="var(--amber)" stroke-width="2"/>`;
   g += rows.map((r) => `<circle cx="${x(r[0]).toFixed(1)}" cy="${y(r[1]).toFixed(1)}" r="2" fill="var(--paper)"/>`).join('');
   g += rp.map((r) => { const cx = x(r.at), cy = y(r.sizeFt || 0); return `<path d="M${cx - 5},${cy + 4}L${cx + 5},${cy + 4}L${cx},${cy - 5}Z" fill="var(--amber)"/>`; }).join('');
-  return `<svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Predicted and measured size over the swell's time">${g}</svg>` +
-    `<div class="key"><span><i style="border-color:var(--amber);border-top-style:dashed"></i>Held</span>${sw.views.length > 1 ? '<span><i style="border-color:var(--glass)"></i>Latest run</span>' : ''}` +
+  return `<svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Forecast breaking size at Saltburn over the next week, from the latest run and the ones before">${g}</svg>` +
+    `<div class="key"><span><i style="border-color:var(--amber)"></i>Latest run</span>${lines.length > 1 ? '<span><i style="border-color:var(--glass)"></i>Earlier runs</span>' : ''}` +
     `${rows.length ? '<span>● Whitby</span>' : ''}${rp.length ? '<span style="color:var(--amber)">▲ Reports</span>' : ''}</div>`;
 }
 
-function renderSwells() {
-  const box = $('#predSwells'), note = $('#predSwNote');
-  note.textContent = heldBusy && !heldSwells ? 'loading…' : heldSwells && heldSwells.updated ? `updated ${ago(heldSwells.updated)}` : '';
-  const list = heldSwells ? heldSwells.list.slice() : [];
-  // Coming first, soonest first; then those that have been, latest first.
-  list.sort((a, b) => (b.status === 'coming') - (a.status === 'coming') || (a.status === 'coming' ? lastSeen(a).peak - lastSeen(b).peak : lastSeen(b).peak - lastSeen(a).peak));
-  if (!list.length) {
-    box.innerHTML = `<div class="d" style="color:var(--slate);font-size:14px">${heldSwells ? (heldSwells.updated ? 'Nothing knee high or more on its way in the latest runs.' : 'No swells held yet: the first come with the next model run.') : heldBusy ? 'Loading the coming swells' : "Couldn't load the coming swells. Check you're online."}</div>`;
+function renderRoll() {
+  const box = $('#predRoll'), ks = rollRuns();
+  $('#predRollNote').textContent = rollBusy ? 'updating…' : ks.length ? `latest run ${runName(ks[0])}` : '';
+  if (!ks.length) {
+    box.innerHTML = `<div class="d" style="color:var(--slate);font-size:14px">${rollBusy || !stormAlerts ? 'Loading the forecast' : 'No forecasts yet: they start with the next model run.'}</div>`;
     return;
   }
-  const whitby = obs && obs.stations.find((s) => s.name === 'Whitby');
-  box.innerHTML = '';
-  list.forEach((sw) => {
-    const h = sw.held, last = sw.views.at(-1), seen = lastSeen(sw), past = sw.status !== 'coming';
-    const t0 = Math.min(...sw.views.filter((v) => !v.gone).map((v) => v.start)) - 6 * H, t1 = Math.max(...sw.views.filter((v) => !v.gone).map((v) => v.end)) + 12 * H;
-    const reps = reports.filter((r) => r.at >= t0 && r.at <= t1);
-    const buoyRows = sw.observed ? sw.observed.rows : whitby && whitby.hist ? whitby.hist : [];
-    const ahead = Math.round((h.peak - h.run) / (24 * H));
-    const el = document.createElement('div');
-    el.className = 'swc' + (past ? ' past' : '');
-    const head = last.gone
-      ? `<div class="ah">Gone <small>from the ${runName(last.run)} run</small></div>`
-      : `<div class="ah">${last.ft.toFixed(1)} ft <small>${sizeWord(last.ft)} · ${Math.round(last.p)} s</small></div>`;
-    const runs = sw.views.slice(-6).map((v) => `<li><b>${runName(v.run)}</b> · ` + (v.gone ? 'not in this run'
-      : `${v.ft.toFixed(1)} ft, ${Math.round(v.p)} s from ${compass(v.d)}, peak ${whenUk(v.peak)}` +
-        (v.run !== h.run ? ` (${signed(+(v.ft - h.ft).toFixed(1), ' ft')}, ${signed(Math.round((v.peak - h.peak) / H), ' h')})` : ' (held)')) + '</li>').join('');
-    const more = sw.views.length > 6 ? `<li>…and ${sw.views.length - 6} earlier</li>` : '';
-    const o = sw.observed;
-    const came = o ? `<div class="d"><b>What came:</b> ${o.buoy} peaked at ${feet(o.h)} ft (${o.h} m)${o.p ? ` at ${Math.round(o.p)} s` : ''}${o.d != null ? ` from ${compass(o.d)}` : ''}, ${whenUk(o.at)}${o.ft != null ? `: about ${o.ft} ft at Saltburn by the same sums` : ''}.</div>`
-      : past ? '<div class="d">Waiting for the Whitby readings from its time.</div>' : '';
-    const repl = reps.length ? '<ul>' + reps.sort((a, b) => a.at - b.at).map((r) => `<li><b>${escapeHtml(r.spot)}</b> · ${(SIZES.find((x) => x[0] === r.size) || [, r.size])[1]}${r.quality ? ', ' + r.quality : ''} · ${whenUk(r.at)}</li>`).join('') + '</ul>' : '';
-    el.innerHTML = `<div class="k">${past ? 'Been' : 'Peak'} ${whenUk(seen.peak)} · from ${compass(seen.d)}</div>${head}` +
-      `<div class="d">${seen.h.toFixed(1)} m at ${Math.round(seen.p)} s, from winds ${/^\d/.test(seen.where) ? 'at' : 'over'} ${escapeHtml(seen.where)}. <b>Held</b> from the ${runName(h.run)} run, ${ahead} day${ahead === 1 ? '' : 's'} ahead: ${h.ft.toFixed(1)} ft, ${Math.round(h.p)} s from ${compass(h.d)}, peak ${whenUk(h.peak)}.</div>` +
-      swellPlot(sw, buoyRows, reps) + came + `<ul>${runs}${more}</ul>` + repl;
-    box.appendChild(el);
+  // Each day: the latest run's biggest hour, and the range of the runs' biggest.
+  const days = [];
+  for (let k = 0; k < 7; k++) {
+    const key = fUkDate.format(Date.now() + k * DAY);
+    if (days.some((d) => d.key === key)) continue;
+    const of = (l) => l.filter((r) => fUkDate.format(r[0]) === key && (k || r[0] >= Date.now() - H));
+    const top = (l) => l.reduce((a, b) => (b[1] > a[1] ? b : a), l[0]);
+    const latest = of(roll.runs[ks[0]]);
+    if (!latest.length) continue;
+    const best = top(latest), others = ks.map((q) => of(roll.runs[q])).filter((l) => l.length >= latest.length * 0.8).map((l) => top(l)[1]);
+    const lo = Math.min(...others), hi = Math.max(...others);
+    days.push({ key, html: `<li class="day"><span><b>${k ? fUkDay.format(best[0]) : 'Today'}</b> · ${best[1] < 0.5 ? 'flat' : `up to ${swellText(best[1], best[3], best[4])}, ${whenUk(best[0]).split(' ')[1]}`}</span>` +
+      (others.length > 1 ? `<span class="r">runs ${lo.toFixed(1)}–${hi.toFixed(1)}</span>` : '') + '</li>' });
+  }
+  box.innerHTML = `<div class="swc">${rollPlot(ks)}<ul>${days.map((d) => d.html).join('')}</ul></div>`;
+}
+
+// Every prediction made for an hour, from the history branch's file for its day.
+const dayFiles = {};
+async function dayFile(date) {
+  const c = dayFiles[date];
+  if (c && Date.now() - c.at < 10 * 60e3) return c.rows;
+  const r = await fetchT(`${HIST}days/${date}.json?t=${Math.floor(Date.now() / 300e3)}`, { cache: 'no-store' }, 15e3);
+  if (!r.ok && r.status !== 404) throw new Error(`HTTP ${r.status}`);
+  const rows = r.ok ? (await r.json()).rows : [];
+  dayFiles[date] = { at: Date.now(), rows };
+  return rows;
+}
+// [run, ft, m, s, from] for the hour nearest `at`, oldest run first.
+async function ladderFor(at) {
+  const hr = Math.round(at / H) * H;
+  return (await dayFile(new Date(hr).toISOString().slice(0, 10))).filter((r) => r[0] === hr).map((r) => r.slice(1));
+}
+// The newest prediction in each whole number of days ahead: {days: row}.
+function byDaysAhead(ladder, at) {
+  const out = {};
+  (ladder || []).forEach((r) => { out[Math.max(0, Math.floor((Math.round(at / H) * H - r[0]) / DAY))] = r; });
+  return out;
+}
+const aheadName = (k) => (k ? `${k} day${k === 1 ? '' : 's'} ahead` : 'Same day');
+function ladderHtml(ladder, at) {
+  const b = byDaysAhead(ladder, at), ks = Object.keys(b).map(Number).sort((p, q) => q - p);
+  if (!ks.length) return '<div class="d">No predictions for that hour yet.</div>';
+  return '<ul>' + ks.map((k) => `<li><b>${aheadName(k)}</b> · ${runName(b[k][0])} run: ${swellText(b[k][1], b[k][3], b[k][4])}</li>`).join('') + '</ul>';
+}
+let ladderSeq = 0;
+async function showLadder() {
+  const box = $('#repLadder'), at = $('#repWhen').value ? new Date($('#repWhen').value).getTime() : Date.now(), seq = ++ladderSeq;
+  box.innerHTML = '<div class="k">We predicted for then</div><div class="d">Looking…</div>';
+  let html;
+  try { html = ladderHtml(await ladderFor(at), at); } catch { html = '<div class="d">Couldn\'t load the predictions; saving will try again.</div>'; }
+  if (seq === ladderSeq) box.innerHTML = '<div class="k">We predicted for then</div>' + html;
+}
+
+// Predictions against reports and against Whitby, by days ahead.
+function renderAcc() {
+  const box = $('#predAcc'), mine = {};
+  reports.forEach((r) => {
+    if (r.sizeFt == null || !r.ladder) return;
+    Object.entries(byDaysAhead(r.ladder, r.at)).forEach(([k, row]) => {
+      const m = (mine[k] = mine[k] || { n: 0, d: 0, a: 0 });
+      m.n++; m.d += row[1] - r.sizeFt; m.a += Math.abs(row[1] - r.sizeFt);
+    });
   });
+  const buoy = {};
+  ((roll && roll.verify && roll.verify.lead) || []).forEach((v) => { if (v.biasFt != null) buoy[v.days] = v; });
+  const ks = [...new Set([...Object.keys(mine), ...Object.keys(buoy)].map(Number))].sort((a, b) => a - b);
+  if (!ks.length) { box.innerHTML = '<div class="d" style="color:var(--slate);font-size:14px">Fills in as you report, and as each run\'s hours pass the Whitby buoy.</div>'; return; }
+  const cell = (bias, typ, n, unit) => `${bias > 0 ? '+' : bias < 0 ? '−' : '±'}${Math.abs(bias).toFixed(1)} ft <small>typically ${typ.toFixed(1)} out · ${n} ${unit}</small>`;
+  box.innerHTML = '<table class="acc"><tr><th>Ahead</th><th>Your reports</th><th>Whitby</th></tr>' + ks.map((k) => {
+    const m = mine[k], b = buoy[k];
+    return `<tr><td>${k ? k + ' d' : 'Same day'}</td><td>${m ? cell(m.d / m.n, m.a / m.n, m.n, m.n === 1 ? 'report' : 'reports') : '–'}</td><td>${b ? cell(b.biasFt, b.maeFt, b.n, 'h') : '–'}</td></tr>`;
+  }).join('') + '</table>' +
+    `<div class="d" style="color:var(--slate);font-size:13px;margin-top:8px">Plus: we said bigger than it was; minus: smaller. Whitby is the buoy's reading turned into size at Saltburn the same way, over the last ${(roll.verify && roll.verify.days) || 30} days.</div>`;
 }
 
 function renderPredict() {
   if (!showing('predict')) return;
   renderAlerts();
-  renderSwells();
+  renderRoll();
+  renderAcc();
   const box = $('#predNow'), snap = snapshot(), est = estimate();
   const b = snap.buoys && snap.buoys[0], w = snap.wind, t = snap.tide;
   box.innerHTML = (est
@@ -2339,6 +2415,7 @@ function renderPredict() {
     (b ? `<div><dt>${escapeHtml(b.name)}</dt><dd>${feet(b.h)} ft${b.p != null ? ` · ${Math.round(b.p)} s` : ''}${b.d != null ? ` · ${compass(b.d)}` : ''}</dd></div>` : '') +
     (w ? `<div><dt>Wind</dt><dd>${compass(w.from)} ${speedIn(w.kn)} ${UNIT_S()}</dd></div>` : '') +
     (t ? `<div><dt>Tide</dt><dd>${metres(t.m)}${t.next ? `, ${t.next.hi ? 'rising' : 'falling'}` : ''}</dd></div>` : '') +
+    (snap.forecast ? `<div><dt>Our forecast</dt><dd>${snap.forecast.ft < 0.5 ? 'flat' : `${snap.forecast.ft.toFixed(1)} ft · ${Math.round(snap.forecast.p)} s`}</dd></div>` : '') +
     (snap.run ? `<div><dt>Model run</dt><dd>${snap.run.slice(11)}</dd></div>` : '') + '</dl>';
   renderHistory();
 }
@@ -2355,10 +2432,12 @@ function renderHistory() {
     el.className = 'rep';
     const lab = (list, v) => (list.find((x) => x[0] === v) || [, v || '–'])[1];
     const est = r.prediction ? `estimate ${r.prediction.lo}–${r.prediction.hi} ft` : 'no estimate';
+    const ahead = byDaysAhead(r.ladder, r.at), aks = Object.keys(ahead).map(Number).sort((p, q) => q - p);
+    const fc = aks.length ? `<div class="rd">Forecast for then: ${aks.map((k) => `${k ? k + ' d' : 'same day'} ${ahead[k][1].toFixed(1)}`).join(' · ')} ft</div>` : '';
     const b = r.state && r.state.buoys && r.state.buoys[0];
     el.innerHTML = `<div class="rh"><b>${escapeHtml(r.spot)} · ${lab(SIZES, r.size)}${r.quality ? ', ' + lab(QUALITY, r.quality).toLowerCase() : ''}</b><span>${whenUk(r.at)}</span></div>` +
       `<div class="rd">${[r.surface && lab(SURFACE, r.surface), r.lines && lab(LINES, r.lines)].filter(Boolean).join(' · ')}${r.notes ? ' · ' + escapeHtml(r.notes) : ''}</div>` +
-      `<div class="rd">We had: ${est}${b ? `; ${escapeHtml(b.name)} ${feet(b.h)} ft${b.p != null ? ` ${Math.round(b.p)} s` : ''}` : ''}. ${r.synced ? 'Saved to GitHub.' : 'On this phone.'} <button class="rx">Delete</button></div>`;
+      fc + `<div class="rd">We had: ${est}${b ? `; ${escapeHtml(b.name)} ${feet(b.h)} ft${b.p != null ? ` ${Math.round(b.p)} s` : ''}` : ''}. ${r.synced ? 'Saved to GitHub.' : 'On this phone.'} <button class="rx">Delete</button></div>`;
     el.querySelector('.rx').addEventListener('click', () => deleteReport(r));
     box.appendChild(el);
   });
@@ -2387,11 +2466,13 @@ $('#repOpen').addEventListener('click', () => {
   repSeg('#repSurf', 'surface', SURFACE);
   repSeg('#repLines', 'lines', LINES);
   $('#repWhen').value = localInput(Date.now());
+  showLadder();
   $('#repNotes').value = '';
   $('#repForm').hidden = false;
   $('#repForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 $('#repCancel').addEventListener('click', () => { $('#repForm').hidden = true; });
+$('#repWhen').addEventListener('change', showLadder);
 $('#repForm').addEventListener('submit', (e) => {
   e.preventDefault();
   if (!repSel.size) { toast('Pick a size'); return; }
@@ -2408,7 +2489,8 @@ $('#repForm').addEventListener('submit', (e) => {
   $('#repForm').hidden = true;
   toast('Report saved');
   renderPredict();
-  syncReports();
+  // Every prediction made for its hour goes with it, before it's sent to GitHub.
+  ladderFor(at).then((l) => { r.ladder = l; }, () => {}).finally(() => { saveReports(); renderPredict(); syncReports(); });
 });
 
 // GitHub: one file per report on the reports branch.
@@ -2643,7 +2725,7 @@ function renderLocal() {
 function refreshLocal(force) {
   const now = route === 'today' || route === 'predict';
   if (route === 'buoys' || now) refreshSwell(force);
-  if (route === 'predict') { refreshAlerts(force); refreshHeld(force); syncReports(); }
+  if (route === 'predict') { refreshAlerts(force).then(() => refreshRoll(force)); syncReports(); }
   if (now || route === 'wind') refreshWind(force);
   if (now || route === 'tides') refreshTides(force);
 }

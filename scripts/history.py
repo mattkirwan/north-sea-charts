@@ -5,15 +5,20 @@ the `history` branch (which only ever grows):
 
   python scripts/history.py CHARTS_DIR WAVES_JSON HISTORY_DIR
 
+Every run forecasts every hour of the next 8 days, so every hour gets ~32
+predictions, made from 8 days ahead down to the hour itself. Those, the buoy
+readings and the reports from the beach (on the `reports` branch) show how
+good the forecast is, and how that changes with how far ahead it was made.
+
 - forecasts/<run>.json: every run's swell forecast (forecast.json), as made.
+- days/<date>.json: every prediction made for each hour of that day (UTC), from
+  every run: rows of [hour, run, ft, m, s, from]. The app reads these to show
+  what was predicted for the time of a report.
 - buoys/<code>.json: the readings from each coastal buoy, merged run after
   run from the last 24 hours the wave collector holds, so nothing is lost.
-- held.json: each swell, held as first predicted. The first run to see a swell
-  coming (at least HOLD_AHEAD hours ahead) fixes its prediction, which never
-  changes. Each later run adds its own view of the same swell (its peak
-  within MATCH_HOURS and its direction within MATCH_DEG of the last view), or
-  notes the swell has gone from that run. Once it has been and gone, the
-  biggest Whitby reading over its time is added: what actually came.
+- verify.json: over the last VERIFY_DAYS, the predictions against the Whitby
+  buoy, by how many days ahead they were made: how far out on average (bias)
+  and typically (mean absolute error), in height offshore and breaking size.
 """
 import datetime as dt
 import json
@@ -22,10 +27,8 @@ import sys
 
 from swell_sources import break_ft
 
-HOLD_AHEAD = 24     # h: a swell is only held if it was seen this far ahead
-MATCH_HOURS = 18    # a later run's swell is the same one if it peaks within this...
-MATCH_DEG = 45      # ...and comes from within this of the last view
-WATCH = 'Whitby'    # the buoy that says what came
+WATCH = 'Whitby'     # the buoy the forecast is checked against
+VERIFY_DAYS = 30
 H = 3600 * 1000
 
 
@@ -43,12 +46,8 @@ def save(path, data):
         json.dump(data, fh, separators=(',', ':'))
 
 
-def off(a, b):
-    return abs((a - b + 180) % 360 - 180)
-
-
-def label(ms):
-    return dt.datetime.fromtimestamp(ms / 1000, dt.timezone.utc).strftime('%Y-%m-%d-%Hz')
+def utc(ms):
+    return dt.datetime.fromtimestamp(ms / 1000, dt.timezone.utc)
 
 
 def keep_buoys(waves, out):
@@ -69,28 +68,60 @@ def keep_buoys(waves, out):
     return names
 
 
-def view_of(run, e):
-    return dict(run=run, peak=e['peak'], start=e['start'], end=e['end'], ft=e['ft'], h=e['h'], p=e['p'], d=e['d'], where=e['where'])
+def keep_hours(fc, out):
+    """File each of the run's hourly predictions under the day it's for.
+    Returns the number added (none if the run is already in)."""
+    run, by_day = fc['run'], {}
+    for t, ft, h, p, d in fc['hourly']:
+        if t >= run:
+            by_day.setdefault(utc(t).strftime('%Y-%m-%d'), []).append([t, run, ft, h, p, d])
+    added = 0
+    for day, rows in by_day.items():
+        path = os.path.join(out, 'days', f'{day}.json')
+        f = load(path, dict(date=day, rows=[]))
+        if any(r[1] == run for r in f['rows']):
+            continue
+        f['rows'] = sorted(f['rows'] + rows, key=lambda r: (r[0], r[1]))
+        save(path, f)
+        added += len(rows)
+    return added
 
 
-def hourly_around(fc, start, end):
-    return [[r[0], r[1]] for r in fc['hourly'] if start - 12 * H <= r[0] <= end + 12 * H]
-
-
-def observed(sw, out, names):
-    """The biggest reading at the watched buoy while the swell was due."""
+def verify(out, names, now):
+    """The predictions for the last VERIFY_DAYS against the watched buoy, by
+    days ahead (0: made less than a day before)."""
     code = names.get(WATCH)
-    seen = [v for v in sw['views'] if not v.get('gone')]
-    a = min(v['start'] for v in seen) - 6 * H
-    b = max(v['end'] for v in seen) + 12 * H
     rows = load(os.path.join(out, 'buoys', f'{code}.json'), {}).get('rows', []) if code else []
-    rows = [r for r in rows if a <= r[0] <= b and r[1] is not None]
-    if not rows or rows[-1][0] < b - 3 * H:
-        return None
-    top = max(rows, key=lambda r: r[1])
-    ft = break_ft(top[1], top[2] or 0, top[3]) if top[2] and top[3] is not None else None
-    hourly = [r for i, r in enumerate(rows) if i % 2 == 0 or r is top]
-    return dict(buoy=WATCH, at=top[0], h=top[1], p=top[2], d=top[3], ft=round(float(ft), 1) if ft is not None else None, rows=hourly)
+    seen = {}
+    for r in rows:  # the reading nearest each hour (within 20 minutes)
+        if r[1] is None:
+            continue
+        hr = round(r[0] / H) * H
+        if abs(r[0] - hr) <= 20 * 60 * 1000 and (hr not in seen or abs(r[0] - hr) < abs(seen[hr][0] - hr)):
+            seen[hr] = r
+    stats = {}
+    for k in range(VERIFY_DAYS + 1):
+        day = utc(now - k * 24 * H).strftime('%Y-%m-%d')
+        for t, run, ft, h, p, d in load(os.path.join(out, 'days', f'{day}.json'), {}).get('rows', []):
+            b = seen.get(t)
+            if not b or t > now or t < now - VERIFY_DAYS * 24 * H:
+                continue
+            s = stats.setdefault(int((t - run) // (24 * H)), dict(n=0, dh=0.0, ah=0.0, nft=0, dft=0.0, aft=0.0))
+            s['n'] += 1
+            s['dh'] += h - b[1]
+            s['ah'] += abs(h - b[1])
+            if b[2] and b[3] is not None:
+                e = ft - float(break_ft(b[1], b[2], b[3]))
+                s['nft'] += 1
+                s['dft'] += e
+                s['aft'] += abs(e)
+    lead = []
+    for k in sorted(stats):
+        s = stats[k]
+        lead.append(dict(days=k, n=s['n'], biasM=round(s['dh'] / s['n'], 2), maeM=round(s['ah'] / s['n'], 2),
+                         biasFt=round(s['dft'] / s['nft'], 1) if s['nft'] else None,
+                         maeFt=round(s['aft'] / s['nft'], 1) if s['nft'] else None))
+    return dict(buoy=WATCH, days=VERIFY_DAYS, updated=now, lead=lead)
 
 
 def main():
@@ -99,54 +130,20 @@ def main():
     if not fc:
         print('No forecast this run; nothing to keep.')
         return
-    run = fc['run']
     now = int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000)
-    save(os.path.join(out, 'forecasts', f'{label(run)}.json'), fc)
+    label = utc(fc['run']).strftime('%Y-%m-%d-%Hz')
+    save(os.path.join(out, 'forecasts', f'{label}.json'), fc)
     names = keep_buoys(load(waves_path, {}), out)
-
-    held = load(os.path.join(out, 'held.json'), dict(swells=[]))
-    if any(v['run'] == run for sw in held['swells'] for v in sw['views']):
-        print(f'{label(run)} already in held.json')
-        return
-    held['model'] = fc.get('model')
-    events = list(fc['events'])
-    for sw in held['swells']:
-        if sw['status'] != 'coming':
-            continue
-        last = next(v for v in reversed(sw['views']) if not v.get('gone'))
-        near = [e for e in events if abs(e['peak'] - last['peak']) <= MATCH_HOURS * H and off(e['d'], last['d']) <= MATCH_DEG]
-        if near:
-            e = min(near, key=lambda e: abs(e['peak'] - last['peak']))
-            events.remove(e)
-            sw['views'].append(view_of(run, e))
-            sw['latestHourly'] = hourly_around(fc, e['start'], e['end'])
-        elif last['end'] > run:
-            sw['views'].append(dict(run=run, gone=True))
-    n = 0
-    for e in events:
-        if e['peak'] < run + HOLD_AHEAD * H:
-            continue  # too close to call: swell already on its way isn't in the run
-        n += 1
-        v = view_of(run, e)
-        hourly = hourly_around(fc, e['start'], e['end'])
-        held['swells'].append(dict(id=f'{label(run)}-{n}', held=v, views=[v], status='coming',
-                                   heldHourly=hourly, latestHourly=hourly, observed=None))
-    # Swells that have been and gone: what came.
-    for sw in held['swells']:
-        seen = [v for v in sw['views'] if not v.get('gone')]
-        end = max(v['end'] for v in seen)
-        if sw['status'] == 'coming' and end + 12 * H < now:
-            sw['status'] = 'passed'
-        if sw['status'] == 'passed' and not sw.get('observed') and now < end + 4 * 24 * H:
-            sw['observed'] = observed(sw, out, names)
-    held['updated'] = now
-    save(os.path.join(out, 'held.json'), held)
-    coming = [sw for sw in held['swells'] if sw['status'] == 'coming']
-    print(f'{label(run)}: {n} new swells held; {len(coming)} coming, {len(held["swells"])} in all')
-    for sw in coming:
-        h, last = sw['held'], sw['views'][-1]
-        now_s = 'gone from this run' if last.get('gone') else f"now {last['ft']} ft, peak {label(last['peak'])}"
-        print(f"  {sw['id']}: held {h['ft']} ft, peak {label(h['peak'])} from {h['d']}; {now_s}")
+    added = keep_hours(fc, out)
+    v = verify(out, names, now)
+    save(os.path.join(out, 'verify.json'), v)
+    old = os.path.join(out, 'held.json')  # the first try: held swells, replaced by every hour
+    if os.path.exists(old):
+        os.unlink(old)
+    print(f'{label}: {added} hourly predictions filed')
+    for x in v['lead']:
+        print(f"  {x['days']} days ahead: {x['n']} hours, height {x['biasM']:+.2f} m (typically {x['maeM']} m out)"
+              + (f", size {x['biasFt']:+.1f} ft (typically {x['maeFt']} ft out)" if x['biasFt'] is not None else ''))
 
 
 if __name__ == '__main__':

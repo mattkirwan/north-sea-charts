@@ -81,9 +81,10 @@ jobs:
           git commit -q -m "GFS charts $(python3 -c 'import json; print(json.load(open("manifest.json"))["runLabel"])')"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch"
       - name: Keep the history
-        # Every run's swell forecast, the buoy readings, and each swell held
-        # as first predicted (scripts/history.py), on the history branch,
-        # which only ever grows. Never holds the charts up.
+        # Every run's swell forecast, every hour's predictions from every run,
+        # the buoy readings and how far out the forecast has been
+        # (scripts/history.py), on the history branch, which only ever grows.
+        # Never holds the charts up.
         if: steps.pub.outputs.go && !inputs.quick
         continue-on-error: true
         env:
