@@ -138,6 +138,21 @@ def home_view():
                 span=round((k1 - k0) / (y1 - y0), 4), w=round((h1 - h0) / (x1 - x0), 4))
 
 
+def write_grid(path):
+    """Where each whole 2° of latitude and longitude falls on the chart, as
+    fractions of its width and height from the top left, so the app can draw
+    its own lines (the swell travel times) exactly on the map by
+    interpolating."""
+    x0, x1, y0, y1 = map_box(VIEW)
+    lons, lats = np.arange(-60, 72, 2.0), np.arange(30, 90, 2.0)
+    lon, lat = np.meshgrid(lons, lats)
+    xy = PROJ.transform_points(ccrs.PlateCarree(), lon, lat)
+    fx, fy = (xy[..., 0] - x0) / (x1 - x0), (y1 - xy[..., 1]) / (y1 - y0)
+    with open(path, 'w') as fh:
+        json.dump(dict(lon0=float(lons[0]), lat0=float(lats[0]), step=2.0, nlon=len(lons), nlat=len(lats),
+                       fx=[round(float(v), 5) for v in fx.ravel()], fy=[round(float(v), 5) for v in fy.ravel()]), fh)
+
+
 def extrema(field, lons, lats, size, kind):
     """Local highs or lows in a smoothed field, away from the edges."""
     sm = gaussian_filter(field, 3)
@@ -367,8 +382,9 @@ def main():
             check(run, step, p, lons, lats, path, outdir)
     save_fields(run, steps, frames, os.path.join(outdir, 'fields.npz'))
     ice_date = draw_ice(outdir)
+    write_grid(os.path.join(outdir, 'grid.json'))
     print(f'  fields.npz: {os.path.getsize(os.path.join(outdir, "fields.npz")) // 1024} KB')
-    manifest = dict(run=int(run.timestamp() * 1000), runLabel=label(run), steps=steps, file='f%03d.png', wind='w%03d.png', data='fields.npz', home=home_view(),
+    manifest = dict(run=int(run.timestamp() * 1000), runLabel=label(run), steps=steps, file='f%03d.png', wind='w%03d.png', data='fields.npz', home=home_view(), grid='grid.json',
                     ice=dict(file='ice.png', date=ice_date) if ice_date else None,
                     generated=int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000), source='NOAA GFS 0.25°',
                     pressure=dict(min=round(min(lows)), max=round(max(highs))))
