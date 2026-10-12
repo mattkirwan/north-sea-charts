@@ -198,6 +198,21 @@ body.adjust #stage{cursor:move}
 .status{font-size:14px;color:var(--slate);line-height:1.35}
 .cam{position:relative;aspect-ratio:16/9;margin-top:16px;border-radius:14px;overflow:hidden;background:#000}
 .cam iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.camplay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;color:#fff;font-size:16px;font-weight:600;
+  background:linear-gradient(160deg,#1d3d50,#0b1a24)}
+.camplay svg{width:44px;height:44px;padding:10px;border-radius:50%;background:var(--amber);color:var(--ink)}
+.camlinks{margin-top:10px}
+.camlinks .pill{padding:8px 12px;font-size:14px}
+.repform{margin-top:14px}
+.repform input,.repform textarea{width:100%;box-sizing:border-box;background:rgba(232,238,241,.08);border:1px solid var(--hair);border-radius:10px;color:var(--paper);font:inherit;padding:9px 10px}
+#ghToken{width:100%;box-sizing:border-box;background:rgba(232,238,241,.08);border:1px solid var(--hair);border-radius:10px;color:var(--paper);font:inherit;padding:9px 10px}
+.rep{padding:10px 0;border-top:1px solid var(--hair)}
+.rep .rh{display:flex;justify-content:space-between;gap:10px;font-size:15px}
+.rep .rh b{font-weight:600}
+.rep .rd{font-size:13px;color:var(--slate);margin-top:3px;line-height:1.4}
+.rep .rx{font-size:12px;color:var(--slate);background:none;border:0;padding:0;text-decoration:underline}
+.est{font-family:var(--f-cond);font-weight:700;font-size:34px;line-height:1.1;margin-top:4px}
+.est small{font-size:16px;color:var(--slate);font-weight:600}
 .links{display:flex;flex-wrap:wrap;gap:8px}
 a.pill{display:inline-block;color:inherit;text-decoration:none}
 .smap{margin-top:12px;border-radius:14px;overflow:hidden;background:#173242;min-height:120px}
@@ -274,7 +289,16 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="wsub" id="todayDate">Saltburn</div>
     <div class="status" id="todayStatus"></div>
   </div>
-  <div id="todayAlerts"></div>
+  <div class="cam" id="todayCam">
+    <button class="camplay" id="camPlay" aria-label="Play the Saltburn cam"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg><span>Saltburn cam</span></button>
+  </div>
+  <div class="links camlinks" aria-label="Surfline cams">
+    <a class="pill" href="https://www.surfline.com/surf-report/saltburn/5842041f4e65fad6a7708c99" target="_blank" rel="noopener">Saltburn</a>
+    <a class="pill" href="https://www.surfline.com/surf-report/sandsend/5842041f4e65fad6a7708c9c" target="_blank" rel="noopener">Sandsend</a>
+    <a class="pill" href="https://www.surfline.com/surf-report/tynemouth-longsands/584204204e65fad6a7709084" target="_blank" rel="noopener">Long Sands</a>
+    <a class="pill" href="https://www.surfline.com/surf-report/scarborough-north-bay/584204204e65fad6a7709088" target="_blank" rel="noopener">Scarborough N Bay</a>
+    <a class="pill" href="https://www.surfline.com/surf-report/cayton-bay/5842041f4e65fad6a7708c9d" target="_blank" rel="noopener">Cayton Bay</a>
+  </div>
   <div class="thero" id="todayNow"></div>
   <section class="wday" aria-labelledby="todayWaveH">
     <h3 id="todayWaveH">Waves <small id="todayWaveSub">latest measured</small></h3>
@@ -291,26 +315,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="wsum" id="todayWindSum"></div>
     <div id="todayWind"></div>
   </section>
-</main>
-
-<!-- Cam: the Saltburn Surf Shop's live YouTube stream, with conditions now -->
-<main class="view panel" id="vCam" aria-labelledby="camTitle" hidden>
-  <div class="wait" id="waitCam" role="status" hidden></div>
-  <div class="thead">
-    <h1 id="camTitle">Cam</h1>
-    <div class="wsub">Saltburn, live from the Saltburn Surf Shop</div>
-  </div>
-  <div class="cam"><iframe id="camFrame" title="Saltburn live surf cam" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
-  <div class="thero" id="camNow"></div>
-  <section class="wday" aria-labelledby="slH">
-    <h3 id="slH">Surfline cams</h3>
-    <div class="wsum">These open in the Surfline app or site, which needs a login and, for most cams, a subscription.</div>
-    <div class="links">
-      <a class="pill" href="https://www.surfline.com/surf-report/saltburn/5842041f4e65fad6a7708c99" target="_blank" rel="noopener">Saltburn</a>
-      <a class="pill" href="https://www.surfline.com/surf-report/sandsend/5842041f4e65fad6a7708c9c" target="_blank" rel="noopener">Sandsend</a>
-    </div>
-  </section>
-  <p class="fine">Cam stream from the <a href="https://saltburnsurfshop.co.uk/pages/surf-cam" target="_blank" rel="noopener">Saltburn Surf Shop</a> on YouTube. It only plays while this tab is open. If it shows as unavailable, the shop may have restarted the stream; their page will have the current one.</p>
 </main>
 
 <!-- Forecast: the coming days. Pressure charts for the swell being made, then local wind and tides. -->
@@ -412,12 +416,54 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
   </section>
 </div>
 
+<!-- Predictions (beta): storm alerts, the state of things now with our own
+     size estimate, and reports of what it was really like, to build a history
+     to check and tune the estimates against. -->
+<main class="view panel" id="vPredict" aria-labelledby="predTitle" hidden>
+  <div class="thead">
+    <div class="whead">
+      <h1 id="predTitle">Predictions</h1>
+      <div class="links"><button class="pill primary" id="repOpen">Report</button></div>
+    </div>
+    <div class="wsub">Beta · Saltburn</div>
+  </div>
+  <div id="predAlerts"></div>
+  <section class="wday" aria-labelledby="predNowH">
+    <h3 id="predNowH">Now <small>what we know, and our estimate</small></h3>
+    <div class="tile" id="predNow"></div>
+  </section>
+  <form class="tile repform" id="repForm" hidden>
+    <div class="k">What's it like?</div>
+    <div class="field"><span>Where</span><div class="seg" id="repSpot"></div></div>
+    <div class="field"><span>When</span><input type="datetime-local" id="repWhen"></div>
+    <div class="field"><span>Size</span><div class="seg" id="repSize"></div></div>
+    <div class="field"><span>Quality</span><div class="seg" id="repQual"></div></div>
+    <div class="field"><span>Surface</span><div class="seg" id="repSurf"></div></div>
+    <div class="field"><span>Lines</span><div class="seg" id="repLines"></div></div>
+    <div class="field"><span>Notes</span><textarea id="repNotes" rows="3" placeholder="Sets, period, crowd, anything"></textarea></div>
+    <div class="actions"><button type="button" class="pill" id="repCancel">Cancel</button><button type="submit" class="pill primary">Save report</button></div>
+  </form>
+  <section class="wday" aria-labelledby="predHistH">
+    <h3 id="predHistH">Reports <small id="predSync"></small></h3>
+    <div id="predHist"></div>
+    <div class="links" style="margin-top:12px"><button class="pill" id="repExport">Export all</button><button class="pill" id="repPull">Sync with GitHub</button></div>
+  </section>
+  <p class="fine">The estimate is a first go: breaking height from the nearest buoy's height and period (Komar and Gaughan), less for swell arriving at an angle to Saltburn's beach. Each report keeps the readings and the estimate from the moment it was made, so we can see how far out the estimates are and tune them.</p>
+</main>
+
 <!-- Settings: wind units and the pressure charts' options -->
 <main class="view panel" id="vSettings" aria-labelledby="setTitle" hidden>
   <div class="thead"><h1 id="setTitle">Settings</h1></div>
   <section class="sgroup" aria-labelledby="setWindH">
     <h3 id="setWindH">Wind</h3>
     <div class="field"><span>Speed</span><div class="seg" id="segUnit"></div></div>
+  </section>
+  <section class="sgroup" aria-labelledby="setBetaH">
+    <h3 id="setBetaH">Beta</h3>
+    <div class="field"><span>Predictions tab</span><div class="seg" id="segBeta"></div></div>
+    <div class="field" id="tokField"><span>GitHub token, to keep reports in the repo</span>
+      <input type="password" id="ghToken" autocomplete="off" placeholder="github_pat_…">
+      <div class="fine" style="margin-top:6px">A fine-grained token with Contents read and write on this repository only. It stays on this phone. Without one, reports are kept on this phone only.</div></div>
   </section>
   <section class="sgroup" aria-labelledby="setChartH">
     <h3 id="setChartH">Pressure charts</h3>
@@ -444,8 +490,8 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 
 <nav class="tabbar" role="tablist" aria-label="Views">
   <button role="tab" data-route="today" aria-controls="vToday"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>Today</button>
-  <button role="tab" data-route="cam" aria-controls="vCam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="13.5" height="12" rx="2.5"/><path d="M16 10.5l5.5-3v9l-5.5-3z"/></svg>Cam</button>
   <button role="tab" data-route="forecast" aria-controls="vForecast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Forecast</button>
+  <button role="tab" data-route="predict" aria-controls="vPredict" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 4-6 5 5"/><circle cx="8" cy="11" r="1.2"/><circle cx="12" cy="14" r="1.2"/><circle cx="16" cy="8" r="1.2"/><path d="M3 21h18"/></svg>Predict</button>
   <button role="tab" data-route="settings" aria-controls="vSettings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
 </nav>
 
@@ -534,6 +580,7 @@ const SPEEDS = [[700, 'Slow'], [420, 'Normal'], [220, 'Fast']];
 const WIND_LAYER = [[false, 'Off'], [true, 'On']];
 const ICE_LAYER = WIND_LAYER;
 const MONO = [[false, 'Colour'], [true, 'Black & white']];
+const BETA = [[false, 'Off'], [true, 'On']];
 const TRAVEL_LAYER = WIND_LAYER;
 const PERIODS = [[8, '8 s'], [10, '10 s'], [12, '12 s'], [14, '14 s']];
 // Starting crop as a fraction of the source image: centre point and visible height.
@@ -550,7 +597,7 @@ function homeFrom(home) {
   if (SOURCE === SOURCES.ours && !exploring) { view = loadView(); applyView(); }
 }
 const SRCS = [['ours', 'Ours'], ['wz', 'Wetterzentrale']];
-const DEFAULTS = { src: 'ours', windLayer: false, seaIce: true, chartMono: false, travelLayer: false, swellPeriod: 10, chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
+const DEFAULTS = { src: 'ours', beta: false, windLayer: false, seaIce: true, chartMono: false, travelLayer: false, swellPeriod: 10, chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
 
 const opts = Object.assign({}, DEFAULTS, store.get('nsv.opts', {}));
 const saveOpts = () => store.set('nsv.opts', opts);
@@ -1273,6 +1320,7 @@ function onOptChange(key) {
   if (key === 'windLayer') { updateWind(); return; }
   if (key === 'seaIce') { updateIce(); return; }
   if (key === 'chartMono') { applyMono(); return; }
+  if (key === 'beta') { showBeta(); renderSettings(); return; }
   if (key === 'travelLayer' || key === 'swellPeriod') { updateTravel(); return; }
   if (key === 'src') { SOURCE = SOURCES[opts.src] || SOURCES.ours; showSourceFields(); }
   if (key === 'region' || key === 'src') { view = loadView(); natural = null; maybeHint(); }
@@ -1326,6 +1374,9 @@ function renderSettings() {
   seg($('#segWind'), 'windLayer', WIND_LAYER);
   seg($('#segIce'), 'seaIce', ICE_LAYER);
   seg($('#segMono'), 'chartMono', MONO);
+  seg($('#segBeta'), 'beta', BETA);
+  $('#tokField').hidden = !opts.beta;
+  $('#ghToken').value = store.get('nsv.ghToken', '') || '';
   const ice = SOURCES.ours.ice;
   $('#segIce').previousElementSibling.textContent = ice ? `Sea ice (${iceDay(ice.date)} ice chart)` : 'Sea ice';
   seg($('#segTravel'), 'travelLayer', TRAVEL_LAYER);
@@ -2052,7 +2103,7 @@ const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '
    The chart job looks through each model run for bomb lows (falling 24 hPa
    or more in 24 hours) whose winds are aimed at us, and works out when their
    swell would arrive (scripts/swell_sources.py). They come with our charts'
-   manifest; Today shows any whose swell is still to come. */
+   manifest; Predictions shows any whose swell is still to come. */
 let stormAlerts = store.get('nsv.alerts', null), alertsBusy = false;
 async function refreshAlerts(force) {
   if (alertsBusy || (!force && stormAlerts && Date.now() - stormAlerts.at < 20 * 60e3)) return;
@@ -2066,7 +2117,7 @@ async function refreshAlerts(force) {
     }
   } catch {}
   alertsBusy = false;
-  renderToday();
+  renderPredict();
 }
 const fUkDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'short' });
 const fUkHour = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: 'numeric', hourCycle: 'h23' });
@@ -2079,7 +2130,7 @@ function partOfDay(ms) {
   return h < 5 ? `the early hours of ${day}` : `${day} ${h < 12 ? 'morning' : h < 17 ? 'afternoon' : h < 21 ? 'evening' : 'night'}`;
 }
 function renderAlerts() {
-  const box = $('#todayAlerts');
+  const box = $('#predAlerts');
   const list = stormAlerts && stormAlerts.list ? stormAlerts.list.filter((a) => a.until > Date.now()) : [];
   box.innerHTML = '';
   list.forEach((a) => {
@@ -2104,6 +2155,208 @@ function renderAlerts() {
     box.appendChild(el);
   });
 }
+
+/* ---------------- Predictions (beta) ----------------
+   Where we start working on our own predictions. "Now" is a snapshot of what
+   the app knows (the nearest buoys, wind and tide here, any storm alerts and
+   the model run) and a first estimate of breaking wave size at Saltburn.
+   Reports record what it was actually like, each with the snapshot and the
+   estimate from the moment it was made, so the history shows how far out the
+   estimates were. Reports are kept on the phone and, with a GitHub token in
+   Settings, as one JSON file each on the repo's `reports` branch. */
+const REPO = 'mattkirwan/north-sea-charts', REPORTS_BRANCH = 'reports';
+const BEACH_FACES = 30; // Saltburn's beach faces NNE
+const SPOTS = ['Saltburn', 'Sandsend', 'Long Sands', 'Scarborough N Bay', 'Cayton Bay', 'Other'];
+const SIZES = [['flat', 'Flat'], ['ankle', 'Ankle'], ['knee', 'Knee'], ['waist', 'Waist'], ['chest', 'Chest'], ['head', 'Head'], ['overhead', 'Overhead'], ['double', 'Double overhead+']];
+const SIZE_FT = { flat: 0, ankle: 1, knee: 1.5, waist: 2.5, chest: 3.5, head: 5, overhead: 7, double: 10 };
+const QUALITY = [['poor', 'Poor'], ['fair', 'Fair'], ['good', 'Good'], ['epic', 'Epic']];
+const SURFACE = [['glassy', 'Glassy'], ['light', 'Light texture'], ['choppy', 'Choppy'], ['blown', 'Blown out']];
+const LINES = [['clean', 'Clean lines'], ['mixed', 'Mixed'], ['messy', 'Messy']];
+let reports = store.get('nsv.reports', []) || [];
+let syncBusy = false, syncNote = '';
+const saveReports = () => store.set('nsv.reports', reports);
+
+function showBeta() {
+  document.querySelector('.tabbar button[data-route="predict"]').hidden = !opts.beta;
+  if (!opts.beta && route === 'predict') go('today');
+}
+
+// Breaking height from deep-water height and period (Komar and Gaughan, 1972),
+// less for swell coming in at an angle to the beach.
+function estimate() {
+  const st = obs && obs.stations, b = st && st.find((s) => s.p != null && s.d != null);
+  if (!b) return null;
+  const H0 = b.h, T = b.p, hb = 0.39 * Math.pow(9.81, 0.2) * Math.pow(T * H0 * H0, 0.4);
+  const off = Math.abs(((b.d - BEACH_FACES) % 360 + 540) % 360 - 180);
+  const fac = off >= 90 ? 0 : Math.sqrt(Math.cos(off * Math.PI / 180));
+  const ft = hb * fac * FT;
+  return { model: 'v0', from: b.name, ft: +ft.toFixed(1), lo: +(ft * 0.75).toFixed(1), hi: +(ft * 1.3).toFixed(1), angle: Math.round(off) };
+}
+const sizeWord = (ft) => ft < 0.7 ? 'flat to ankle' : ft < 1.3 ? 'ankle to knee' : ft < 2 ? 'knee' : ft < 3 ? 'waist' : ft < 4 ? 'chest' : ft < 6 ? 'head high' : ft < 8.5 ? 'overhead' : 'double overhead+';
+
+// What the app knows right now, kept with each report.
+function snapshot() {
+  const now = Date.now(), uk = ukNow();
+  const wDay = wind ? windDaysList().find((x) => x.k === uk.day) : null, wh = wDay && wDay.hours.find((h) => h.h === uk.hour);
+  const turns = tides ? tideTurns(tides.time, tides.level) : [], next = turns.find((e) => e.ms > now), level = tides ? levelAt(now) : null;
+  return {
+    at: now,
+    buoys: obs ? obs.stations.slice(0, 4).map((s) => ({ name: s.name, km: Math.round(s.km), h: s.h, p: s.p, d: s.d, hmax: s.hmax ?? null, ms: s.ms })) : null,
+    buoysCollected: obs ? obs.collected : null,
+    wind: wh && wh.kn != null ? { kn: +wh.kn.toFixed(1), from: wh.from, gust: wh.gust ?? null } : null,
+    tide: level != null ? { m: +level.toFixed(2), rising: next ? next.hi : null, next: next ? { hi: next.hi, ms: next.ms, m: +next.m.toFixed(2) } : null } : null,
+    alerts: stormAlerts && stormAlerts.list ? stormAlerts.list.map((a) => ({ hPa: a.hPa, where: a.where, at: a.at, pulses: a.pulses })) : [],
+    run: stormAlerts ? stormAlerts.runLabel : null
+  };
+}
+
+function renderPredict() {
+  if (!showing('predict')) return;
+  renderAlerts();
+  const box = $('#predNow'), snap = snapshot(), est = estimate();
+  const b = snap.buoys && snap.buoys[0], w = snap.wind, t = snap.tide;
+  box.innerHTML = (est
+    ? `<div class="k">Estimated breaking size at Saltburn</div><div class="est">${est.lo}–${est.hi}<small> ft · ${sizeWord(est.ft)}</small></div>` +
+      `<div class="d">From the ${escapeHtml(est.from)} buoy, arriving ${est.angle}° off the beach's line.</div>`
+    : `<div class="d">${obsBusy ? 'Loading the buoy readings' : 'No buoy reading with a period yet.'}</div>`) +
+    '<dl class="bfacts">' +
+    (b ? `<div><dt>${escapeHtml(b.name)}</dt><dd>${feet(b.h)} ft${b.p != null ? ` · ${Math.round(b.p)} s` : ''}${b.d != null ? ` · ${compass(b.d)}` : ''}</dd></div>` : '') +
+    (w ? `<div><dt>Wind</dt><dd>${compass(w.from)} ${speedIn(w.kn)} ${UNIT_S()}</dd></div>` : '') +
+    (t ? `<div><dt>Tide</dt><dd>${metres(t.m)}${t.next ? `, ${t.next.hi ? 'rising' : 'falling'}` : ''}</dd></div>` : '') +
+    (snap.run ? `<div><dt>Model run</dt><dd>${snap.run.slice(11)}</dd></div>` : '') + '</dl>';
+  renderHistory();
+}
+
+function renderHistory() {
+  const box = $('#predHist');
+  const token = store.get('nsv.ghToken', '');
+  const unsynced = reports.filter((r) => !r.synced).length;
+  $('#predSync').textContent = syncBusy ? 'syncing…' : syncNote || (!token ? 'on this phone only' : unsynced ? `${unsynced} to sync` : 'all synced');
+  if (!reports.length) { box.innerHTML = '<div class="d" style="color:var(--slate);font-size:14px">No reports yet. Tap Report when you\'ve had a look.</div>'; return; }
+  box.innerHTML = '';
+  reports.slice().sort((a, b) => b.at - a.at).forEach((r) => {
+    const el = document.createElement('div');
+    el.className = 'rep';
+    const lab = (list, v) => (list.find((x) => x[0] === v) || [, v || '–'])[1];
+    const est = r.prediction ? `estimate ${r.prediction.lo}–${r.prediction.hi} ft` : 'no estimate';
+    const b = r.state && r.state.buoys && r.state.buoys[0];
+    el.innerHTML = `<div class="rh"><b>${escapeHtml(r.spot)} · ${lab(SIZES, r.size)}${r.quality ? ', ' + lab(QUALITY, r.quality).toLowerCase() : ''}</b><span>${whenUk(r.at)}</span></div>` +
+      `<div class="rd">${[r.surface && lab(SURFACE, r.surface), r.lines && lab(LINES, r.lines)].filter(Boolean).join(' · ')}${r.notes ? ' · ' + escapeHtml(r.notes) : ''}</div>` +
+      `<div class="rd">We had: ${est}${b ? `; ${escapeHtml(b.name)} ${feet(b.h)} ft${b.p != null ? ` ${Math.round(b.p)} s` : ''}` : ''}. ${r.synced ? 'Saved to GitHub.' : 'On this phone.'} <button class="rx">Delete</button></div>`;
+    el.querySelector('.rx').addEventListener('click', () => deleteReport(r));
+    box.appendChild(el);
+  });
+}
+
+// The report form.
+const repSel = {};
+function repSeg(id, key, items) {
+  const el = $(id);
+  el.innerHTML = '';
+  items.forEach(([v, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.setAttribute('aria-pressed', String(repSel[key] === v));
+    b.addEventListener('click', () => { repSel[key] = repSel[key] === v ? null : v; [...el.children].forEach((c) => c.setAttribute('aria-pressed', String(c === b && repSel[key] === v))); });
+    el.appendChild(b);
+  });
+}
+function localInput(ms) { const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60e3); return d.toISOString().slice(0, 16); }
+$('#repOpen').addEventListener('click', () => {
+  Object.assign(repSel, { spot: store.get('nsv.lastSpot', 'Saltburn'), size: null, quality: null, surface: null, lines: null });
+  repSeg('#repSpot', 'spot', SPOTS.map((x) => [x, x]));
+  repSeg('#repSize', 'size', SIZES);
+  repSeg('#repQual', 'quality', QUALITY);
+  repSeg('#repSurf', 'surface', SURFACE);
+  repSeg('#repLines', 'lines', LINES);
+  $('#repWhen').value = localInput(Date.now());
+  $('#repNotes').value = '';
+  $('#repForm').hidden = false;
+  $('#repForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('#repCancel').addEventListener('click', () => { $('#repForm').hidden = true; });
+$('#repForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (!repSel.size) { toast('Pick a size'); return; }
+  const at = $('#repWhen').value ? new Date($('#repWhen').value).getTime() : Date.now();
+  const id = new Date(at).toISOString().replace(/[:.]/g, '-').slice(0, 19) + '-' + Math.random().toString(36).slice(2, 6);
+  const r = {
+    id, at, reportedAt: Date.now(), spot: repSel.spot || 'Saltburn', size: repSel.size, sizeFt: SIZE_FT[repSel.size],
+    quality: repSel.quality, surface: repSel.surface, lines: repSel.lines, notes: $('#repNotes').value.trim(),
+    state: snapshot(), prediction: estimate(), synced: false
+  };
+  store.set('nsv.lastSpot', r.spot);
+  reports.push(r);
+  saveReports();
+  $('#repForm').hidden = true;
+  toast('Report saved');
+  renderPredict();
+  syncReports();
+});
+
+// GitHub: one file per report on the reports branch.
+const b64 = (str) => btoa(unescape(encodeURIComponent(str)));
+async function gh(path, opts2 = {}) {
+  const token = store.get('nsv.ghToken', '');
+  const r = await fetchT(`https://api.github.com/repos/${REPO}/${path}`, {
+    ...opts2, headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, ...(opts2.headers || {}) }
+  }, 20e3);
+  if (!r.ok && r.status !== 404) throw new Error(`GitHub replied ${r.status}`);
+  return r;
+}
+async function syncReports(pull) {
+  const token = store.get('nsv.ghToken', '');
+  if (!token || syncBusy) { renderHistory(); return; }
+  syncBusy = true; syncNote = ''; renderHistory();
+  try {
+    for (const r of reports.filter((x) => !x.synced)) {
+      const { synced, sha, ...body } = r;
+      const res = await gh(`contents/reports/${r.id}.json`, { method: 'PUT', body: JSON.stringify({ message: `Report: ${r.spot}, ${r.size}`, content: b64(JSON.stringify(body, null, 1)), branch: REPORTS_BRANCH }) });
+      const j = await res.json();
+      if (j.content) { r.synced = true; r.sha = j.content.sha; }
+    }
+    if (pull) {
+      // Bring in reports made on another device.
+      const res = await gh(`contents/reports?ref=${REPORTS_BRANCH}`);
+      const list = res.ok ? await res.json() : [];
+      const have = new Set(reports.map((x) => x.id));
+      for (const f of list.filter((x) => x.name.endsWith('.json') && !have.has(x.name.slice(0, -5)))) {
+        const fr = await gh(`contents/reports/${f.name}?ref=${REPORTS_BRANCH}`, { headers: { Accept: 'application/vnd.github.raw+json' } });
+        if (fr.ok) reports.push({ ...(await fr.json()), synced: true, sha: f.sha });
+      }
+    }
+    saveReports();
+  } catch (e) { syncNote = `couldn't sync: ${e.message}`; }
+  syncBusy = false;
+  renderHistory();
+}
+async function deleteReport(r) {
+  if (!confirm(`Delete the ${r.spot} report from ${whenUk(r.at)}?`)) return;
+  if (r.synced && r.sha && store.get('nsv.ghToken', '')) {
+    try { await gh(`contents/reports/${r.id}.json`, { method: 'DELETE', body: JSON.stringify({ message: `Remove report ${r.id}`, sha: r.sha, branch: REPORTS_BRANCH }) }); }
+    catch (e) { toast(`Couldn't delete it on GitHub: ${e.message}`); return; }
+  }
+  reports = reports.filter((x) => x !== r);
+  saveReports();
+  renderHistory();
+}
+$('#repPull').addEventListener('click', () => {
+  if (!store.get('nsv.ghToken', '')) { toast('Add a GitHub token in Settings first'); return; }
+  syncReports(true);
+});
+$('#repExport').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(reports.map(({ synced, sha, ...r }) => r), null, 1)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `surf-reports-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+$('#ghToken').addEventListener('change', () => {
+  store.set('nsv.ghToken', $('#ghToken').value.trim());
+  toast($('#ghToken').value.trim() ? 'Token saved on this phone' : 'Token removed');
+});
 
 /* ---------------- Today ----------------
    Saltburn right now and for the rest of today, from the same wind and tide
@@ -2182,12 +2435,6 @@ function sunTiles(box, uk) {
     box.appendChild(el);
   });
 }
-function renderCam() {
-  if (!showing('cam')) return;
-  const uk = ukNow();
-  nowTiles($('#camNow'), wind ? windDaysList().find((x) => x.k === uk.day) : null, tides ? tideTurns(tides.time, tides.level) : []);
-}
-
 function renderToday() {
   if (!showing('today')) return;
   const now = Date.now(), uk = ukNow();
@@ -2200,7 +2447,6 @@ function renderToday() {
   const turns = tides ? tideTurns(tides.time, tides.level) : [];
 
   nowTiles($('#todayNow'), wDay, turns);
-  renderAlerts();
 
   // Waves: the latest reading from the nearest buoy (Whitby, usually).
   const wave = $('#todayWave'), near = obs && obs.stations[0];
@@ -2261,7 +2507,6 @@ function renderWaits() {
   const T = { label: 'tides', data: tides, busy: tideBusy, failed: tideFailed, maxAge: TIDE.maxAge };
   const O = { label: 'wave measurements', data: obs, busy: obsBusy, failed: !!obsProblem, maxAge: OBS.old, problem: obsProblem };
   if (showing('today')) waitBanner('#waitToday', [W, T, O]);
-  if (showing('cam')) waitBanner('#waitCam', [W, T]);
   if (showing('wind')) waitBanner('#waitWind', [W]);
   if (showing('tides')) waitBanner('#waitTides', [T]);
   if (showing('buoys')) {
@@ -2277,52 +2522,63 @@ function renderWaits() {
 }
 function renderLocal() {
   renderWaits();
-  renderToday(); renderCam(); renderSwell(); renderWind(); renderTides();
+  renderToday(); renderPredict(); renderSwell(); renderWind(); renderTides();
 }
 function refreshLocal(force) {
-  const now = route === 'today' || route === 'cam';
-  if (route === 'buoys' || route === 'today') refreshSwell(force);
-  if (route === 'today') refreshAlerts(force);
+  const now = route === 'today' || route === 'predict';
+  if (route === 'buoys' || now) refreshSwell(force);
+  if (route === 'predict') { refreshAlerts(force); syncReports(); }
   if (now || route === 'wind') refreshWind(force);
   if (now || route === 'tides') refreshTides(force);
 }
 
 /* ---------------- Views ----------------
-   Today, Cam, or one of the Forecast tabs. The hash names the view so links and
+   Today, Predictions (beta), Settings, or one of the Forecast tabs. The hash names the view so links and
    home-screen bookmarks open in the right place; tab taps replace it rather
    than stacking history. The charts only start loading on first visit. */
-const ROUTES = ['today', 'cam', 'pressure', 'buoys', 'wind', 'tides', 'settings'];
-const TOPS = ['today', 'cam', 'settings']; // views of their own; the rest are Forecast tabs
-// Buoys was called Swell: keep old links and the remembered tab working.
-const RENAMED = { swell: 'buoys' };
-// The shop's live stream: loaded only while Cam is open, so it costs no data otherwise.
+const ROUTES = ['today', 'pressure', 'buoys', 'wind', 'tides', 'predict', 'settings'];
+const TOPS = ['today', 'predict', 'settings']; // views of their own; the rest are Forecast tabs
+// Buoys was called Swell, and the cam has moved to Today: keep old links working.
+const RENAMED = { swell: 'buoys', cam: 'today' };
+// The shop's live stream, on Today: only loaded when tapped, so it costs no data otherwise.
 const CAM_SRC = 'https://www.youtube.com/embed/4BAG3xt3YQo?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1';
-const camFrame = $('#camFrame');
+function camOff() {
+  const f = $('#todayCam iframe');
+  if (f) { f.remove(); $('#camPlay').hidden = false; }
+}
+$('#camPlay').addEventListener('click', () => {
+  const f = document.createElement('iframe');
+  f.title = 'Saltburn live surf cam';
+  f.referrerPolicy = 'strict-origin-when-cross-origin';
+  f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+  f.allowFullscreen = true;
+  f.src = CAM_SRC;
+  $('#camPlay').hidden = true;
+  $('#todayCam').appendChild(f);
+});
 let forecastTab = store.get('nsv.forecastTab', 'pressure');
 forecastTab = RENAMED[forecastTab] || forecastTab;
 let chartsStarted = false;
 let jumpTo = null; // a time to show when the charts next load (from an alert)
-const routeFromHash = () => { const h = location.hash.slice(1); const r = RENAMED[h] || h; return ROUTES.includes(r) ? r : 'today'; };
+const routeFromHash = () => {
+  const h = location.hash.slice(1), r = RENAMED[h] || h;
+  return ROUTES.includes(r) && (r !== 'predict' || opts.beta) ? r : 'today';
+};
 function go(r) {
   history.replaceState(null, '', r === 'today' ? location.pathname + location.search : '#' + r);
   syncRoute();
 }
 function syncRoute() {
   const r = routeFromHash(), prev = route, top = TOPS.includes(r) ? r : 'forecast';
-  if (RENAMED[location.hash.slice(1)]) history.replaceState(null, '', '#' + r);
+  if (RENAMED[location.hash.slice(1)]) history.replaceState(null, '', r === 'today' ? location.pathname + location.search : '#' + r);
+  else if (location.hash && location.hash.slice(1) !== r) history.replaceState(null, '', location.pathname + location.search); // e.g. Predictions with beta off
   route = r;
   if (top === 'forecast') { forecastTab = r; store.set('nsv.forecastTab', r); }
   $('#vToday').hidden = top !== 'today';
-  $('#vCam').hidden = top !== 'cam';
   $('#vForecast').hidden = top !== 'forecast';
+  $('#vPredict').hidden = top !== 'predict';
   $('#vSettings').hidden = top !== 'settings';
-  if (r === 'cam' && camFrame.dataset.on !== '1') {
-    camFrame.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
-    camFrame.allowFullscreen = true;
-    camFrame.src = CAM_SRC;
-    camFrame.dataset.on = '1';
-  }
-  if (r !== 'cam' && camFrame.dataset.on === '1') { camFrame.src = 'about:blank'; camFrame.dataset.on = ''; }
+  if (r !== 'today') camOff();
   $('#sPressure').hidden = r !== 'pressure';
   $('#sSwell').hidden = r !== 'buoys';
   $('#sWind').hidden = r !== 'wind';
@@ -2337,10 +2593,11 @@ function syncRoute() {
     stopPlay();
     if (adjusting) exitAdjust();
   }
-  if (r !== prev) { const pane = { today: '#vToday', cam: '#vCam', settings: '#vSettings', buoys: '#sSwell', wind: '#sWind', tides: '#sTides' }[r]; if (pane) $(pane).scrollTop = 0; }
+  if (r !== prev) { const pane = { today: '#vToday', predict: '#vPredict', settings: '#vSettings', buoys: '#sSwell', wind: '#sWind', tides: '#sTides' }[r]; if (pane) $(pane).scrollTop = 0; }
   refreshLocal();
   renderSettings();
 }
+showBeta();
 window.addEventListener('popstate', syncRoute);
 window.addEventListener('hashchange', syncRoute);
 document.querySelectorAll('.tabbar button').forEach((b) => b.addEventListener('click', () => {
