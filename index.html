@@ -761,7 +761,10 @@ function fetchWindAhead() {
    The period comes from Settings. The chart job publishes grid.json, where
    each 2° of latitude and longitude lands on the chart, so the lines sit
    exactly on the map wherever it's panned or zoomed. */
-const TRAVEL = { rule: 35, from: 330, to: 100, stepH: 12, maxKm: 2600 };
+// Arcs run from past Scotland's north-east tip (west of that, Scotland is in
+// the way) round to the measure; close in, where there's sea to the east too,
+// on round to the east. Beyond about 520 km east of the measure is land.
+const TRAVEL = { rule: 35, from: 345, to: 100, openKm: 520, stepH: 12, maxKm: 2600 };
 const travelSvg = $('#travel'), travelBtn = $('#travelBtn');
 let travelGrid = null, travelGridKey = '';
 const travelOn = () => opts.travelLayer && SOURCE === SOURCES.ours && !!SOURCES.ours.gridFile;
@@ -792,7 +795,8 @@ function drawTravel() {
   const ruleEnd = Math.min(TRAVEL.maxKm, kmh * 24 * 4);
   for (let h = TRAVEL.stepH; kmh * h <= ruleEnd; h += TRAVEL.stepH) {
     const km = kmh * h, pts = [];
-    for (let b = TRAVEL.from; b <= TRAVEL.to + 360; b += 2) pts.push(pt(scr(...destination(km, b % 360))));
+    const end = (km < TRAVEL.openKm ? TRAVEL.to : TRAVEL.rule) + 360;
+    for (let b = TRAVEL.from; b <= end; b += 2) pts.push(pt(scr(...destination(km, b % 360))));
     const d = 'M' + pts.join('L');
     arcs += `<path class="arc halo" d="${d}"/><path class="arc ink" d="${d}"/>`;
     const [x, y] = scr(...destination(km, TRAVEL.rule)), label = hoursLabel(h), w = 8 + label.length * 7.4;
@@ -800,7 +804,7 @@ function drawTravel() {
   }
   const r0 = scr(WIND.lat, WIND.lon), r1 = scr(...destination(ruleEnd, TRAVEL.rule));
   const rule = `M${pt(r0)}L${pt(r1)}`;
-  const key = `<g class="key" transform="translate(${(r1[0] + 6).toFixed(1)},${(r1[1] - 34).toFixed(1)})"><rect width="92" height="20" rx="6"/><text x="46" y="14.5" text-anchor="middle">${opts.swellPeriod} s swell</text></g>`;
+  const key = `<g class="key" transform="translate(${(r1[0] - 98).toFixed(1)},${(r1[1] - 26).toFixed(1)})"><rect width="92" height="20" rx="6"/><text x="46" y="14.5" text-anchor="middle">${opts.swellPeriod} s swell</text></g>`;
   travelSvg.innerHTML = arcs + `<path class="rule halo" d="${rule}"/><path class="rule ink" d="${rule}"/>` + tags + key;
 }
 async function updateTravel() {
