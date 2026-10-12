@@ -266,7 +266,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="wsum" id="todayWindSum"></div>
     <div id="todayWind"></div>
   </section>
-  <p class="fine" id="todayFine"></p>
 </main>
 
 <!-- Cam: the Saltburn Surf Shop's live YouTube stream, with conditions now -->
@@ -1521,6 +1520,7 @@ const arrowSvg = (deg, size) => `<svg viewBox="0 0 24 24" width="${size}" height
 // The map moves: drag to pan, pinch, scroll or the buttons to zoom, and tap a
 // station (or a row in the list) to see its details in the card below it.
 const BMAP = { maxK: 8, bw: 46, bh: 32 };
+const BUOY_DEFAULT = 'Whitby'; // selected on arrival, if it has reported
 let buoySel = null;
 let bview = { k: 1, tx: 0, ty: 0 }, bbase = null, bframe = 0;
 
@@ -1698,7 +1698,7 @@ function renderSwell() {
     return;
   }
   const st = obs.stations;
-  if (!st.some((s) => s.code === buoySel)) buoySel = null;
+  if (!st.some((s) => s.code === buoySel)) buoySel = (st.find((s) => s.name === BUOY_DEFAULT) || {}).code || null;
   status.textContent = `Latest measurements · ${st.length} station${st.length === 1 ? '' : 's'} · ` +
     (obsBusy ? 'updating' : `collected ${ago(obs.collected)}`);
   renderBuoyCard();
@@ -1880,12 +1880,6 @@ function renderToday() {
       wBox.appendChild(grid);
     }
   } else wBox.innerHTML = `<div class="wmsg">${windBusy ? 'Loading the wind forecast' : "Couldn't load the wind forecast. Check your connection and tap Refresh."}</div>`;
-
-  $('#todayFine').textContent = 'Waves are measured, not forecast: the newest reading from the nearest wave buoy. ' +
-    'Forecast › Buoys has the rest of the North Sea. ' +
-    'Tide heights are above chart datum, like tide tables. Arrows on the wind point the way it blows; the amber outline is this hour. ' +
-    'First and last light are civil twilight, when the sun is 6° below the horizon and there\'s enough light to see; they and sunrise and sunset are calculated for Saltburn. ' +
-    'Forecast has the coming days: pressure charts for the swell, then wind and tides.';
 }
 // A banner at the top of a view whenever it isn't showing live data yet.
 function waitBanner(id, sources) {
