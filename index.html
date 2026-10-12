@@ -250,6 +250,15 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 .swc li.day{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .swc li.day .r{white-space:nowrap;font-size:12px}
 .ladder{margin:4px 0 12px}
+.swell{border-top:1px solid var(--hair);padding-top:12px}
+.swell>.k{display:flex;justify-content:space-between;font-size:15px;font-weight:600}
+.swell>.k button{font-size:13px;color:var(--slate);background:none;border:0;padding:0;text-decoration:underline;font-weight:400}
+.range{display:flex;align-items:center;gap:10px}
+.range input{max-width:96px}
+.range span{color:var(--slate)}
+.field>span small{color:var(--slate);opacity:.8}
+#pred8 .d{font-size:14px;color:var(--slate);line-height:1.4}
+#pred8 .links{margin-top:10px}
 .ladder .k{font-size:12px;color:var(--slate)}
 .ladder .d{font-size:13px;color:var(--slate);margin-top:4px}
 .ladder ul{list-style:none;margin:4px 0 0;padding:0}
@@ -454,6 +463,10 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="wsub">Beta · Saltburn</div>
   </div>
   <div id="predAlerts"></div>
+  <section class="wday" aria-labelledby="pred8H">
+    <h3 id="pred8H">8am check <small id="pred8Note"></small></h3>
+    <div class="tile" id="pred8"></div>
+  </section>
   <section class="wday" aria-labelledby="predRollH">
     <h3 id="predRollH">Next 7 days <small id="predRollNote"></small></h3>
     <div id="predRoll"></div>
@@ -467,11 +480,10 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="field"><span>Where</span><div class="seg" id="repSpot"></div></div>
     <div class="field"><span>When</span><input type="datetime-local" id="repWhen"></div>
     <div class="ladder" id="repLadder"></div>
-    <div class="field"><span>Size</span><div class="seg" id="repSize"></div></div>
-    <div class="field"><span>Quality</span><div class="seg" id="repQual"></div></div>
+    <div id="repSwells"></div>
+    <div class="field"><button type="button" class="pill" id="repAdd2">Add a second swell</button></div>
     <div class="field"><span>Surface</span><div class="seg" id="repSurf"></div></div>
-    <div class="field"><span>Lines</span><div class="seg" id="repLines"></div></div>
-    <div class="field"><span>Notes</span><textarea id="repNotes" rows="3" placeholder="Sets, period, crowd, anything"></textarea></div>
+    <div class="field"><span>Notes</span><textarea id="repNotes" rows="3" placeholder="Sets, tide, crowd, anything"></textarea></div>
     <div class="actions"><button type="button" class="pill" id="repCancel">Cancel</button><button type="submit" class="pill primary">Save report</button></div>
   </form>
   <section class="wday" aria-labelledby="predHistH">
@@ -2203,11 +2215,14 @@ function renderAlerts() {
 const REPO = 'mattkirwan/north-sea-charts', REPORTS_BRANCH = 'reports';
 const BEACH_FACES = 30; // Saltburn's beach faces NNE
 const SPOTS = ['Saltburn', 'Sandsend', 'Long Sands', 'Scarborough N Bay', 'Cayton Bay', 'Other'];
+// Reports are what's measurable: each swell's face height as a range in feet
+// against a body (1-2 ft is shin to thigh; 6 ft is head high on a 6 ft
+// person), its kind, and if counted or seen, its period and direction; and
+// the surface, for the local wind. (Early reports had a size word instead.)
 const SIZES = [['flat', 'Flat'], ['ankle', 'Ankle'], ['knee', 'Knee'], ['waist', 'Waist'], ['chest', 'Chest'], ['head', 'Head'], ['overhead', 'Overhead'], ['double', 'Double overhead+']];
-const SIZE_FT = { flat: 0, ankle: 1, knee: 1.5, waist: 2.5, chest: 3.5, head: 5, overhead: 7, double: 10 };
-const QUALITY = [['poor', 'Poor'], ['fair', 'Fair'], ['good', 'Good'], ['epic', 'Epic']];
+const KINDS = [['local', 'Local'], ['mid', 'Mid-distance'], ['ground', 'Groundswell']];
+const FROM8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const SURFACE = [['glassy', 'Glassy'], ['light', 'Light texture'], ['choppy', 'Choppy'], ['blown', 'Blown out']];
-const LINES = [['clean', 'Clean lines'], ['mixed', 'Mixed'], ['messy', 'Messy']];
 let reports = store.get('nsv.reports', []) || [];
 let syncBusy = false, syncNote = '';
 const saveReports = () => store.set('nsv.reports', reports);
@@ -2311,10 +2326,50 @@ function rollPlot(ks) {
   for (let i = lines.length - 1; i > 0; i--) g += `<path d="${path(lines[i])}" fill="none" stroke="var(--glass)" stroke-opacity="${(0.15 + 0.45 * (1 - i / lines.length)).toFixed(2)}" stroke-width="1.2"/>`;
   if (lines.length) g += `<path d="${path(lines[0])}" fill="none" stroke="var(--amber)" stroke-width="2"/>`;
   g += rows.map((r) => `<circle cx="${x(r[0]).toFixed(1)}" cy="${y(r[1]).toFixed(1)}" r="2" fill="var(--paper)"/>`).join('');
-  g += rp.map((r) => { const cx = x(r.at), cy = y(r.sizeFt || 0); return `<path d="M${cx - 5},${cy + 4}L${cx + 5},${cy + 4}L${cx},${cy - 5}Z" fill="var(--amber)"/>`; }).join('');
+  g += rp.map((r) => {
+    const cx = x(r.at).toFixed(1);
+    if (r.sizeLo == null) { const cy = y(r.sizeFt || 0); return `<path d="M${cx - 5},${cy + 4}L${+cx + 5},${cy + 4}L${cx},${cy - 5}Z" fill="var(--amber)"/>`; }
+    const a = y(r.sizeHi).toFixed(1), b = y(r.sizeLo).toFixed(1);
+    return `<path d="M${cx},${a}V${b}M${cx - 4},${a}H${+cx + 4}M${cx - 4},${b}H${+cx + 4}" stroke="var(--amber)" stroke-width="2.5" stroke-linecap="round"/>`;
+  }).join('');
   return `<svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Forecast breaking size at Saltburn over the next week, from the latest run and the ones before">${g}</svg>` +
     `<div class="key"><span><i style="border-color:var(--amber)"></i>Latest run</span>${lines.length > 1 ? '<span><i style="border-color:var(--glass)"></i>Earlier runs</span>' : ''}` +
-    `${rows.length ? '<span>● Whitby</span>' : ''}${rp.length ? '<span style="color:var(--amber)">▲ Reports</span>' : ''}</div>`;
+    `${rows.length ? '<span>● Whitby</span>' : ''}${rp.length ? '<span style="color:var(--amber)">┃ Reports</span>' : ''}</div>`;
+}
+
+/* The 8am check: what every run has predicted for 8am, today until noon and
+   tomorrow's after, with a report for 8am to set against it. Ad hoc reports
+   count too; a fixed time each day makes the days easiest to compare. */
+const ukOffset = (ms) => (+fUkHour.format(ms) - new Date(ms).getUTCHours() + 24) % 24;
+function ukHourOn(dayOffset, hour) {
+  const [y, m, d] = fUkDate.format(Date.now() + dayOffset * DAY).split('-').map(Number), guess = Date.UTC(y, m - 1, d, hour);
+  return guess - ukOffset(guess) * H;
+}
+let eight = null, eightBusy = false;
+async function load8(ms) {
+  if (eightBusy || (eight && eight.ms === ms && Date.now() - eight.at < 10 * 60e3)) return;
+  eightBusy = true;
+  let ladder = null;
+  try { ladder = await ladderFor(ms); } catch {}
+  eight = { ms, at: Date.now(), ladder };
+  eightBusy = false;
+  renderPredict();
+}
+function render8() {
+  const box = $('#pred8'), today8 = ukHourOn(0, 8), after = +fUkHour.format(Date.now()) >= 12;
+  const ms = after ? ukHourOn(1, 8) : today8;
+  load8(ms);
+  const near = (t) => reports.find((r) => Math.abs(r.at - t) <= 90 * 60e3);
+  const done = near(today8);
+  const rows = eight && eight.ms === ms && eight.ladder;
+  $('#pred8Note').textContent = `${after ? 'tomorrow' : 'today'}, ${fUkDay.format(ms)}`;
+  const latest = rows && rows.length ? rows.at(-1) : null;
+  box.innerHTML = (latest ? `<div class="k">Latest run (${runName(latest[0])})</div><div class="est">${latest[1] < 0.5 ? 'Flat' : fmtFt(latest[1])}<small>${latest[1] < 0.5 ? '' : ` ft · ${Math.round(latest[3])} s from ${compass(latest[4])}`}</small></div>` : '') +
+    `<div class="ladder">${rows ? ladderHtml(rows, ms) : `<div class="d">${eightBusy || !eight ? 'Loading the predictions' : "Couldn't load the predictions."}</div>`}</div>` +
+    (done ? `<div class="d">This morning: ${done.swells ? done.swells.map(swellReport).join(' + ') : (SIZES.find((x) => x[0] === done.size) || [, done.size])[1]}, reported.</div>`
+      : `<div class="links"><button class="pill primary" id="rep8">Report for 8am ${after ? 'this morning' : 'today'}</button></div>`);
+  const b = $('#rep8');
+  if (b) b.addEventListener('click', () => openReport(today8));
 }
 
 function renderRoll() {
@@ -2403,6 +2458,7 @@ function renderAcc() {
 function renderPredict() {
   if (!showing('predict')) return;
   renderAlerts();
+  render8();
   renderRoll();
   renderAcc();
   const box = $('#predNow'), snap = snapshot(), est = estimate();
@@ -2435,8 +2491,9 @@ function renderHistory() {
     const ahead = byDaysAhead(r.ladder, r.at), aks = Object.keys(ahead).map(Number).sort((p, q) => q - p);
     const fc = aks.length ? `<div class="rd">Forecast for then: ${aks.map((k) => `${k ? k + ' d' : 'same day'} ${ahead[k][1].toFixed(1)}`).join(' · ')} ft</div>` : '';
     const b = r.state && r.state.buoys && r.state.buoys[0];
-    el.innerHTML = `<div class="rh"><b>${escapeHtml(r.spot)} · ${lab(SIZES, r.size)}${r.quality ? ', ' + lab(QUALITY, r.quality).toLowerCase() : ''}</b><span>${whenUk(r.at)}</span></div>` +
-      `<div class="rd">${[r.surface && lab(SURFACE, r.surface), r.lines && lab(LINES, r.lines)].filter(Boolean).join(' · ')}${r.notes ? ' · ' + escapeHtml(r.notes) : ''}</div>` +
+    const seen = r.swells ? r.swells.map(swellReport).join(' + ') : lab(SIZES, r.size);
+    el.innerHTML = `<div class="rh"><b>${escapeHtml(r.spot)} · ${seen}</b><span>${whenUk(r.at)}</span></div>` +
+      `<div class="rd">${[r.surface && lab(SURFACE, r.surface)].filter(Boolean).join(' · ')}${r.notes ? (r.surface ? ' · ' : '') + escapeHtml(r.notes) : ''}</div>` +
       fc + `<div class="rd">We had: ${est}${b ? `; ${escapeHtml(b.name)} ${feet(b.h)} ft${b.p != null ? ` ${Math.round(b.p)} s` : ''}` : ''}. ${r.synced ? 'Saved to GitHub.' : 'On this phone.'} <button class="rx">Delete</button></div>`;
     el.querySelector('.rx').addEventListener('click', () => deleteReport(r));
     box.appendChild(el);
@@ -2445,42 +2502,79 @@ function renderHistory() {
 
 // The report form.
 const repSel = {};
-function repSeg(id, key, items) {
-  const el = $(id);
+// A row of choices; tapping the chosen one again clears it.
+function chips(el, items, obj, key) {
   el.innerHTML = '';
   items.forEach(([v, label]) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.textContent = label;
-    b.setAttribute('aria-pressed', String(repSel[key] === v));
-    b.addEventListener('click', () => { repSel[key] = repSel[key] === v ? null : v; [...el.children].forEach((c) => c.setAttribute('aria-pressed', String(c === b && repSel[key] === v))); });
+    b.setAttribute('aria-pressed', String(obj[key] === v));
+    b.addEventListener('click', () => { obj[key] = obj[key] === v ? null : v; [...el.children].forEach((c) => c.setAttribute('aria-pressed', String(c === b && obj[key] === v))); });
     el.appendChild(b);
   });
 }
+const repSeg = (id, key, items) => chips($(id), items, repSel, key);
+const fmtFt = (v) => String(+v.toFixed(1));
+const swellReport = (w) => `${fmtFt(w.lo)}${w.hi !== w.lo ? '–' + fmtFt(w.hi) : ''} ft` + (w.kind ? ' ' + KINDS.find((k) => k[0] === w.kind)[1].toLowerCase() : '') +
+  (w.period ? ` ${w.period} s` : '') + (w.from ? ` from ${w.from}` : '');
+function swellFields(n) {
+  const el = document.createElement('div');
+  el.className = 'swell';
+  el.innerHTML = `<div class="k">${n ? 'Second swell<button type="button" class="rm">Remove</button>' : 'Main swell'}</div>` +
+    '<div class="field"><span>Face height, ft <small>against a body: 1–2 is shin to thigh</small></span><div class="range">' +
+    '<input type="number" inputmode="decimal" step="0.5" min="0" max="40" class="lo" placeholder="low" aria-label="Low, feet"><span>to</span>' +
+    '<input type="number" inputmode="decimal" step="0.5" min="0" max="40" class="hi" placeholder="high" aria-label="High, feet"></div></div>' +
+    '<div class="field"><span>Kind</span><div class="seg kind"></div></div>' +
+    '<div class="field"><span>Period, s <small>if you counted it</small></span><input type="number" inputmode="numeric" step="1" min="2" max="25" class="per" style="max-width:96px"></div>' +
+    '<div class="field"><span>From <small>if you can tell</small></span><div class="seg from"></div></div>';
+  const sel = { kind: null, from: null };
+  chips(el.querySelector('.kind'), KINDS, sel, 'kind');
+  chips(el.querySelector('.from'), FROM8.map((x) => [x, x]), sel, 'from');
+  el.sel = sel;
+  if (n) el.querySelector('.rm').addEventListener('click', () => { el.remove(); $('#repAdd2').parentElement.hidden = false; });
+  return el;
+}
+// One swell's figures from its fields: null if no height given.
+function readSwell(el) {
+  const num = (c) => { const v = parseFloat(el.querySelector(c).value); return Number.isFinite(v) && v >= 0 ? v : null; };
+  let lo = num('.lo'), hi = num('.hi');
+  if (lo == null && hi == null) return null;
+  if (lo == null) lo = hi;
+  if (hi == null) hi = lo;
+  if (hi < lo) [lo, hi] = [hi, lo];
+  const per = num('.per');
+  return { lo, hi, kind: el.sel.kind, period: per ? Math.round(per) : null, from: el.sel.from, fromDeg: el.sel.from ? FROM8.indexOf(el.sel.from) * 45 : null };
+}
 function localInput(ms) { const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60e3); return d.toISOString().slice(0, 16); }
-$('#repOpen').addEventListener('click', () => {
-  Object.assign(repSel, { spot: store.get('nsv.lastSpot', 'Saltburn'), size: null, quality: null, surface: null, lines: null });
+function openReport(at) {
+  Object.assign(repSel, { spot: store.get('nsv.lastSpot', 'Saltburn'), surface: null });
   repSeg('#repSpot', 'spot', SPOTS.map((x) => [x, x]));
-  repSeg('#repSize', 'size', SIZES);
-  repSeg('#repQual', 'quality', QUALITY);
   repSeg('#repSurf', 'surface', SURFACE);
-  repSeg('#repLines', 'lines', LINES);
-  $('#repWhen').value = localInput(Date.now());
+  $('#repSwells').innerHTML = '';
+  $('#repSwells').appendChild(swellFields(0));
+  $('#repAdd2').parentElement.hidden = false;
+  $('#repWhen').value = localInput(at);
   showLadder();
   $('#repNotes').value = '';
   $('#repForm').hidden = false;
   $('#repForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
-});
+}
+$('#repOpen').addEventListener('click', () => openReport(Date.now()));
+$('#repAdd2').addEventListener('click', () => { $('#repSwells').appendChild(swellFields(1)); $('#repAdd2').parentElement.hidden = true; });
 $('#repCancel').addEventListener('click', () => { $('#repForm').hidden = true; });
 $('#repWhen').addEventListener('change', showLadder);
 $('#repForm').addEventListener('submit', (e) => {
   e.preventDefault();
-  if (!repSel.size) { toast('Pick a size'); return; }
+  const swells = [...$('#repSwells').children].map(readSwell);
+  if (!swells[0]) { toast("Give the main swell's height in feet"); return; }
   const at = $('#repWhen').value ? new Date($('#repWhen').value).getTime() : Date.now();
   const id = new Date(at).toISOString().replace(/[:.]/g, '-').slice(0, 19) + '-' + Math.random().toString(36).slice(2, 6);
+  const main = swells[0];
   const r = {
-    id, at, reportedAt: Date.now(), spot: repSel.spot || 'Saltburn', size: repSel.size, sizeFt: SIZE_FT[repSel.size],
-    quality: repSel.quality, surface: repSel.surface, lines: repSel.lines, notes: $('#repNotes').value.trim(),
+    id, at, reportedAt: Date.now(), spot: repSel.spot || 'Saltburn', swells: swells.filter(Boolean),
+    sizeLo: main.lo, sizeHi: main.hi, sizeFt: (main.lo + main.hi) / 2,
+    surface: repSel.surface, notes: $('#repNotes').value.trim(),
     state: snapshot(), prediction: estimate(), synced: false
   };
   store.set('nsv.lastSpot', r.spot);
