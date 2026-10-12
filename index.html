@@ -767,7 +767,7 @@ function fetchWindAhead() {
 const TRAVEL = { rule: 35, from: 345, to: 100, openKm: 520, stepH: 12, maxKm: 2600 };
 const travelSvg = $('#travel'), travelBtn = $('#travelBtn');
 let travelGrid = null, travelGridKey = '';
-const travelOn = () => opts.travelLayer && SOURCE === SOURCES.ours && !!SOURCES.ours.gridFile;
+const travelOn = () => opts.travelLayer && SOURCE === SOURCES.ours;
 const swellKmH = (T) => 9.81 * T / (4 * Math.PI) * 3.6;
 // The point a given distance and bearing from Saltburn (spherical Earth).
 function destination(km, bearing) {
@@ -812,7 +812,8 @@ async function updateTravel() {
   travelBtn.hidden = !ours;
   travelBtn.setAttribute('aria-pressed', String(!!opts.travelLayer));
   if (travelOn()) {
-    const key = SOURCES.ours.base + SOURCES.ours.gridFile;
+    // The grid only changes if the map's area does, so it's always worth asking for.
+    const key = SOURCES.ours.base + (SOURCES.ours.gridFile || 'grid.json');
     if (travelGridKey !== key) {
       travelGridKey = key;
       try {
@@ -824,11 +825,15 @@ async function updateTravel() {
   }
   drawTravel();
 }
-travelBtn.addEventListener('click', () => {
+// Re-read the manifest when a layer looks missing: the run may have been
+// redrawn with it since the app last looked.
+async function freshManifest() { try { await SOURCES.ours.latest(); } catch {} }
+travelBtn.addEventListener('click', async () => {
   opts.travelLayer = !opts.travelLayer;
   saveOpts();
-  updateTravel();
-  toast(!opts.travelLayer ? 'Swell travel times off' : SOURCES.ours.gridFile ? `Travel times to Saltburn for a ${opts.swellPeriod} s swell` : 'Travel times come with the next run');
+  if (opts.travelLayer && !travelGrid) travelGridKey = '';
+  await updateTravel();
+  toast(!opts.travelLayer ? 'Swell travel times off' : travelGrid ? `Travel times to Saltburn for a ${opts.swellPeriod} s swell` : "Couldn't load the travel times; check your connection");
 });
 
 /* Sea ice: one layer for the whole run, from the latest ice chart. */
@@ -845,9 +850,10 @@ function updateIce() {
     iceImg.decode().then(() => { if (iceImg.dataset.url === url) iceImg.classList.add('on'); }).catch(() => {});
   } else iceImg.classList.add('on');
 }
-iceBtn.addEventListener('click', () => {
+iceBtn.addEventListener('click', async () => {
   opts.iceLayer = !opts.iceLayer;
   saveOpts();
+  if (opts.iceLayer && !SOURCES.ours.ice) await freshManifest();
   updateIce();
   const ice = SOURCES.ours.ice;
   toast(!opts.iceLayer ? 'Sea ice off' : ice ? `Sea ice from the ${iceDay(ice.date)} ice chart` : 'No ice chart with this run');
@@ -860,9 +866,10 @@ function updateWind() {
   fetchWindAhead();
   showWind(frames[idx]);
 }
-windBtn.addEventListener('click', () => {
+windBtn.addEventListener('click', async () => {
   opts.windLayer = !opts.windLayer;
   saveOpts();
+  if (opts.windLayer && !SOURCES.ours.hasWind) await freshManifest();
   updateWind();
   toast(!opts.windLayer ? 'Wind arrows off' : SOURCES.ours.hasWind ? 'Wind arrows on' : 'Wind arrows on from the next run');
 });
