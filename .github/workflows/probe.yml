@@ -1,0 +1,13 @@
+name: probe
+on:
+  push:
+    branches: [claude/north-sea-charts-repo-17wjvk]
+    paths: [scripts/probe-cco.mjs, .github/workflows/probe.yml]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node scripts/probe-cco.mjs
+        env:
+          CCO_API_KEY: ${{ secrets.CCO_API_KEY }}
