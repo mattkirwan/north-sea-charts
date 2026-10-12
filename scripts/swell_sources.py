@@ -465,6 +465,7 @@ def swell_forecast(run, winds, window, ice=None, days=8):
     events. winds: the 10 m winds (winds_from_npz), from the past few days'
     analyses on through the run; ice: the close-packed sea ice (a shapely
     geometry), if known."""
+    run = run.replace(tzinfo=None)  # all times here are plain UTC
     lat_all, lon_all, times = winds['lat'], winds['lon'], winds['times']
     dlat, dlon = float(lat_all[1] - lat_all[0]), float(lon_all[1] - lon_all[0])
     paths = _paths(window)

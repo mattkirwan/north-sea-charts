@@ -130,6 +130,7 @@ def keep_analyses(run, frames_path, out_path):
     starts is still arriving for days after. Adds this run's to those
     published with the last run (analyses.npz, or failing that its
     fields.npz). Returns them all, before and including this run's."""
+    run = run.replace(tzinfo=None)  # the stored times are plain UTC
     now = swell_sources.winds_from_npz(np.load(frames_path), 2)
     past = None
     for name, every in (('analyses.npz', 1), ('fields.npz', 2)):
