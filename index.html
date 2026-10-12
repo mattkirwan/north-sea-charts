@@ -115,15 +115,12 @@ body.bare .top,body.bare .bottom{opacity:0;pointer-events:none}
 .reticle span{position:absolute;left:50%;bottom:-24px;transform:translateX(-50%);white-space:nowrap;font-size:13px;color:var(--amber)}
 body.adjust .adjustbar{display:flex}
 body.adjust .reticle{display:block}
-body.adjust .top,body.adjust .bottom,body.adjust .hint{display:none}
+body.adjust .top,body.adjust .bottom,body.adjust .hint,body.adjust #waitPressure{display:none}
 body.adjust #stage{cursor:move}
 
-/* Settings sheet */
-.sheet{position:absolute;inset:0;background:rgba(5,14,20,.5);display:flex;align-items:flex-end;justify-content:center}
-.card{width:100%;max-width:520px;max-height:86%;overflow:auto;-webkit-user-select:text;user-select:text;
-  background:var(--ink);border-radius:20px 20px 0 0;padding:18px calc(var(--sr) + 18px) calc(var(--sb) + 18px) calc(var(--sl) + 18px);
-  box-shadow:0 -12px 40px rgba(0,0,0,.35)}
-.card h2{font-family:var(--f-cond);font-weight:600;font-size:24px;margin:0 0 6px}
+/* Settings */
+.sgroup{margin-top:22px}
+.sgroup h3{font-family:var(--f-cond);font-weight:600;font-size:22px;margin:0 0 4px}
 .field{padding:12px 0;border-top:1px solid var(--hair)}
 .field>span{display:block;font-size:13px;color:var(--slate);margin-bottom:8px}
 .seg{display:flex;flex-wrap:wrap;gap:6px}
@@ -248,7 +245,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
       <h1 id="todayTitle">Today</h1>
       <div class="links">
         <button class="pill" id="todayReload">Refresh</button>
-        <button class="pill" id="todaySettings" aria-label="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:block"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
       </div>
     </div>
     <div class="wsub" id="todayDate">Saltburn</div>
@@ -343,7 +339,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
         <button class="btn play" id="play" aria-label="Play"><svg viewBox="0 0 24 24" fill="currentColor"><path id="playIcon" d="M8 5.5v13l11-6.5z"/></svg></button>
         <button class="btn" id="next" aria-label="Next frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
         <div class="run" id="run">Finding the latest run</div>
-        <button class="btn" id="more" aria-label="Chart settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
       </div>
     </footer>
 
@@ -388,35 +383,40 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
   </section>
 </div>
 
-<nav class="tabbar" role="tablist" aria-label="Views">
-  <button role="tab" data-route="today" aria-controls="vToday"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>Today</button>
-  <button role="tab" data-route="cam" aria-controls="vCam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="13.5" height="12" rx="2.5"/><path d="M16 10.5l5.5-3v9l-5.5-3z"/></svg>Cam</button>
-  <button role="tab" data-route="forecast" aria-controls="vForecast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Forecast</button>
-</nav>
-
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-<div class="sheet" id="sheet" hidden>
-  <div class="card" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
-    <h2 id="sheetTitle">Settings</h2>
-    <div class="field"><span>Wind speed</span><div class="seg" id="segUnit"></div></div>
-    <div id="chartSettings">
+<!-- Settings: wind units and the pressure charts' options -->
+<main class="view panel" id="vSettings" aria-labelledby="setTitle" hidden>
+  <div class="thead"><h1 id="setTitle">Settings</h1></div>
+  <section class="sgroup" aria-labelledby="setWindH">
+    <h3 id="setWindH">Wind</h3>
+    <div class="field"><span>Speed</span><div class="seg" id="segUnit"></div></div>
+  </section>
+  <section class="sgroup" aria-labelledby="setChartH">
+    <h3 id="setChartH">Pressure charts</h3>
+    <div class="field"><span>Charts</span><div class="seg" id="segSrc"></div></div>
     <div class="field"><span>Chart</span><div class="seg" id="segChart"></div></div>
     <div class="field"><span>Map</span><div class="seg" id="segRegion"></div></div>
     <div class="field"><span>Model run</span><div class="seg" id="segRun"></div></div>
     <div class="field"><span>How far ahead</span><div class="seg" id="segDays"></div></div>
     <div class="field"><span>Time between frames</span><div class="seg" id="segStep"></div></div>
     <div class="field"><span>Playback speed</span><div class="seg" id="segSpeed"></div></div>
-    </div>
     <div class="actions">
       <button class="pill" id="actAdjust">Adjust view</button>
       <button class="pill" id="actReload">Reload charts</button>
       <button class="pill" id="actFull" hidden>Full screen</button>
-      <button class="pill primary" id="actDone">Done</button>
     </div>
     <p class="fine" id="fine"></p>
-  </div>
-</div>
+  </section>
+</main>
+
+<nav class="tabbar" role="tablist" aria-label="Views">
+  <button role="tab" data-route="today" aria-controls="vToday"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>Today</button>
+  <button role="tab" data-route="cam" aria-controls="vCam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="13.5" height="12" rx="2.5"/><path d="M16 10.5l5.5-3v9l-5.5-3z"/></svg>Cam</button>
+  <button role="tab" data-route="forecast" aria-controls="vForecast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Forecast</button>
+  <button role="tab" data-route="settings" aria-controls="vSettings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
+</nav>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
 
 <script>
 (() => {
@@ -469,7 +469,7 @@ SOURCES.ours = {
   model: 'GFS',
   cycleH: 6,
   maxStep: 168,
-  only: { step: 6, runOffset: 0 }, // options this source can't vary
+  only: { step: 6, runOffset: 0, days: 7 }, // options this source can't vary
   region: 'GFS',
   base: 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/charts/',
   url(runMs, step) { return `${this.base}f${String(step).padStart(3, '0')}.png?run=${runKey(runMs)}${cacheBust ? '&v=' + cacheBust : ''}`; },
@@ -489,12 +489,12 @@ const STEPS = [[6, '6 hours'], [3, '3 hours']];
 const SPEEDS = [[700, 'Slow'], [420, 'Normal'], [220, 'Fast']];
 // Starting crop as a fraction of the source image: centre point and visible height.
 const DEFAULT_VIEWS = { EU: { cx: 0.53, cy: 0.34, span: 0.68 }, UK: { cx: 0.5, cy: 0.5, span: 1.02 }, GFS: { cx: 0.5, cy: 0.5, span: 1.0 } };
+const SRCS = [['ours', 'Ours'], ['wz', 'Wetterzentrale']];
 const DEFAULTS = { src: 'ours', chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
 
 const opts = Object.assign({}, DEFAULTS, store.get('nsv.opts', {}));
 const saveOpts = () => store.set('nsv.opts', opts);
-opts.src = 'ours'; // the only charts offered now
-let SOURCE = SOURCES.ours;
+let SOURCE = SOURCES[opts.src] || SOURCES.ours;
 // An option's value as the current source uses it (ours has fixed steps and one run).
 const opt = (k) => (SOURCE.only && k in SOURCE.only ? SOURCE.only[k] : opts[k]);
 const viewRegion = () => SOURCE.region || opts.region;
@@ -548,7 +548,7 @@ const probeCache = new Map();
 const stage = $('#stage'), layer = $('#layer');
 let front = $('#imgA'), back = $('#imgB');
 const tl = $('#tl'), barsEl = $('#bars'), daysEl = $('#days'), nowEl = $('#now');
-const notice = $('#notice'), toastEl = $('#toast'), sheet = $('#sheet'), hint = $('#hint');
+const notice = $('#notice'), toastEl = $('#toast'), hint = $('#hint');
 
 /* ---------------- Working out which run is on the server ---------------- */
 const cycleStart = (ms) => {
@@ -559,7 +559,7 @@ const cycleStart = (ms) => {
 // Reads the last frame's Last-Modified date. Only works if the server allows
 // cross-origin reads; otherwise returns 'unknown' and the schedule is used.
 async function probe(rMs) {
-  const lastStep = Math.min(opts.days * 24, SOURCE.maxStep);
+  const lastStep = Math.min(opt('days') * 24, SOURCE.maxStep);
   const url = SOURCE.url(rMs, lastStep, opts);
   if (probeCache.has(url)) return probeCache.get(url);
   let res = 'unknown';
@@ -601,7 +601,7 @@ async function load({ keepValid = true, latest = null } = {}) {
   runMs = latestMs - opt('runOffset') * SOURCE.cycleH * H;
   lastCheck = Date.now();
 
-  const maxStep = Math.min(opts.days * 24, SOURCE.maxStep);
+  const maxStep = Math.min(opt('days') * 24, SOURCE.maxStep);
   frames = [];
   for (let h = 0; h <= maxStep; h += opt('step')) {
     frames.push({ step: h, valid: runMs + h * H, url: SOURCE.url(runMs, h, opts), status: 'pending', img: null });
@@ -932,7 +932,7 @@ stage.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 function enterAdjust() {
-  closeSheet();
+  if (route !== 'pressure') go('pressure');
   hint.hidden = true;
   stopPlay();
   adjusting = true;
@@ -962,7 +962,7 @@ function toast(msg) {
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2400);
 }
 
-/* ---------------- Settings sheet ---------------- */
+/* ---------------- Settings ---------------- */
 function seg(el, key, items) {
   el.innerHTML = '';
   items.forEach(([v, label]) => {
@@ -983,10 +983,11 @@ function seg(el, key, items) {
 function onOptChange(key) {
   if (key === 'speed') return;
   if (key === 'speedUnit') { renderLocal(); return; }
-  if (key === 'src') { SOURCE = SOURCES[opts.src] || SOURCES.wz; showSourceFields(); }
+  if (key === 'src') { SOURCE = SOURCES[opts.src] || SOURCES.ours; showSourceFields(); }
   if (key === 'region' || key === 'src') { view = loadView(); natural = null; maybeHint(); }
   if (key !== 'runOffset') probeCache.clear();
-  load({ keepValid: true }).then(renderFine);
+  // Charts load on the first visit to Pressure; until then there's nothing to redo.
+  if (chartsStarted) load({ keepValid: true }).then(renderFine);
 }
 function runItems() {
   if (!latestMs) return [[0, 'Latest']];
@@ -1020,12 +1021,10 @@ function renderFine() {
 }
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
 const standalone = window.navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
-function openSheet() {
-  stopPlay();
-  // Chart options only make sense on the charts; elsewhere it's just the wind unit.
-  const charts = route === 'pressure';
-  ['#chartSettings', '#actAdjust', '#actReload', '#fine'].forEach((q) => { $(q).hidden = !charts; });
+function renderSettings() {
+  if (!showing('settings')) return;
   seg($('#segUnit'), 'speedUnit', UNITS);
+  seg($('#segSrc'), 'src', SRCS);
   showSourceFields();
   seg($('#segChart'), 'chart', CHARTS);
   seg($('#segRegion'), 'region', REGIONS);
@@ -1036,31 +1035,25 @@ function openSheet() {
   $('#actFull').hidden = !document.fullscreenEnabled;
   $('#actFull').textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
   renderFine();
-  sheet.hidden = false;
-  $('#actDone').focus();
 }
-// Our charts come in one style and area, every 6 hours, latest run only.
+// Our charts come in one style and area, every 6 hours for 7 days, latest run only.
 function showSourceFields() {
-  ['#segChart', '#segRegion', '#segRun', '#segStep'].forEach((q) => { $(q).closest('.field').hidden = SOURCE === SOURCES.ours; });
+  ['#segChart', '#segRegion', '#segRun', '#segDays', '#segStep'].forEach((q) => { $(q).closest('.field').hidden = SOURCE === SOURCES.ours; });
 }
-function closeSheet() { sheet.hidden = true; }
-$('#more').addEventListener('click', openSheet);
-$('#actDone').addEventListener('click', closeSheet);
 $('#actAdjust').addEventListener('click', enterAdjust);
 $('#actReload').addEventListener('click', () => {
   cacheBust = Date.now();
   probeCache.clear();
-  closeSheet();
-  load({ keepValid: true }).then(() => toast('Charts reloaded'));
+  chartsStarted = true;
+  load({ keepValid: true }).then(() => { toast('Charts reloaded'); renderSettings(); });
 });
 $('#actFull').addEventListener('click', async () => {
   try {
     if (document.fullscreenElement) await document.exitFullscreen();
     else await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
   } catch {}
-  closeSheet();
+  renderSettings();
 });
-sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
 
 /* ---------------- Saltburn wind ----------------
    A beach forecast that ignores the chart's run and frame time: the charts
@@ -1943,7 +1936,8 @@ function refreshLocal(force) {
    Today, Cam, or one of the Forecast tabs. The hash names the view so links and
    home-screen bookmarks open in the right place; tab taps replace it rather
    than stacking history. The charts only start loading on first visit. */
-const ROUTES = ['today', 'cam', 'pressure', 'buoys', 'wind', 'tides'];
+const ROUTES = ['today', 'cam', 'pressure', 'buoys', 'wind', 'tides', 'settings'];
+const TOPS = ['today', 'cam', 'settings']; // views of their own; the rest are Forecast tabs
 // Buoys was called Swell: keep old links and the remembered tab working.
 const RENAMED = { swell: 'buoys' };
 // The shop's live stream: loaded only while Cam is open, so it costs no data otherwise.
@@ -1958,13 +1952,14 @@ function go(r) {
   syncRoute();
 }
 function syncRoute() {
-  const r = routeFromHash(), prev = route, top = r === 'today' || r === 'cam' ? r : 'forecast';
+  const r = routeFromHash(), prev = route, top = TOPS.includes(r) ? r : 'forecast';
   if (RENAMED[location.hash.slice(1)]) history.replaceState(null, '', '#' + r);
   route = r;
   if (top === 'forecast') { forecastTab = r; store.set('nsv.forecastTab', r); }
   $('#vToday').hidden = top !== 'today';
   $('#vCam').hidden = top !== 'cam';
   $('#vForecast').hidden = top !== 'forecast';
+  $('#vSettings').hidden = top !== 'settings';
   if (r === 'cam' && camFrame.dataset.on !== '1') {
     camFrame.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
     camFrame.allowFullscreen = true;
@@ -1986,25 +1981,24 @@ function syncRoute() {
     stopPlay();
     if (adjusting) exitAdjust();
   }
-  if (r !== prev) { const pane = { today: '#vToday', cam: '#vCam', buoys: '#sSwell', wind: '#sWind', tides: '#sTides' }[r]; if (pane) $(pane).scrollTop = 0; }
+  if (r !== prev) { const pane = { today: '#vToday', cam: '#vCam', settings: '#vSettings', buoys: '#sSwell', wind: '#sWind', tides: '#sTides' }[r]; if (pane) $(pane).scrollTop = 0; }
   refreshLocal();
+  renderSettings();
 }
 window.addEventListener('popstate', syncRoute);
 window.addEventListener('hashchange', syncRoute);
 document.querySelectorAll('.tabbar button').forEach((b) => b.addEventListener('click', () => {
   if (b.dataset.route !== 'forecast') go(b.dataset.route);
-  else go(route === 'today' || route === 'cam' ? forecastTab : route);
+  else go(TOPS.includes(route) ? forecastTab : route);
 }));
 document.querySelectorAll('.subnav button').forEach((b) => b.addEventListener('click', () => go(b.dataset.route)));
 $('#todayReload').addEventListener('click', () => refreshLocal(true));
-$('#todaySettings').addEventListener('click', openSheet);
 $('#windReload').addEventListener('click', () => refreshWind(true));
 $('#tideReload').addEventListener('click', () => refreshTides(true));
 $('#swellReload').addEventListener('click', () => refreshSwell(true));
 
 /* ---------------- Keyboard ---------------- */
 document.addEventListener('keydown', (e) => {
-  if (!sheet.hidden) { if (e.key === 'Escape') closeSheet(); return; }
   if (route !== 'pressure') return;
   if (adjusting) { if (e.key === 'Escape' || e.key === 'Enter') exitAdjust(); return; }
   if (e.key === 'ArrowRight') { stopPlay(); step(1); e.preventDefault(); }
