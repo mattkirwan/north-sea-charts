@@ -147,6 +147,7 @@ body.adjust #stage{cursor:move}
 .wday h3 small{font-size:16px;color:var(--slate);font-weight:500;margin-left:6px}
 .wsum{font-size:14px;color:var(--slate);margin:2px 0 10px}
 .wgrid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px}
+:root{--w-none:rgba(232,238,241,.07)}
 .wc{border-radius:9px;padding:6px 0 7px;text-align:center;background:var(--w-none);font-variant-numeric:tabular-nums}
 .wc .t{font-size:12px;color:var(--slate)}
 .wc svg{display:block;width:20px;height:20px;margin:3px auto 0}
@@ -154,13 +155,6 @@ body.adjust #stage{cursor:move}
 .wc .s{font-family:var(--f-cond);font-weight:600;font-size:21px;line-height:1.1}
 .wc .g{font-size:11px;color:var(--slate)}
 .wc.past{opacity:.35}
-:root{--w-none:rgba(232,238,241,.05);--w-light:rgba(232,238,241,.09);--w-off:rgba(126,214,195,.34);
-  --w-xoff:rgba(126,214,195,.15);--w-xon:rgba(255,194,61,.2);--w-on:rgba(255,112,82,.32)}
-.wc.light,.sw.light{background:var(--w-light)} .wc.off,.sw.off{background:var(--w-off)} .wc.xoff,.sw.xoff{background:var(--w-xoff)}
-.wc.xon,.sw.xon{background:var(--w-xon)} .wc.on,.sw.on{background:var(--w-on)}
-.wlegend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--slate);padding-top:14px;margin-top:14px;border-top:1px solid var(--hair)}
-.wlegend span{display:inline-flex;align-items:center;gap:6px}
-.sw{width:14px;height:14px;border-radius:4px;display:inline-block}
 .tabs{display:flex;gap:4px;padding:4px;border-radius:14px;background:rgba(232,238,241,.07)}
 .tabs button{flex:1;padding:9px 0;border-radius:10px;font-size:15px;font-weight:500;color:var(--slate)}
 .tabs button[aria-selected="true"]{background:var(--paper);color:var(--ink);font-weight:600}
@@ -186,9 +180,6 @@ body.adjust #stage{cursor:move}
 .tile .big svg{width:30px;height:30px;flex:none}
 .tile .big small{font-size:18px;font-weight:600;color:var(--slate)}
 .tile .d{font-size:14px;color:var(--slate);margin-top:6px;line-height:1.35}
-.chip{display:inline-block;margin-top:8px;padding:3px 9px;border-radius:999px;font-size:13px;background:var(--w-none)}
-.chip.light{background:var(--w-light)} .chip.off{background:var(--w-off)} .chip.xoff{background:var(--w-xoff)}
-.chip.xon{background:var(--w-xon)} .chip.on{background:var(--w-on)}
 .wc.nowc{box-shadow:inset 0 0 0 2px var(--amber)}
 .wgrid+.wgrid{margin-top:3px}
 .status{font-size:14px;color:var(--slate);line-height:1.35}
@@ -278,10 +269,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <h3 id="todayWindH">Wind <small>now until midnight</small></h3>
     <div class="wsum" id="todayWindSum"></div>
     <div id="todayWind"></div>
-    <div class="wlegend" aria-label="Colour key">
-      <span><i class="sw off"></i>Offshore</span><span><i class="sw xoff"></i>Cross-offshore</span>
-      <span><i class="sw xon"></i>Cross-onshore</span><span><i class="sw on"></i>Onshore</span><span><i class="sw light"></i><span class="lightLabel">Under 5 kn</span></span>
-    </div>
   </section>
   <p class="fine" id="todayFine"></p>
 </main>
@@ -387,10 +374,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
       <button class="pill" id="windReload">Refresh</button>
     </div>
     <div id="windDays"></div>
-    <div class="wlegend" aria-label="Colour key">
-      <span><i class="sw off"></i>Offshore</span><span><i class="sw xoff"></i>Cross-offshore</span>
-      <span><i class="sw xon"></i>Cross-onshore</span><span><i class="sw on"></i>Onshore</span><span><i class="sw light"></i><span class="lightLabel">Under 5 kn</span></span>
-    </div>
     <p class="fine" id="windFine"></p>
   </section>
 
@@ -418,7 +401,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <h2 id="sheetTitle">Settings</h2>
     <div class="field"><span>Wind speed</span><div class="seg" id="segUnit"></div></div>
     <div id="chartSettings">
-    <div class="field"><span>Charts</span><div class="seg" id="segSrc"></div></div>
     <div class="field"><span>Chart</span><div class="seg" id="segChart"></div></div>
     <div class="field"><span>Map</span><div class="seg" id="segRegion"></div></div>
     <div class="field"><span>Model run</span><div class="seg" id="segRun"></div></div>
@@ -507,12 +489,12 @@ const STEPS = [[6, '6 hours'], [3, '3 hours']];
 const SPEEDS = [[700, 'Slow'], [420, 'Normal'], [220, 'Fast']];
 // Starting crop as a fraction of the source image: centre point and visible height.
 const DEFAULT_VIEWS = { EU: { cx: 0.53, cy: 0.34, span: 0.68 }, UK: { cx: 0.5, cy: 0.5, span: 1.02 }, GFS: { cx: 0.5, cy: 0.5, span: 1.0 } };
-const SRCS = [['ours', 'Ours (NOAA GFS)'], ['wz', 'Wetterzentrale']];
 const DEFAULTS = { src: 'ours', chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
 
 const opts = Object.assign({}, DEFAULTS, store.get('nsv.opts', {}));
 const saveOpts = () => store.set('nsv.opts', opts);
-let SOURCE = SOURCES[opts.src] || SOURCES.wz;
+opts.src = 'ours'; // the only charts offered now
+let SOURCE = SOURCES.ours;
 // An option's value as the current source uses it (ours has fixed steps and one run).
 const opt = (k) => (SOURCE.only && k in SOURCE.only ? SOURCE.only[k] : opts[k]);
 const viewRegion = () => SOURCE.region || opts.region;
@@ -667,7 +649,7 @@ function preload(token) {
   return Promise.all(Array.from({ length: 6 }, worker)).then(() => {
     if (token !== loadToken) return;
     if (!frames.some((f) => f.status === 'ok')) {
-      showNotice("Couldn't load any charts from wetterzentrale.de. Check your connection. If this page is open inside an app preview, host it on a normal web address instead, as previews often block images from other sites.");
+      showNotice("Couldn't load any charts. Check your connection and try again.");
     }
     updateRunLine();
   });
@@ -697,7 +679,7 @@ async function swapTo(f) {
     natural = { w: back.naturalWidth, h: back.naturalHeight };
     applyView();
   }
-  back.alt = `${SOURCE.model} chart for ${fDay.format(f.valid)} ${fTime.format(f.valid)}`;
+  back.alt = `Pressure chart for ${fDay.format(f.valid)} ${fTime.format(f.valid)}`;
   back.classList.add('on');
   front.classList.remove('on');
   [front, back] = [back, front];
@@ -720,7 +702,7 @@ function updateRunLine() {
   const pending = !runMs || frames.some((f) => f.status === 'pending');
   wait.hidden = ok;
   wait.classList.toggle('busy', pending);
-  if (!ok) wait.textContent = pending ? 'Waiting for the pressure charts from wetterzentrale.de…' : "No pressure charts yet: couldn't load any from wetterzentrale.de. Check your connection or try Reload charts in settings.";
+  if (!ok) wait.textContent = pending ? 'Waiting for the pressure charts…' : "No pressure charts yet: couldn't load any. Check your connection or try Reload charts in settings.";
   const el = $('#run');
   if (!runMs) { el.textContent = 'Finding the latest run'; return; }
   const done = frames.filter((f) => f.status !== 'pending').length;
@@ -728,7 +710,7 @@ function updateRunLine() {
   const second = done < frames.length ? `Loading ${done} of ${frames.length}` : `Checked ${ago(lastCheck)}`;
   el.innerHTML = '';
   const b = document.createElement('b');
-  b.textContent = `${SOURCE.model} ${runLabel(runMs)}`;
+  b.textContent = `${runLabel(runMs)} run`;
   el.append(b, ` ${fRunDay.format(runMs)}${older}`, document.createElement('br'), second);
 }
 
@@ -1017,21 +999,21 @@ function renderFine() {
   const f = frames[idx];
   const p = $('#fine');
   if (SOURCE === SOURCES.ours) {
-    p.textContent = "Our own charts, drawn every hour from NOAA's GFS model data as soon as a new run is complete. " +
+    p.textContent = 'New charts four times a day, about five hours after each model run (00, 06, 12 and 18 UTC). ' +
       'Colour is sea-level pressure: blues and purples for low pressure, oranges and reds for high, with isobars every 4 hPa and the yellow dot at Saltburn. ' +
       'Before publishing, each run is checked for missing frames and impossible pressures. ';
   } else {
     const how = runHow === 'server'
       ? "The run time is confirmed from the server's file dates."
-      : "The run time is worked out from the GFS schedule, because the server doesn't share file dates with other sites.";
-    p.textContent = `Charts from wetterzentrale.de, drawn from NOAA's GFS model. ${how} New runs are checked every 10 minutes while this page is open. `;
+      : "The run time is worked out from the model's schedule.";
+    p.textContent = `${how} New runs are checked every 10 minutes while this page is open. `;
   }
   if (f && SOURCE === SOURCES.wz) {
     const a = document.createElement('a');
     a.href = SOURCE.page(runMs, f.step, opts);
     a.target = '_blank';
     a.rel = 'noopener';
-    a.textContent = 'Open this frame on wetterzentrale.de';
+    a.textContent = 'Open this frame full size';
     p.append(a);
   }
   if (isIOS && !standalone) p.append(document.createElement('br'), 'On iPhone, use Share, then Add to Home Screen, to open this full screen.');
@@ -1044,7 +1026,6 @@ function openSheet() {
   const charts = route === 'pressure';
   ['#chartSettings', '#actAdjust', '#actReload', '#fine'].forEach((q) => { $(q).hidden = !charts; });
   seg($('#segUnit'), 'speedUnit', UNITS);
-  seg($('#segSrc'), 'src', SRCS);
   showSourceFields();
   seg($('#segChart'), 'chart', CHARTS);
   seg($('#segRegion'), 'region', REGIONS);
@@ -1090,7 +1071,6 @@ sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); }
 const WIND = {
   name: 'Saltburn',
   lat: 54.5838, lon: -0.9724, // the pier
-  facing: 30,                 // the beach faces NNE, so SSW–SW winds blow offshore
   light: 5,                   // knots; below this the direction hardly matters
   days: 6,                    // today plus five
   maxAge: 30 * 60e3,
@@ -1105,7 +1085,6 @@ const UNIT_K = { kn: 1, mph: 1.15078, kmh: 1.852 };
 const UNIT_SHORT = { kn: 'kn', mph: 'mph', kmh: 'km/h' };
 const UNIT_S = () => UNIT_SHORT[opts.speedUnit];
 const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-const SIDE = { off: 'offshore', xoff: 'cross-offshore', xon: 'cross-onshore', on: 'onshore', light: 'light' };
 const fUkParts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const fWindWeekday = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'long' });
 const fWindDate = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', day: 'numeric', month: 'short' });
@@ -1132,13 +1111,6 @@ function dayHeading(k, i) {
 }
 const speedIn = (kn) => Math.round(kn * UNIT_K[opts.speedUnit]);
 const compass = (deg) => COMPASS[Math.round(deg / 22.5) % 16];
-function side(from, kn) {
-  if (from == null || kn == null) return '';
-  if (kn < WIND.light) return 'light';
-  const d = Math.abs(((from - WIND.facing - 180) % 360 + 540) % 360 - 180);
-  return d <= 45 ? 'off' : d <= 90 ? 'xoff' : d <= 135 ? 'xon' : 'on';
-}
-
 async function fetchWind() {
   // Ask for the Met Office models first; fall back to Open-Meteo's own blend.
   for (const model of ['ukmo_seamless', '']) {
@@ -1181,13 +1153,19 @@ function daySummary(hours, label = 'Daytime') {
   // Forecast days: daylight-ish hours only, what matters for getting in the water.
   const day = hours.filter((x) => x.kn != null && (label !== 'Daytime' || (x.h >= 6 && x.h <= 18)));
   if (!day.length) return '';
-  const count = {};
-  day.forEach((x) => { const s = side(x.from, x.kn); count[s] = (count[s] || 0) + 1; });
-  const windy = Object.entries(count).filter(([s]) => s !== 'light').sort((a, b) => b[1] - a[1]);
+  // Direction to eight points, from the hours with enough wind for it to matter.
+  const POINTS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'], pt = (x) => POINTS[Math.round(x.from / 45) % 8];
+  const windy = day.filter((x) => x.from != null && x.kn >= WIND.light), count = {};
+  windy.forEach((x) => { count[pt(x)] = (count[pt(x)] || 0) + 1; });
+  const top = Object.entries(count).sort((a, b) => b[1] - a[1])[0];
   const lo = speedIn(Math.min(...day.map((x) => x.kn))), hi = speedIn(Math.max(...day.map((x) => x.kn)));
   const gusts = day.map((x) => x.gust).filter((x) => x != null);
   const u = UNIT_S();
-  let txt = !windy.length ? 'Light throughout' : (windy[0][1] >= day.length * 0.6 ? 'Mostly ' : 'Mixed, mainly ') + SIDE[windy[0][0]];
+  let txt = 'Light throughout';
+  if (top) {
+    const first = pt(windy[0]), last = pt(windy[windy.length - 1]);
+    txt = top[1] >= windy.length * 0.6 ? `Mostly ${top[0]}` : first !== last ? `${first}, turning ${last}` : `Mixed, mainly ${top[0]}`;
+  }
   txt += ` · ${lo === hi ? lo : `${lo}–${hi}`} ${u}`;
   if (gusts.length) txt += `, gusts to ${speedIn(Math.max(...gusts))}`;
   return `${label}: ${txt}`;
@@ -1196,8 +1174,7 @@ const ARROW = 'M12 4v15M6.5 13.5L12 19l5.5-5.5';
 
 function windCell(x, past) {
   const el = document.createElement('div');
-  const s = side(x.from, x.kn);
-  el.className = 'wc' + (s ? ' ' + s : '') + (past ? ' past' : '');
+  el.className = 'wc' + (past ? ' past' : '');
   const time = `${pad2(x.h)}:00`;
   if (x.kn == null || x.from == null) {
     el.innerHTML = `<div class="t">${pad2(x.h)}</div><div class="s" style="margin-top:22px">–</div>`;
@@ -1211,7 +1188,7 @@ function windCell(x, past) {
     `<div class="g">${x.gust != null ? 'g' + speedIn(x.gust) : '&nbsp;'}</div>`;
   el.setAttribute('role', 'img');
   el.setAttribute('aria-label', `${time}, from ${compass(x.from)}, ${speedIn(x.kn)} ${UNIT_S()}` +
-    (x.gust != null ? `, gusting ${speedIn(x.gust)}` : '') + `, ${SIDE[s]}`);
+    (x.gust != null ? `, gusting ${speedIn(x.gust)}` : ''));
   return el;
 }
 
@@ -1223,7 +1200,7 @@ function renderWind() {
     sub.textContent = 'Next 5 days';
     const m = document.createElement('div');
     m.className = 'wmsg';
-    m.textContent = windBusy ? 'Loading the wind forecast' : "Couldn't load the wind forecast from open-meteo.com. Check your connection and tap Refresh.";
+    m.textContent = windBusy ? 'Loading the wind forecast' : "Couldn't load the wind forecast. Check your connection and tap Refresh.";
     windDays.appendChild(m);
     return;
   }
@@ -1244,10 +1221,8 @@ function renderWind() {
     sec.append(h3, sum, grid);
     windDays.appendChild(sec);
   });
-  const src = wind.model ? 'the Met Office UKV (2 km) model for the first two days, then the Met Office global model' : "Open-Meteo's best available models";
-  $('#windFine').textContent = `Forecast wind at 10 m for ${WIND.name} pier from ${src}, via open-meteo.com. ` +
-    `Every 3 hours in UK time; speed in ${UNIT_S()}, with gusts underneath. Arrows point the way the wind blows. ` +
-    `${WIND.name} faces north-north-east, so south-westerlies blow offshore and north-easterlies onshore.`;
+  $('#windFine').textContent = `Forecast wind at 10 m for ${WIND.name} pier, every 3 hours in UK time; speed in ${UNIT_S()}, with gusts underneath. ` +
+    'Arrows point the way the wind blows.';
 }
 
 /* ---------------- Saltburn tides ----------------
@@ -1424,7 +1399,7 @@ function renderTides() {
     sub.textContent = 'Next 5 days';
     const m = document.createElement('div');
     m.className = 'wmsg';
-    m.textContent = tideBusy ? 'Loading the tide forecast' : "Couldn't load the tide forecast from open-meteo.com. Check your connection and tap Refresh.";
+    m.textContent = tideBusy ? 'Loading the tide forecast' : "Couldn't load the tide forecast. Check your connection and tap Refresh.";
     tideDays.appendChild(m);
     return;
   }
@@ -1446,9 +1421,9 @@ function renderTides() {
     sec.append(dayHeading(d.k, i + 1), sum, tideEvents(d, turns, now), tideCurve(d, turns, lo, hi, tideDays.clientWidth));
     tideDays.appendChild(sec);
   });
-  const used = tides.used.length > 1 ? `averaged between sea points off ${tides.used.join(' and ')}` : `for a sea point off ${tides.used[0]}`;
-  $('#tideFine').textContent = `Predicted sea level from Open-Meteo's marine model, ${used}. ` +
-    `Heights are metres above chart datum, like tide tables, using a mean level of ${TIDE.datum.toFixed(1)} m (the dashed line) from the published Whitby and River Tees levels. ` +
+  const used = tides.used.length > 1 ? `averaged between ${tides.used.join(' and ')}` : `for ${tides.used[0]}`;
+  $('#tideFine').textContent = `Predicted sea level, ${used}. ` +
+    `Heights are metres above chart datum, like tide tables, with mean sea level ${TIDE.datum.toFixed(1)} m up (the dashed line). ` +
     'Times are UK time to the nearest 5 minutes and can differ from the official tables by 15–30 minutes. ' +
     'Touch the curve to read the level at any time; the amber line is now.';
 }
@@ -1768,13 +1743,13 @@ function renderSwell() {
     mapEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }));
 
-  $('#swellFine').textContent = 'Measured, not forecast: the newest reading from each buoy and platform that had reported within 6 hours ' +
-    `when last collected (every half hour): wave buoys from the Coastal Monitoring network, such as Whitby, and North Sea oil and gas platforms relayed by NOAA's National Data Buoy Center, which report height only. ` +
+  $('#swellFine').textContent = 'Measured, not forecast: the newest reading from each wave buoy and North Sea platform that had reported within 6 hours ' +
+    'when last collected (every half hour). Platforms report height only. ' +
     'Each buoy sends one set of figures for the whole sea, not separate swells: height is significant wave height in feet (so local wind chop is included), ' +
     'the period in seconds is the peak period (the dominant swell) and the arrow shows the way the waves are travelling. ' +
     'Biggest wave is the highest single wave in the half-hour record; spread is how wide a range of directions the waves come from, lower meaning a cleaner, more organised swell. ' +
     'Platform wind is measured high up on the platform, so it reads stronger than at sea level. Faded labels are over 3 hours old. ' +
-    'Real time data from the Regional Coastal Monitoring Programme, made freely available under the terms of the Open Government Licence. These are real-time data and are not quality-controlled.';
+    'Readings are live and unchecked, so the odd one can be wrong.';
 }
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -1804,10 +1779,9 @@ function nowTiles(hero, wDay, turns) {
   hero.innerHTML = '';
   const wt = tile('Wind now'), x = wDay && wDay.hours.find((h) => h.h === uk.hour);
   if (x && x.kn != null && x.from != null) {
-    const s = side(x.from, x.kn);
     wt.insertAdjacentHTML('beforeend',
       `<div class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(${Math.round(x.from)}deg)"><path d="${ARROW}"/></svg>${speedIn(x.kn)}<small>${UNIT_S()}</small></div>` +
-      `<div class="d">From ${compass(x.from)}${x.gust != null ? ` · gusts ${speedIn(x.gust)}` : ''}</div><span class="chip ${s}">${SIDE[s][0].toUpperCase() + SIDE[s].slice(1)}</span>`);
+      `<div class="d">From ${compass(x.from)}${x.gust != null ? ` · gusts ${speedIn(x.gust)}` : ''}</div>`);
   } else wt.insertAdjacentHTML('beforeend', `<div class="d">${windBusy ? 'Loading' : 'No wind data yet'}</div>`);
   const tt = tile('Tide now'), level = tides ? levelAt(now) : null, next = turns.find((e) => e.ms > now);
   if (level != null && next) {
@@ -1914,9 +1888,8 @@ function renderToday() {
     }
   } else wBox.innerHTML = `<div class="wmsg">${windBusy ? 'Loading the wind forecast' : "Couldn't load the wind forecast. Check your connection and tap Refresh."}</div>`;
 
-  $('#todayFine').textContent = 'Waves are measured, not forecast: the newest reading from the nearest wave buoy, from the Regional Coastal Monitoring Programme (Open Government Licence; real-time data, not quality-controlled). ' +
+  $('#todayFine').textContent = 'Waves are measured, not forecast: the newest reading from the nearest wave buoy. ' +
     'Forecast › Buoys has the rest of the North Sea. ' +
-    'Wind from the Met Office models and tides from the Open-Meteo marine model, both via open-meteo.com. ' +
     'Tide heights are above chart datum, like tide tables. Arrows on the wind point the way it blows; the amber outline is this hour. ' +
     'First and last light are civil twilight, when the sun is 6° below the horizon and there\'s enough light to see; they and sunrise and sunset are calculated for Saltburn. ' +
     'Forecast has the coming days: pressure charts for the swell, then wind and tides.';
@@ -1957,7 +1930,6 @@ function renderWaits() {
 }
 function renderLocal() {
   renderWaits();
-  document.querySelectorAll('.lightLabel').forEach((el) => { el.textContent = `Under ${speedIn(WIND.light)} ${UNIT_S()}`; });
   renderToday(); renderCam(); renderSwell(); renderWind(); renderTides();
 }
 function refreshLocal(force) {
@@ -2067,7 +2039,7 @@ async function checkForNewRun() {
   const latest = await resolveLatest();
   lastCheck = Date.now();
   if (latest.ms !== latestMs) {
-    toast(`New ${SOURCE.model} run: ${runLabel(latest.ms)}, loading`);
+    toast(`New ${runLabel(latest.ms)} run, loading`);
     await load({ keepValid: true, latest });
   }
   updateRunLine();
