@@ -6,6 +6,7 @@ data on AWS, using the .idx files to fetch just those two fields, and draws a
 chart per hour: sea-level pressure as bright colour (blues and purples for
 lows, oranges and reds for highs) with isobars every 4 hPa, H/L centres and
 coastlines. (500 hPa height is downloaded for the checks but not drawn.) Writes PNGs and manifest.json into the output folder,
+plus ice.png, a transparent sea-ice layer from the latest ice chart (see draw_ice), with ice.zip, the chart itself;
 plus a matching transparent wind layer per hour (w000.png...): 10 m wind as
 arrows the way it blows, longer for stronger, which the app can lay over the chart;
 plus fields.npz: the run's numbers themselves for the charted area, so we
@@ -27,11 +28,13 @@ import os
 import sys
 import tempfile
 import urllib.request
+import zipfile
 
 import matplotlib
 matplotlib.use('Agg')
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+import cartopy.io.shapereader as shpreader
 import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import numpy as np
@@ -39,6 +42,8 @@ import xarray as xr
 from matplotlib.colors import LinearSegmentedColormap
 from PIL import Image
 from scipy.ndimage import gaussian_filter, maximum_filter, minimum_filter
+from shapely.geometry import box
+from shapely.ops import unary_union
 
 from gfs_latest import STEPS, grib_url, label, latest_run
 
@@ -52,6 +57,10 @@ SALTBURN = (54.583, -0.973)
 PROJ = ccrs.LambertConformal(central_longitude=5, central_latitude=62, standard_parallels=(55, 70))
 FIELDS = {'PRMSL:mean sea level': 'prmsl', 'HGT:500 mb': 'gh', 'UGRD:10 m above ground': 'u10', 'VGRD:10 m above ground': 'v10'}
 KN = 1.943844                                  # knots per m/s
+# The Norwegian Ice Service's latest chart of the European Arctic: drawn by
+# their sea-ice analysts from satellite radar, Svalbard, the Barents Sea and
+# the Fram and Denmark Straits, on weekdays (after 15 UTC).
+ICE_URL = 'https://cryo.met.no/sites/cryo/files/latest/NIS_arctic_latest_pl_a.zip'
 
 INK, PAPER, COAST = '#173242', '#E8EEF1', '#0F2230'
 # Sea-level pressure, in the same 4 hPa steps as the isobars: deep purple and
@@ -224,6 +233,77 @@ def draw_wind(step, f, path):
     return float(np.nanmax(speed))
 
 
+def ice_tenths(ct):
+    """Total concentration from a SIGRID-3 CT code, in tenths: 01 ice free and
+    02 open water (under a tenth) are None; 13 is 1-3 tenths, 46 4-6, 79 7-9,
+    91 9-10, 92 10, 10..90 that many tenths; 98 (icebergs only) None."""
+    try:
+        v = int(str(ct).strip())
+    except ValueError:
+        return None
+    if v < 10 or v > 92:
+        return None
+    if v == 91:
+        return 9.5
+    if v == 92:
+        return 10.0
+    lo, hi = divmod(v, 10)
+    return float(lo) if hi == 0 else (lo + hi) / 2
+
+
+def draw_ice(outdir):
+    """The sea ice as a transparent layer the size of the charts: white,
+    more solid where the ice is closer packed, with the ice edge outlined.
+    Waves can't build over it. Returns the chart's date, or None if the
+    chart couldn't be had (the charts publish without it)."""
+    try:
+        data = get(ICE_URL, timeout=120)
+        zpath = os.path.join(outdir, 'ice.zip')
+        with open(zpath, 'wb') as fh:
+            fh.write(data)
+        tmp = tempfile.mkdtemp()
+        with zipfile.ZipFile(zpath) as z:
+            z.extractall(tmp)
+        shp = next(os.path.join(tmp, n) for n in os.listdir(tmp) if n.endswith('.shp'))
+        date = next(t for t in os.path.basename(shp).split('_') if t.isdigit() and len(t) == 8)
+        fig, ax = map_figure()
+        fig.patch.set_alpha(0)
+        ax.set_facecolor((0, 0, 0, 0))
+        # The chart's areas run under the coast (it's drawn with land on top),
+        # so cut the land out, using the same coastline as the charts.
+        area = box(-60, 55, 90, 90)
+        land = unary_union([g.buffer(0) for g in shpreader.Reader(shpreader.natural_earth('50m', 'physical', 'land')).geometries()
+                            if g.intersects(area)]).intersection(area)
+        ice, counts = [], {}
+        for rec in shpreader.Reader(shp).records():
+            tenths = ice_tenths(rec.attributes.get('CT'))
+            name = str(rec.attributes.get('NIS_CLASS', '')).strip() or str(rec.attributes.get('CT'))
+            counts[name] = counts.get(name, 0) + 1
+            if tenths is None or rec.geometry is None:
+                continue
+            g = rec.geometry.buffer(0).difference(land)
+            if g.is_empty:
+                continue
+            ice.append(g)
+            ax.add_geometries([g], ccrs.PlateCarree(), facecolor=(1, 1, 1, 0.3 + 0.6 * tenths / 10),
+                              edgecolor='none', zorder=3)
+        if not ice:
+            raise RuntimeError('no ice polygons in the chart')
+        edge = unary_union(ice)
+        ax.add_geometries([edge], ccrs.PlateCarree(), facecolor='none', edgecolor='#0F2230', linewidth=1.2, zorder=4)
+        ax.add_geometries([edge], ccrs.PlateCarree(), facecolor='none', edgecolor='white', linewidth=0.5, zorder=5)
+        ax.axis('off')
+        save_png(fig, os.path.join(outdir, 'ice.png'), transparent=True)
+        print(f'  ice.png: chart of {date}, {len(ice)} ice areas; classes {counts}')
+        return f'{date[:4]}-{date[4:6]}-{date[6:]}'
+    except Exception as e:  # the ice is a nice-to-have; never hold the charts up for it
+        print(f'  No ice layer this run: {e}')
+        for n in ('ice.zip', 'ice.png'):
+            if os.path.exists(os.path.join(outdir, n)):
+                os.unlink(os.path.join(outdir, n))
+        return None
+
+
 def sanity(step, p):
     lo, hi = float(np.nanmin(p)), float(np.nanmax(p))
     if np.isnan(p).any() or lo < 900 or hi > 1070:
@@ -286,8 +366,10 @@ def main():
         if do_check and step in (0, 24, 72, 120):
             check(run, step, p, lons, lats, path, outdir)
     save_fields(run, steps, frames, os.path.join(outdir, 'fields.npz'))
+    ice_date = draw_ice(outdir)
     print(f'  fields.npz: {os.path.getsize(os.path.join(outdir, "fields.npz")) // 1024} KB')
     manifest = dict(run=int(run.timestamp() * 1000), runLabel=label(run), steps=steps, file='f%03d.png', wind='w%03d.png', data='fields.npz', home=home_view(),
+                    ice=dict(file='ice.png', date=ice_date) if ice_date else None,
                     generated=int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000), source='NOAA GFS 0.25°',
                     pressure=dict(min=round(min(lows)), max=round(max(highs))))
     with open(os.path.join(outdir, 'manifest.json'), 'w') as fh:
