@@ -149,7 +149,7 @@ body.adjust #stage{cursor:move}
 /* Scrolling panels: Today, Forecast wind and tides */
 .panel{background:var(--ink);overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch;
   padding:4px calc(var(--sr) + 16px) 28px calc(var(--sl) + 16px)}
-#vToday.panel{padding-top:calc(var(--st) + 14px)}
+#vToday.panel,#vPredict.panel,#vSettings.panel{padding-top:calc(var(--st) + 14px)}
 .panel>*{max-width:560px;margin-left:auto;margin-right:auto}
 .whead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .whead h2{font-family:var(--f-cond);font-weight:600;font-size:30px;line-height:1.1;margin:0}
