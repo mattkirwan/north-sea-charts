@@ -800,7 +800,9 @@ function updateRunLine() {
   el.innerHTML = '';
   const b = document.createElement('b');
   b.textContent = `${runLabel(runMs)} run`;
-  el.append(b, ` ${fRunDay.format(runMs)}${older}`, document.createElement('br'), second);
+  // Short, to fit beside the layer buttons: the day only when it isn't today's run.
+  const today = fRunDay.format(runMs) === fRunDay.format(Date.now());
+  el.append(b, `${today ? '' : ' ' + fRunDay.format(runMs).split(',')[0]}${older}`, document.createElement('br'), second);
 }
 
 /* ---------------- Timeline ---------------- */
