@@ -36,11 +36,19 @@ stretches of wind blowing along the path towards us, grows waves from the
 wind speed, the stretch's length (fetch) and how long it has blown (the
 standard deep-water growth curves; none over close-packed sea ice), and
 sends that swell on to Saltburn at the group speed for its period, smaller
-with distance (fitted to Bretschneider's swell decay curves). Hour by hour, the
+with distance (fitted to Bretschneider's swell decay curves). It starts
+from the last few days' analyses as well as the run itself, so swell
+already on its way when the run starts is counted. Hour by hour, the
 biggest arriving swell is turned into a breaking size at Saltburn (Komar and
 Gaughan, less at an angle to the beach), and each rise to knee-high or more
 (a peak standing out from the hours around it) is a swell event. Simple on purpose: a starting point to check against
 the buoys and what we see, and tune.
+
+Not yet allowed for: the sea bed. Crossing the North Sea's shallows (EMODnet
+has its depths in detail), swell slows, bends and loses height to the bottom,
+more so the longer its period. The plan is to let the reports from the beach
+show how far out each direction and period comes, then bring in the depths
+to explain it.
 
 Standard library, numpy, scipy and shapely (all installed with cartopy).
 
@@ -69,6 +77,7 @@ LAND_URL = 'https://naturalearth.s3.amazonaws.com/10m_physical/ne_10m_land.zip'
 STEP_DEG, MAX_KM, RAY_KM = 0.5, 3500, 4
 ISLAND_KM2 = 3000  # islands smaller than this don't block the window
 NW_FAN, SE_FAN, SE_SHORE_KM = 30, 45, 85
+SE_ARRIVE = 105    # the most side-on (degrees) swell bending in from the south-east arrives
 KN = 1.943844
 R = 6371.0
 
@@ -416,21 +425,48 @@ def _paths(window):
             out.append(dict(lat=ORIGIN[0], lon=ORIGIN[1], b=b, start=0, end=min(r, MAX_KM), km=0, share=1.0, arrive=b))
     for g in window.get('bends', []):
         gr = np.array(g['reach'])
+        # Swell bending round the north-west corner arrives from the corner;
+        # swell bending in along the coast from the south-east has turned to
+        # come in no squarer than ESE (it would otherwise run past the beach).
         arrive = float(bearing(ORIGIN[0], ORIGIN[1], g['lat'], g['lon'])) if g['km'] else None
         for b in np.arange(0, 360, RAY_EVERY):
             r = gr[int(round(b / step)) % len(gr)]
             if r > max(g['start'], 60):
                 out.append(dict(lat=g['lat'], lon=g['lon'], b=b, start=g['start'], end=min(r, MAX_KM - g['km']), km=g['km'],
-                                share=0.5, arrive=arrive if arrive is not None else b))
+                                share=0.5, arrive=arrive if arrive is not None else min(b, SE_ARRIVE)))
     return out
 
 
-def swell_forecast(run, steps, frames, window, ice=None, days=8):
-    """Hourly swell forecast for Saltburn from this run, and its swell events.
-    ice: the close-packed sea ice (a shapely geometry), if known."""
-    lat_all, lon_all = frames[0]['u10'].latitude.values, frames[0]['u10'].longitude.values
+def winds_from_npz(z, every=1):
+    """The 10 m winds from a fields.npz (or analyses.npz), as swell_forecast
+    takes them: every'th grid point, in m/s."""
+    if 'times' in z:
+        times = [dt.datetime(1970, 1, 1) + dt.timedelta(milliseconds=int(t)) for t in z['times']]
+    else:
+        run = dt.datetime.strptime(str(z['run']), '%Y-%m-%dT%HZ')
+        times = [run + dt.timedelta(hours=int(h)) for h in z['steps']]
+    return dict(lat=z['lat'][::every], lon=z['lon'][::every], times=times,
+                u=z['u10_dms'][:, ::every, ::every] / 10.0, v=z['v10_dms'][:, ::every, ::every] / 10.0)
+
+
+def join_winds(past, now):
+    """The past analyses (before the run, on the same grid), then the run."""
+    if not past or past['u'].shape[1:] != now['u'].shape[1:]:
+        return now
+    keep = [k for k, t in enumerate(past['times']) if t < now['times'][0]]
+    if not keep:
+        return now
+    return dict(lat=now['lat'], lon=now['lon'], times=[past['times'][k] for k in keep] + list(now['times']),
+                u=np.concatenate([past['u'][keep], now['u']]), v=np.concatenate([past['v'][keep], now['v']]))
+
+
+def swell_forecast(run, winds, window, ice=None, days=8):
+    """Hourly swell forecast for Saltburn from the run's start, and its swell
+    events. winds: the 10 m winds (winds_from_npz), from the past few days'
+    analyses on through the run; ice: the close-packed sea ice (a shapely
+    geometry), if known."""
+    lat_all, lon_all, times = winds['lat'], winds['lon'], winds['times']
     dlat, dlon = float(lat_all[1] - lat_all[0]), float(lon_all[1] - lon_all[0])
-    times = [run + dt.timedelta(hours=int(s)) for s in steps]
     paths = _paths(window)
     pts = []
     for pth in paths:
@@ -443,8 +479,8 @@ def swell_forecast(run, steps, frames, window, ice=None, days=8):
         pts.append(dict(d=d, la=la, lo=lo, toward=toward, i=i, j=j, sea=open_sea, hours=np.zeros(len(d))))
     packets = []  # (arrival, height m, period s, from deg, share, src lat, src lon, made at)
     for k, t in enumerate(times):
-        u, v = frames[k]['u10'].values, frames[k]['v10'].values
-        gap = 6 if k == 0 else (t - times[k - 1]).total_seconds() / 3600
+        u, v = winds['u'][k], winds['v'][k]
+        gap = 6 if k == 0 else min((t - times[k - 1]).total_seconds() / 3600, 12)  # a missing analysis: don't count the gap as wind
         for pth, pt in zip(paths, pts):
             uu, vv = u[pt['i'], pt['j']], v[pt['i'], pt['j']]
             sp = np.hypot(uu, vv)
@@ -533,8 +569,11 @@ if __name__ == '__main__':
     for b in (340, 345, 348, 349, 350, 352, 355, 357, 358, 359, 0, 5, 10, 20, 30, 35, 40, 60, 80, 100, 110, 120):
         print(f'  {b:5.1f} deg: {w["reach"][int(b / w["step"])]} km of sea')
     print(json.dumps(storm_alerts(run, list(z['steps']), frames, w), indent=1))
-    ice = ice_from_shp(sys.argv[2]) if len(sys.argv) > 2 else None
-    series, events = swell_forecast(run, list(z['steps']), frames, w, ice)
+    ice = ice_from_shp(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] != '-' else None
+    winds = winds_from_npz(z, 2)
+    if len(sys.argv) > 3:  # an earlier run's fields.npz, for its analysis... or an analyses.npz
+        winds = join_winds(winds_from_npz(np.load(sys.argv[3]), 2), winds)
+    series, events = swell_forecast(run, winds, w, ice)
     print('Forecast events:')
     for e in events:
         print(f"  {e['start']:%a %d %H}z - {e['end']:%a %d %H}z, peak {e['peak']:%a %d %H}z {e['ft']:.1f} ft ({e['h']:.2f} m {e['p']:.0f} s from {e['d']}) from {e['where']}")

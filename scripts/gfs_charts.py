@@ -60,6 +60,8 @@ SALTBURN = (54.583, -0.973)
 PROJ = ccrs.LambertConformal(central_longitude=5, central_latitude=62, standard_parallels=(55, 70))
 FIELDS = {'PRMSL:mean sea level': 'prmsl', 'HGT:500 mb': 'gh', 'UGRD:10 m above ground': 'u10', 'VGRD:10 m above ground': 'v10'}
 KN = 1.943844                                  # knots per m/s
+ANALYSIS_DAYS = 5                              # how far back the swell forecast starts
+PUBLISHED = f"https://raw.githubusercontent.com/{os.environ.get('GITHUB_REPOSITORY', 'mattkirwan/north-sea-charts')}/charts/"
 # The Norwegian Ice Service's latest chart of the European Arctic: drawn by
 # their sea-ice analysts from satellite radar, Svalbard, the Barents Sea and
 # the Fram and Denmark Straits, on weekdays (after 15 UTC).
@@ -120,6 +122,34 @@ def save_fields(run, steps, frames, path):
         z500_m=np.stack([np.rint(crop(f['gh']).values) for f in frames]).astype(np.int16),
         u10_dms=np.stack([np.rint(crop(f['u10']).values * 10) for f in frames]).astype(np.int16),
         v10_dms=np.stack([np.rint(crop(f['v10']).values * 10) for f in frames]).astype(np.int16))
+
+
+def keep_analyses(run, frames_path, out_path):
+    """The 10 m winds at the start of every run over the last ANALYSIS_DAYS,
+    at 0.5°, for the swell forecast to start from: swell made before a run
+    starts is still arriving for days after. Adds this run's to those
+    published with the last run (analyses.npz, or failing that its
+    fields.npz). Returns them all, before and including this run's."""
+    now = swell_sources.winds_from_npz(np.load(frames_path), 2)
+    past = None
+    for name, every in (('analyses.npz', 1), ('fields.npz', 2)):
+        try:
+            past = swell_sources.winds_from_npz(np.load(io.BytesIO(get(PUBLISHED + name, timeout=120))), every)
+            break
+        except Exception as e:
+            print(f'  No earlier {name}: {e}')
+    times, u, v = [now['times'][0]], [now['u'][0]], [now['v'][0]]
+    if past and past['u'].shape[1:] == now['u'].shape[1:]:
+        keep = [k for k, t in enumerate(past['times']) if run - dt.timedelta(days=ANALYSIS_DAYS) <= t < run]
+        if 'analyses' not in name:
+            keep = keep[:1]  # just the earlier run's own start; the rest is forecast
+        times = [past['times'][k] for k in keep] + times
+        u, v = [past['u'][k] for k in keep] + u, [past['v'][k] for k in keep] + v
+    np.savez_compressed(out_path, times=np.array([int((t - dt.datetime(1970, 1, 1)).total_seconds() * 1000) for t in times], dtype=np.int64),
+                        lat=now['lat'].astype(np.float32), lon=now['lon'].astype(np.float32),
+                        u10_dms=np.rint(np.stack(u) * 10).astype(np.int16), v10_dms=np.rint(np.stack(v) * 10).astype(np.int16))
+    print(f'  analyses.npz: {len(times)} run starts from {times[0]:%d %H}z, {os.path.getsize(out_path) // 1024} KB')
+    return swell_sources.join_winds(swell_sources.winds_from_npz(np.load(out_path)), now)
 
 
 def map_box(box):
@@ -372,6 +402,11 @@ def main():
         if do_check and step in (0, 24, 72, 120):
             check(run, step, p, lons, lats, path, outdir)
     save_fields(run, steps, frames, os.path.join(outdir, 'fields.npz'))
+    winds = None
+    try:
+        winds = keep_analyses(run, os.path.join(outdir, 'fields.npz'), os.path.join(outdir, 'analyses.npz'))
+    except Exception as e:
+        print(f'  No analyses kept this run: {e}')
     ice_date, dense_ice = draw_ice(outdir)
     write_grid(os.path.join(outdir, 'grid.json'))
     # Saltburn's swell window, bomb lows sending swell our way, and our swell
@@ -388,8 +423,8 @@ def main():
     except Exception as e:
         print(f'  No swell window or alerts this run: {e}')
     try:
-        if window and len(steps) > 4:
-            series, events = swell_sources.swell_forecast(run, steps, frames, window, dense_ice)
+        if window and winds and len(steps) > 4:
+            series, events = swell_sources.swell_forecast(run, winds, window, dense_ice)
             with open(os.path.join(outdir, 'forecast.json'), 'w') as fh:
                 json.dump(swell_sources.forecast_json(run, series, events), fh)
             forecast = 'forecast.json'
