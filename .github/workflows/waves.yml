@@ -26,6 +26,8 @@ jobs:
         with:
           node-version: 20
       - name: Fetch from the Coastal Monitoring network and NOAA NDBC
+        env:
+          CCO_API_KEY: ${{ secrets.CCO_API_KEY }}
         run: node scripts/fetch-waves.mjs "$RUNNER_TEMP/waves.json"
       - name: Publish to the data branch
         env:
