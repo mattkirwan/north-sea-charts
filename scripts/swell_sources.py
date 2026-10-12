@@ -42,8 +42,12 @@ ORIGIN = (54.605, -0.955)     # rays start a little off the pier, in the sea
 LAND_URL = 'https://naturalearth.s3.amazonaws.com/10m_physical/ne_10m_land.zip'
 STEP_DEG, MAX_KM, RAY_KM = 0.5, 3500, 4
 # The ways in north of Scotland for swell from out west: the Fair Isle gap
-# (Orkney to Shetland) and north of Shetland.
-GAPS = [(59.45, -1.75), (61.0, -0.4)]
+# (Orkney to Shetland) and north of Shetland. Swell through a gap has to turn
+# to come on down to Saltburn, by refraction over the shelf and spreading
+# round the islands; past about 90 degrees too little survives to count.
+GAPS = [dict(name='Fair Isle gap', lat=59.45, lon=-1.75), dict(name='north of Shetland', lat=61.0, lon=-0.4)]
+MAX_TURN = 90
+FEED = (255, 15)  # the gaps feed from out west round to the north; the rest of the North Sea sees Saltburn itself
 KN = 1.943844
 R = 6371.0
 
@@ -101,16 +105,33 @@ def land():
     return _land
 
 
+def rays(lat, lon, max_km):
+    """km of open sea from (lat, lon) along each bearing, to the first land."""
+    bearings = np.arange(0, 360, STEP_DEG)
+    dists = np.arange(RAY_KM, max_km + RAY_KM, RAY_KM)
+    B, D = np.meshgrid(bearings, dists, indexing='ij')
+    la, lo = destination(lat, lon, B, D)
+    hit = shapely.contains_xy(land(), lo, la)
+    return np.where(hit.any(axis=1), dists[np.argmax(hit, axis=1)] - RAY_KM, max_km).astype(float)
+
+
 def swell_window():
     """Open sea from just off Saltburn: km to the first land along each
-    bearing (0, 0.5, ... 359.5 degrees), up to MAX_KM."""
+    bearing (0, 0.5, ... 359.5 degrees), up to MAX_KM. Plus, for each gap
+    north of Scotland, the sea that can send swell through it: rays out from
+    the gap, only on bearings whose swell would turn no more than MAX_TURN
+    to head on down to Saltburn (0 elsewhere)."""
+    out = dict(origin=list(ORIGIN), step=STEP_DEG, maxKm=MAX_KM, reach=[int(v) for v in rays(*ORIGIN, MAX_KM)], gaps=[])
     bearings = np.arange(0, 360, STEP_DEG)
-    dists = np.arange(RAY_KM, MAX_KM + RAY_KM, RAY_KM)
-    B, D = np.meshgrid(bearings, dists, indexing='ij')
-    la, lo = destination(ORIGIN[0], ORIGIN[1], B, D)
-    hit = shapely.contains_xy(land(), lo, la)
-    reach = np.where(hit.any(axis=1), dists[np.argmax(hit, axis=1)] - RAY_KM, MAX_KM).astype(float)
-    return dict(origin=list(ORIGIN), step=STEP_DEG, maxKm=MAX_KM, reach=[int(v) for v in reach])
+    for g in GAPS:
+        on = float(bearing(g['lat'], g['lon'], ORIGIN[0], ORIGIN[1]))      # onward, gap to Saltburn
+        km = float(gc_dist(g['lat'], g['lon'], ORIGIN[0], ORIGIN[1]))
+        travel = (bearings + 180) % 360                                     # swell from that way travels this way
+        turn = np.abs((travel - on + 540) % 360 - 180)
+        feeds = (bearings >= FEED[0]) | (bearings <= FEED[1])
+        reach = np.where((turn <= MAX_TURN) & feeds, rays(g['lat'], g['lon'], MAX_KM - km), 0)
+        out['gaps'].append(dict(name=g['name'], lat=g['lat'], lon=g['lon'], km=round(km), reach=[int(v) for v in reach]))
+    return out
 
 
 def open_sectors(window, min_km=600):
@@ -181,18 +202,21 @@ def swell_path(window, la, lo):
     the swell must leave on, and whether it's straight in (True) or through a
     gap north of Scotland (False). NaN where neither works."""
     reach, step = np.array(window['reach']), window['step']
+    idx = lambda b: (np.round(b / step).astype(int)) % len(reach)
     b_from_s = bearing(ORIGIN[0], ORIGIN[1], la, lo)
     d_direct = gc_dist(ORIGIN[0], ORIGIN[1], la, lo)
-    seen = reach[(np.round(b_from_s / step).astype(int)) % len(reach)] >= d_direct - 25
+    seen = reach[idx(b_from_s)] >= d_direct - 25
     best_d = np.where(seen, d_direct, np.inf)
     aim = np.where(seen, bearing(la, lo, ORIGIN[0], ORIGIN[1]), np.nan)
-    # Out west and north of the Scottish mainland: in through a gap, then on down.
-    out_west = (la >= 58.5) & ~seen
-    for g in GAPS:
-        dg = gc_dist(la, lo, g[0], g[1]) + float(gc_dist(g[0], g[1], ORIGIN[0], ORIGIN[1]))
-        better = out_west & (dg < best_d)
+    # Otherwise in through a gap (where the gap's window reaches), then on down.
+    for g in window.get('gaps', []):
+        gr = np.array(g['reach'])
+        d_gap = gc_dist(g['lat'], g['lon'], la, lo)
+        via = ~seen & (gr[idx(bearing(g['lat'], g['lon'], la, lo))] >= d_gap - 25)
+        dg = d_gap + g['km']
+        better = via & (dg < best_d)
         best_d = np.where(better, dg, best_d)
-        aim = np.where(better, bearing(la, lo, g[0], g[1]), aim)
+        aim = np.where(better, bearing(la, lo, g['lat'], g['lon']), aim)
     best_d = np.where(np.isfinite(best_d), best_d, np.nan)
     return best_d, aim, seen
 
@@ -285,7 +309,10 @@ if __name__ == '__main__':
     frames = [dict(prmsl=F(z['mslp_dhpa'][i] * 10.0, la, lo), u10=F(z['u10_dms'][i] / 10, la, lo), v10=F(z['v10_dms'][i] / 10, la, lo))
               for i in range(len(z['steps']))]
     w = swell_window()
-    print('Open sectors (600 km+):', [(f'{a:.1f}', f'{b:.1f}') for a, b in open_sectors(w)])
+    print('Open sectors (1000 km+):', [(f'{a:.1f}', f'{b:.1f}') for a, b in open_sectors(w, 1000)])
+    for g in w['gaps']:
+        r = np.array(g['reach'])
+        print(f"  {g['name']}: {g['km']} km on to Saltburn; feeds from {[(f'{a:.1f}', f'{b:.1f}') for a, b in open_sectors(dict(reach=list(r), step=w['step']), 300)]}")
     for b in (340, 345, 348, 349, 350, 352, 355, 357, 358, 359, 0, 5, 10, 20, 30, 35, 40, 60, 80, 100, 110, 120):
         print(f'  {b:5.1f} deg: {w["reach"][int(b / w["step"])]} km of sea')
     print(json.dumps(storm_alerts(run, list(z['steps']), frames, w), indent=1))
