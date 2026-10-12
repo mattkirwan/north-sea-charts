@@ -19,7 +19,8 @@ const HOURS = 6; // older readings than this aren't "latest"
 const CCO_KEY = 'd36f6f6fcf2468bec6d79fe781ee6a03';
 
 const get = async (u) => {
-  const r = await fetch(u, { headers: { Referer: 'https://mattkirwan.github.io/' }, signal: AbortSignal.timeout(60e3) });
+  // The CCO API picks its format from Accept (it sends XML otherwise).
+  const r = await fetch(u, { headers: { Referer: 'https://mattkirwan.github.io/', Accept: 'application/json, text/plain, */*' }, signal: AbortSignal.timeout(60e3) });
   if (!r.ok) throw new Error(`HTTP ${r.status} for ${u}`);
   return r.text();
 };
