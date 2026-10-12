@@ -5,8 +5,8 @@
 // Sources:
 // - The National Network of Regional Coastal Monitoring Programmes (CCO API):
 //   wave buoys round the English coast, including Whitby, with height, peak
-//   period and direction. Our key was issued for mattkirwan.github.io; the
-//   site is public, so the key is too.
+//   period and direction. The key (issued for mattkirwan.github.io) comes
+//   from the CCO_API_KEY repository secret.
 // - NOAA's National Data Buoy Center, which relays the newest report from
 //   buoys and platforms worldwide, including North Sea oil and gas platforms
 //   (height only) on the WMO network, in one text file (latest_obs.txt).
@@ -16,7 +16,9 @@ import { writeFileSync } from 'node:fs';
 
 const BOX = { s: 53.5, n: 75, w: -12, e: 32 };
 const HOURS = 6; // older readings than this aren't "latest"
-const CCO_KEY = 'd36f6f6fcf2468bec6d79fe781ee6a03';
+// Until the secret is set, fall back to the key that was first committed here.
+const CCO_KEY = process.env.CCO_API_KEY || 'd36f6f6fcf2468bec6d79fe781ee6a03';
+console.log(`CCO key from ${process.env.CCO_API_KEY ? 'the repository secret' : 'the script (secret not set yet)'}`);
 
 const get = async (u) => {
   // The CCO API picks its format from Accept (it sends XML otherwise).
