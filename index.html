@@ -49,6 +49,7 @@ body.adjust .tabbar,body.adjust .subnav{pointer-events:none;opacity:.35}
 #layer{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
 #layer img{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:none;-webkit-user-drag:none}
 #layer img.on{opacity:1}
+#layer #imgWind{z-index:2;transition:none}
 
 /* Valid time, the main read-out */
 .top{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
@@ -85,6 +86,7 @@ body.adjust .tabbar,body.adjust .subnav{pointer-events:none;opacity:.35}
 .btn{width:46px;height:46px;flex:none;display:grid;place-items:center;border-radius:50%}
 .btn:active{background:rgba(232,238,241,.12)}
 .btn.play{background:var(--amber);color:var(--ink);margin:0 4px}
+.btn[aria-pressed="true"]{color:var(--amber);background:rgba(255,194,61,.14)}
 .btn svg{width:22px;height:22px}
 .run{flex:1;min-width:0;text-align:right;font-size:13px;line-height:1.35;color:var(--slate);padding-right:4px;overflow:hidden}
 .run b{color:var(--paper);font-weight:500}
@@ -305,6 +307,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
       <div id="layer">
         <img id="imgA" alt="" referrerpolicy="no-referrer" draggable="false">
         <img id="imgB" alt="" referrerpolicy="no-referrer" draggable="false">
+        <img id="imgWind" alt="" referrerpolicy="no-referrer" draggable="false">
       </div>
     </div>
     <div class="reticle" aria-hidden="true"><span>Put the UK here</span></div>
@@ -337,6 +340,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
         <button class="btn" id="prev" aria-label="Previous frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
         <button class="btn play" id="play" aria-label="Play"><svg viewBox="0 0 24 24" fill="currentColor"><path id="playIcon" d="M8 5.5v13l11-6.5z"/></svg></button>
         <button class="btn" id="next" aria-label="Next frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+        <button class="btn" id="windBtn" aria-pressed="false" aria-label="Wind arrows" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10.5a2.5 2.5 0 1 0-2.5-2.5M3 12h15.5a2.5 2.5 0 1 1-2.5 2.5M3 16h7.5a2.5 2.5 0 1 1-2.5 2.5"/></svg></button>
         <div class="run" id="run">Finding the latest run</div>
       </div>
     </footer>
@@ -397,6 +401,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="field"><span>Model run</span><div class="seg" id="segRun"></div></div>
     <div class="field"><span>How far ahead</span><div class="seg" id="segDays"></div></div>
     <div class="field"><span>Time between frames</span><div class="seg" id="segStep"></div></div>
+    <div class="field"><span>Wind arrows</span><div class="seg" id="segWind"></div></div>
     <div class="field"><span>Playback speed</span><div class="seg" id="segSpeed"></div></div>
     <div class="actions">
       <button class="pill" id="actAdjust">Adjust view</button>
@@ -473,12 +478,16 @@ SOURCES.ours = {
   region: 'WIDE', // the wide map, from the Atlantic to Svalbard (was 'GFS', the North Sea only)
   base: 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/charts/',
   url(runMs, step) { return `${this.base}f${String(step).padStart(3, '0')}.png?run=${runKey(runMs)}&map=wide${cacheBust ? '&v=' + cacheBust : ''}`; },
+  // The wind layer: transparent arrows the same size as the chart, from the same run.
+  hasWind: false,
+  windUrl(runMs, step) { return `${this.base}w${String(step).padStart(3, '0')}.png?run=${runKey(runMs)}${cacheBust ? '&v=' + cacheBust : ''}`; },
   page() { return 'https://github.com/mattkirwan/north-sea-charts/tree/charts'; },
   async latest() {
     const r = await fetchT(`${this.base}manifest.json?t=${Math.floor(Date.now() / 300e3)}`, { cache: 'no-store' }, 15e3);
     if (!r.ok) throw new Error(`manifest ${r.status}`);
     const m = await r.json();
     if (m.home) homeFrom(m.home);
+    this.hasWind = !!m.wind;
     return { ms: m.run, how: 'manifest' };
   }
 };
@@ -488,6 +497,7 @@ const REGIONS = [['EU', 'North Sea crop'], ['UK', 'UK map']];
 const DAYS = [[5, '5 days'], [7, '7 days'], [10, '10 days'], [16, '16 days']];
 const STEPS = [[6, '6 hours'], [3, '3 hours']];
 const SPEEDS = [[700, 'Slow'], [420, 'Normal'], [220, 'Fast']];
+const WIND_LAYER = [[false, 'Off'], [true, 'On']];
 // Starting crop as a fraction of the source image: centre point and visible height.
 const DEFAULT_VIEWS = { EU: { cx: 0.53, cy: 0.34, span: 0.68 }, UK: { cx: 0.5, cy: 0.5, span: 1.02 }, WIDE: { cx: 0.5309, cy: 0.4806, span: 0.705 } };
 // Our wide map's North Sea framing, from its manifest. A crop saved on the old
@@ -502,7 +512,7 @@ function homeFrom(home) {
   if (SOURCE === SOURCES.ours && !exploring) { view = loadView(); applyView(); }
 }
 const SRCS = [['ours', 'Ours'], ['wz', 'Wetterzentrale']];
-const DEFAULTS = { src: 'ours', chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
+const DEFAULTS = { src: 'ours', windLayer: false, chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
 
 const opts = Object.assign({}, DEFAULTS, store.get('nsv.opts', {}));
 const saveOpts = () => store.set('nsv.opts', opts);
@@ -695,7 +705,42 @@ async function swapTo(f) {
   back.classList.add('on');
   front.classList.remove('on');
   [front, back] = [back, front];
+  showWind(f);
 }
+
+/* Wind arrows: a layer over our charts, on or off with the button by the run
+   line (or in Settings). The new frame's arrows replace the old once decoded,
+   and every frame's are fetched ahead while the layer is on, so playback
+   keeps up. */
+const windImg = $('#imgWind'), windBtn = $('#windBtn');
+let windAhead = { key: '', imgs: [] };
+const windOn = () => opts.windLayer && SOURCE === SOURCES.ours && SOURCES.ours.hasWind;
+function showWind(f) {
+  if (!windOn() || !f) { windImg.classList.remove('on'); return; }
+  const url = SOURCES.ours.windUrl(runMs, f.step);
+  if (windImg.dataset.url === url) { windImg.classList.add('on'); return; }
+  windImg.dataset.url = url;
+  windImg.src = url;
+  windImg.decode().then(() => { if (windImg.dataset.url === url) windImg.classList.add('on'); }).catch(() => {});
+}
+function fetchWindAhead() {
+  const key = `${runMs}|${frames.length}|${cacheBust}`;
+  if (!windOn() || windAhead.key === key) return;
+  windAhead = { key, imgs: frames.map((f) => { const im = new Image(); im.referrerPolicy = 'no-referrer'; im.src = SOURCES.ours.windUrl(runMs, f.step); return im; }) };
+}
+function updateWind() {
+  const can = SOURCE === SOURCES.ours && SOURCES.ours.hasWind;
+  windBtn.hidden = !can;
+  windBtn.setAttribute('aria-pressed', String(!!opts.windLayer && can));
+  fetchWindAhead();
+  showWind(frames[idx]);
+}
+windBtn.addEventListener('click', () => {
+  opts.windLayer = !opts.windLayer;
+  saveOpts();
+  updateWind();
+  toast(opts.windLayer ? 'Wind arrows on' : 'Wind arrows off');
+});
 
 function renderMeta(f) {
   $('#day').textContent = fDay.format(f.valid);
@@ -709,6 +754,7 @@ function renderMeta(f) {
 }
 
 function updateRunLine() {
+  updateWind();
   // Banner until the first chart is on screen, or if none could be loaded.
   const wait = $('#waitPressure'), ok = frames.some((f) => f.status === 'ok');
   const pending = !runMs || frames.some((f) => f.status === 'pending');
@@ -1015,6 +1061,7 @@ function seg(el, key, items) {
 function onOptChange(key) {
   if (key === 'speed') return;
   if (key === 'speedUnit') { renderLocal(); return; }
+  if (key === 'windLayer') { updateWind(); return; }
   if (key === 'src') { SOURCE = SOURCES[opts.src] || SOURCES.ours; showSourceFields(); }
   if (key === 'region' || key === 'src') { view = loadView(); natural = null; maybeHint(); }
   if (key !== 'runOffset') probeCache.clear();
@@ -1064,6 +1111,7 @@ function renderSettings() {
   seg($('#segDays'), 'days', DAYS);
   seg($('#segStep'), 'step', STEPS);
   seg($('#segSpeed'), 'speed', SPEEDS);
+  seg($('#segWind'), 'windLayer', WIND_LAYER);
   $('#actFull').hidden = !document.fullscreenEnabled;
   $('#actFull').textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
   renderFine();
@@ -1071,6 +1119,7 @@ function renderSettings() {
 // Our charts come in one style and area, every 6 hours for 7 days, latest run only.
 function showSourceFields() {
   ['#segChart', '#segRegion', '#segRun', '#segDays', '#segStep'].forEach((q) => { $(q).closest('.field').hidden = SOURCE === SOURCES.ours; });
+  $('#segWind').closest('.field').hidden = SOURCE !== SOURCES.ours;
 }
 $('#actAdjust').addEventListener('click', enterAdjust);
 $('#actReload').addEventListener('click', () => {

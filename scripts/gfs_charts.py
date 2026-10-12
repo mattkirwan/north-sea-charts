@@ -208,12 +208,12 @@ def draw_wind(step, f, path):
     speed = np.hypot(u, v)
     if np.isnan(speed).any() or speed.max() > 200:
         raise RuntimeError(f'f{step:03d}: implausible wind, max {np.nanmax(speed):.0f} kn')
-    calm = speed < 4
+    calm = speed < 6  # light enough not to matter, and only an arrowhead at this size
     u, v = np.where(calm, np.nan, u), np.where(calm, np.nan, v)
     fig, ax = map_figure()
     fig.patch.set_alpha(0)
     ax.set_facecolor((0, 0, 0, 0))
-    q = ax.quiver(lons, lats, u, v, transform=ccrs.PlateCarree(), regrid_shape=30, pivot='middle',
+    q = ax.quiver(lons, lats, u, v, transform=ccrs.PlateCarree(), regrid_shape=24, pivot='middle',
                   scale=75, scale_units='inches', width=0.0026, headwidth=3.6, headlength=4.2, headaxislength=3.8,
                   color='white', edgecolor='#0F2230', linewidth=0.7, zorder=5)
     k = ax.quiverkey(q, 0.955, 0.035, 30, '30 kn', labelpos='W', coordinates='axes', color='white',
