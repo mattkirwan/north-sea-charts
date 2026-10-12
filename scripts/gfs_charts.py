@@ -40,10 +40,12 @@ from scipy.ndimage import gaussian_filter, maximum_filter, minimum_filter
 from gfs_latest import STEPS, grib_url, label, latest_run
 
 AREA = dict(w=-90, e=90, s=20, n=90)          # data we draw: well beyond the map, so colour fills it
-STORE = dict(w=-30, e=30, s=45, n=80)         # data we save: the map with a margin
-VIEW = [-20, 20, 49, 78]                       # map extent: lon W, lon E, lat S, lat N
+STORE = dict(w=-50, e=45, s=35, n=85)         # data we save: the map with a margin
+# Map extent (lon W, lon E, lat S, lat N): out west over Iceland into the
+# Atlantic for lows on their way, all of Svalbard, and down to Biscay.
+VIEW = [-40, 35, 42, 82]
 SALTBURN = (54.583, -0.973)
-PROJ = ccrs.LambertConformal(central_longitude=5, central_latitude=62, standard_parallels=(55, 70))
+PROJ = ccrs.LambertConformal(central_longitude=-2, central_latitude=62, standard_parallels=(50, 72))
 FIELDS = {'PRMSL:mean sea level': 'prmsl', 'HGT:500 mb': 'gh'}
 
 INK, PAPER, COAST = '#173242', '#E8EEF1', '#0F2230'
@@ -126,7 +128,7 @@ def draw(run, step, f, path):
     pax.set_extent(VIEW, crs=ccrs.PlateCarree())
     x0, x1, y0, y1 = pax.get_extent()
     plt.close(probe)
-    width = 9.0
+    width = 11.0
     fig = plt.figure(figsize=(width, width * (y1 - y0) / (x1 - x0)), dpi=100)
     ax = fig.add_axes([0, 0, 1, 1], projection=PROJ)
     ax.set_extent(VIEW, crs=ccrs.PlateCarree())
@@ -149,7 +151,7 @@ def draw(run, step, f, path):
             ax.text(lo, la - 0.9, f'{v:.0f}', color=colour, fontsize=11, fontweight='bold', ha='center', va='top', transform=ccrs.PlateCarree(), zorder=5, path_effects=white)
     ax.plot(SALTBURN[1], SALTBURN[0], 'o', ms=6, color='#FFC23D', mec=COAST, mew=1, transform=ccrs.PlateCarree(), zorder=6)
     valid = run + dt.timedelta(hours=step)
-    ax.text(0.012, 0.008, f'GFS {run:%Hz %d %b} +{step}h · valid {valid:%a %d %b %H}z · NOAA data', transform=ax.transAxes,
+    ax.text(0.012, 0.008, f'Run {run:%Hz %d %b} +{step}h · valid {valid:%a %d %b %H}z', transform=ax.transAxes,
             color=COAST, fontsize=9, zorder=6)
     ax.axis('off')
     fig.savefig(path, facecolor=INK)
