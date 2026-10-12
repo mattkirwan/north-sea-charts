@@ -58,6 +58,8 @@ body.adjust .tabbar,body.adjust .subnav{pointer-events:none;opacity:.35}
 #travel .ink{stroke:#fff}
 #travel text{font:700 12px var(--f-body);fill:#0F2230}
 #travel .win{fill:rgba(255,194,61,.13);stroke:rgba(255,194,61,.7);stroke-width:1.2;stroke-linejoin:round}
+#travel .bend{fill:rgba(255,194,61,.06);stroke:rgba(255,194,61,.45);stroke-width:1;stroke-dasharray:4 4;stroke-linejoin:round}
+#travel .arc.ink.faint{stroke:rgba(255,255,255,.65)}
 #travel .tag rect{fill:#fff;stroke:rgba(15,34,48,.6)}
 #travel .key rect{fill:rgba(15,34,48,.85)}
 #travel .key text{fill:#fff;font-weight:600}
@@ -789,6 +791,18 @@ function destination(km, bearing) {
   const l2 = l1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(f1), Math.cos(d) - Math.sin(f1) * Math.sin(f2));
   return [f2 / r, l2 / r];
 }
+function destFrom(lat, lon, km, bearing) {
+  const r = Math.PI / 180, d = km / 6371, b = bearing * r, f1 = lat * r, l1 = lon * r;
+  const f2 = Math.asin(Math.sin(f1) * Math.cos(d) + Math.cos(f1) * Math.sin(d) * Math.cos(b));
+  const l2 = l1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(f1), Math.cos(d) - Math.sin(f1) * Math.sin(f2));
+  return [f2 / r, l2 / r];
+}
+function distBearing(lat1, lon1, lat2, lon2) {
+  const r = Math.PI / 180, f1 = lat1 * r, f2 = lat2 * r, dl = (lon2 - lon1) * r;
+  const d = 2 * 6371 * Math.asin(Math.sqrt(Math.sin((f2 - f1) / 2) ** 2 + Math.cos(f1) * Math.cos(f2) * Math.sin(dl / 2) ** 2));
+  const b = (Math.atan2(Math.sin(dl) * Math.cos(f2), Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl)) / r + 360) % 360;
+  return [d, b];
+}
 // Latitude and longitude to a fraction of the chart, between the grid's points.
 function onChart(lat, lon) {
   const g = travelGrid, i = (lon - g.lon0) / g.step, j = (lat - g.lat0) / g.step;
@@ -800,7 +814,8 @@ function onChart(lat, lon) {
 const hoursLabel = (h) => { const d = Math.floor(h / 24), r = h % 24; return d ? `${d}d${r ? ' ' + r + 'h' : ''}` : `${r}h`; };
 // The swell window (window.json, from the chart job): km of open sea along
 // each bearing from just off Saltburn before the first land (small islands
-// like Shetland and Orkney don't count: their shadow fills back in). Shaded.
+// like Shetland and Orkney don't count: their shadow fills back in), and the
+// two bends allowed at its edges. Shaded.
 let travelWindow = null;
 function drawTravel() {
   if (!travelOn() || !travelGrid || !natural || !view) { travelSvg.innerHTML = ''; return; }
@@ -814,6 +829,17 @@ function drawTravel() {
     const w = travelWindow, pts = [];
     for (let i = 0; i < w.reach.length; i++) pts.push(pt(scr(...destination(Math.min(w.reach[i], TRAVEL.maxKm), i * w.step))));
     shade = `<path class="win" d="M${pts.join('L')}Z"/>`;
+    // The bends at the window's edges (round the Aberdeenshire corner, and
+    // along the Yorkshire coast): fainter, as less of the swell gets round.
+    (w.bends || []).forEach((g) => {
+      const far = [], near = [];
+      g.reach.forEach((r, i) => {
+        if (r <= g.start) return;
+        far.push(pt(scr(...destFrom(g.lat, g.lon, Math.min(r, TRAVEL.maxKm - g.km), i * w.step))));
+        near.push(pt(scr(...destFrom(g.lat, g.lon, g.start, i * w.step))));
+      });
+      if (far.length) shade += `<path class="bend" d="M${far.join('L')}L${near.reverse().join('L')}Z"/>`;
+    });
   }
   for (let h = TRAVEL.stepH; kmh * h <= ruleEnd; h += TRAVEL.stepH) {
     const km = kmh * h;
@@ -831,6 +857,20 @@ function drawTravel() {
       for (let b = TRAVEL.from; b <= end; b += 2) d += (b === TRAVEL.from ? 'M' : 'L') + pt(scr(...destination(km, b % 360)));
     }
     if (d) arcs += `<path class="arc halo" d="${d}"/><path class="arc ink" d="${d}"/>`;
+    // On round the bends, timed via the bend, where the sea can't see Saltburn straight.
+    if (travelWindow) (travelWindow.bends || []).forEach((g) => {
+      const rest = km - g.km, step = travelWindow.step, n = g.reach.length;
+      if (rest <= Math.max(g.start, 10)) return;
+      let db = '', onb = false;
+      for (let k = 0; k <= n; k++) {
+        const i = k % n, p = destFrom(g.lat, g.lon, rest, i * step);
+        const [dd, bb] = distBearing(travelWindow.origin[0], travelWindow.origin[1], p[0], p[1]);
+        const direct = travelWindow.reach[Math.round(bb / step) % n] >= dd - 25;
+        const open = g.reach[i] >= rest && !direct;
+        if (open) { db += (onb ? 'L' : 'M') + pt(scr(...p)); onb = true; } else onb = false;
+      }
+      if (db) arcs += `<path class="arc halo" d="${db}"/><path class="arc ink faint" d="${db}"/>`;
+    });
     const [x, y] = scr(...destination(km, TRAVEL.rule)), label = hoursLabel(h), lw = 8 + label.length * 7.4;
     tags += `<g class="tag" transform="translate(${(x + 6).toFixed(1)},${(y - 10).toFixed(1)})"><rect width="${lw.toFixed(0)}" height="20" rx="6"/><text x="${(lw / 2).toFixed(1)}" y="14.5" text-anchor="middle">${label}</text></g>`;
   }
@@ -2046,7 +2086,7 @@ function renderAlerts() {
     const el = document.createElement('button');
     el.className = 'alert';
     const pulses = a.pulses.map((p) => `<li><b>${whenUk(p.arriveFrom)} – ${whenUk(p.arriveTo)}</b> · 14–17 s · from ${escapeHtml(p.where)}` +
-      (p.path === 'gaps' ? ', via the gaps north of Scotland' : ', straight down the North Sea') + '</li>').join('');
+      (p.path === 'bend' ? ', bending in round the headlands, so smaller' : ', straight down the North Sea') + '</li>').join('');
     const gaps = a.missed ? `Its strongest winds (${a.missed.kn} kn, ${whenUk(a.missed.at)}, ${escapeHtml(a.missed.where)}) aren't aimed down our window, so most of that swell goes elsewhere; at most a trace reaches us. ` : '';
     el.innerHTML = `<div class="k">Bomb low · deepest ${whenUk(a.at)}</div>` +
       `<div class="ah">${a.hPa} hPa ${escapeHtml(a.where)}</div>` +
