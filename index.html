@@ -234,6 +234,21 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 .alert li{font-size:14px;line-height:1.4;padding:6px 0;border-top:1px solid var(--hair)}
 .alert li b{color:var(--paper);font-weight:600}
 .alert .go{font-size:13px;color:var(--amber);margin-top:8px}
+.swc{margin-top:12px;border-radius:14px;padding:12px 14px 13px;background:rgba(126,214,195,.08);box-shadow:inset 3px 0 0 var(--glass)}
+.swc.past{box-shadow:inset 3px 0 0 var(--slate);background:rgba(232,238,241,.05)}
+.swc .k{font-size:13px;color:var(--glass);font-weight:600}
+.swc.past .k{color:var(--slate)}
+.swc .ah{font-family:var(--f-cond);font-weight:700;font-size:26px;line-height:1.1;margin-top:4px}
+.swc .ah small{font-size:15px;color:var(--slate);font-weight:600}
+.swc .d{font-size:14px;color:var(--slate);margin-top:6px;line-height:1.4}
+.swc .d b{color:var(--paper);font-weight:600}
+.swc svg{display:block;width:100%;height:auto;margin-top:10px;overflow:visible}
+.swc .sx{font:500 10px var(--f-body);fill:var(--slate)}
+.swc .key{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--slate);margin-top:4px}
+.swc .key i{display:inline-block;width:14px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
+.swc ul{list-style:none;margin:10px 0 0;padding:0}
+.swc li{font-size:13px;line-height:1.4;padding:5px 0;border-top:1px solid var(--hair);color:var(--slate);font-variant-numeric:tabular-nums}
+.swc li b{color:var(--paper);font-weight:600}
 .tsun .big{font-size:34px}
 .tsun .big svg{color:var(--amber);width:26px;height:26px}
 .tsun .edge{font-weight:500;color:var(--paper)}
@@ -416,9 +431,9 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
   </section>
 </div>
 
-<!-- Predictions (beta): storm alerts, the state of things now with our own
-     size estimate, and reports of what it was really like, to build a history
-     to check and tune the estimates against. -->
+<!-- Predictions (beta): storm alerts, coming swells held as first predicted,
+     the state of things now with our own size estimate, and reports of what it
+     was really like, to build a history to check and tune them against. -->
 <main class="view panel" id="vPredict" aria-labelledby="predTitle" hidden>
   <div class="thead">
     <div class="whead">
@@ -428,6 +443,10 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="wsub">Beta · Saltburn</div>
   </div>
   <div id="predAlerts"></div>
+  <section class="wday" aria-labelledby="predSwH">
+    <h3 id="predSwH">Coming swells <small id="predSwNote"></small></h3>
+    <div id="predSwells"></div>
+  </section>
   <section class="wday" aria-labelledby="predNowH">
     <h3 id="predNowH">Now <small>what we know, and our estimate</small></h3>
     <div class="tile" id="predNow"></div>
@@ -448,7 +467,8 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div id="predHist"></div>
     <div class="links" style="margin-top:12px"><button class="pill" id="repExport">Export all</button><button class="pill" id="repPull">Sync with GitHub</button></div>
   </section>
-  <p class="fine">The estimate is a first go: breaking height from the nearest buoy's height and period (Komar and Gaughan), less for swell arriving at an angle to Saltburn's beach. Each report keeps the readings and the estimate from the moment it was made, so we can see how far out the estimates are and tune them.</p>
+  <p class="fine">Coming swells are our own forecast from each model run's winds: swell grown wherever the wind blows down our window towards Saltburn, sent on at the speed for its period and smaller with distance. The first run to see a swell coming (a day or more ahead) fixes its prediction, which never changes; every run after adds its own view, then the Whitby buoy and your reports say what really came.</p>
+  <p class="fine">The estimate now is breaking height from the nearest buoy's height and period (Komar and Gaughan), less for swell arriving at an angle to Saltburn's beach. Each report keeps the readings, the estimate and the coming swells from the moment it was made, so we can see how far out they are and tune them.</p>
 </main>
 
 <!-- Settings: wind units and the pressure charts' options -->
@@ -2183,14 +2203,17 @@ function showBeta() {
 
 // Breaking height from deep-water height and period (Komar and Gaughan, 1972),
 // less for swell coming in at an angle to the beach.
+const offBeach = (d) => Math.abs(((d - BEACH_FACES) % 360 + 540) % 360 - 180);
+function breakFt(H0, T, d) {
+  const off = offBeach(d);
+  if (off >= 90 || !(H0 > 0) || !(T > 0)) return 0;
+  return 0.39 * Math.pow(9.81, 0.2) * Math.pow(T * H0 * H0, 0.4) * Math.sqrt(Math.cos(off * Math.PI / 180)) * FT;
+}
 function estimate() {
   const st = obs && obs.stations, b = st && st.find((s) => s.p != null && s.d != null);
   if (!b) return null;
-  const H0 = b.h, T = b.p, hb = 0.39 * Math.pow(9.81, 0.2) * Math.pow(T * H0 * H0, 0.4);
-  const off = Math.abs(((b.d - BEACH_FACES) % 360 + 540) % 360 - 180);
-  const fac = off >= 90 ? 0 : Math.sqrt(Math.cos(off * Math.PI / 180));
-  const ft = hb * fac * FT;
-  return { model: 'v0', from: b.name, ft: +ft.toFixed(1), lo: +(ft * 0.75).toFixed(1), hi: +(ft * 1.3).toFixed(1), angle: Math.round(off) };
+  const ft = breakFt(b.h, b.p, b.d);
+  return { model: 'v0', from: b.name, ft: +ft.toFixed(1), lo: +(ft * 0.75).toFixed(1), hi: +(ft * 1.3).toFixed(1), angle: Math.round(offBeach(b.d)) };
 }
 const sizeWord = (ft) => ft < 0.7 ? 'flat to ankle' : ft < 1.3 ? 'ankle to knee' : ft < 2 ? 'knee' : ft < 3 ? 'waist' : ft < 4 ? 'chest' : ft < 6 ? 'head high' : ft < 8.5 ? 'overhead' : 'double overhead+';
 
@@ -2206,13 +2229,106 @@ function snapshot() {
     wind: wh && wh.kn != null ? { kn: +wh.kn.toFixed(1), from: wh.from, gust: wh.gust ?? null } : null,
     tide: level != null ? { m: +level.toFixed(2), rising: next ? next.hi : null, next: next ? { hi: next.hi, ms: next.ms, m: +next.m.toFixed(2) } : null } : null,
     alerts: stormAlerts && stormAlerts.list ? stormAlerts.list.map((a) => ({ hPa: a.hPa, where: a.where, at: a.at, pulses: a.pulses })) : [],
-    run: stormAlerts ? stormAlerts.runLabel : null
+    run: stormAlerts ? stormAlerts.runLabel : null,
+    swells: comingSwells().map((sw) => ({ id: sw.id, held: { ft: sw.held.ft, peak: sw.held.peak, p: sw.held.p, d: sw.held.d }, latest: latestView(sw) }))
   };
+}
+
+/* Coming swells. After each model run the chart job forecasts the swell for
+   Saltburn from its winds, and keeps every swell it sees coming on the
+   `history` branch (scripts/history.py, held.json): its prediction as first
+   made, held unchanged; each later run's view of it; and once it's been, the
+   Whitby buoy's readings. Each card lays those over each other with any
+   reports from the time, so we can see how the forecast moved and what came. */
+let heldSwells = store.get('nsv.held', null), heldBusy = false;
+async function refreshHeld(force) {
+  if (heldBusy || (!force && heldSwells && Date.now() - heldSwells.at < 20 * 60e3)) return;
+  heldBusy = true;
+  try {
+    const r = await fetchT(`https://raw.githubusercontent.com/${REPO}/history/held.json?t=${Math.floor(Date.now() / 300e3)}`, { cache: 'no-store' }, 15e3);
+    if (r.ok) {
+      const d = await r.json(), keep = Date.now() - 10 * 24 * H;
+      // Only what's shown: swells still coming, and the last ten days' worth.
+      const list = (d.swells || []).filter((sw) => sw.status === 'coming' || sw.held.peak > keep);
+      heldSwells = { at: Date.now(), updated: d.updated, list };
+      store.set('nsv.held', heldSwells);
+    }
+  } catch {}
+  heldBusy = false;
+  renderPredict();
+}
+const latestView = (sw) => { const v = sw.views.at(-1); return v.gone ? { gone: true, run: v.run } : { run: v.run, ft: v.ft, peak: v.peak, p: v.p, d: v.d }; };
+const lastSeen = (sw) => sw.views.filter((v) => !v.gone).at(-1);
+const comingSwells = () => (heldSwells ? heldSwells.list.filter((sw) => sw.status === 'coming') : []);
+const runName = (ms) => `${fUkDay.format(ms)} ${String(new Date(ms).getUTCHours()).padStart(2, '0')}z`;
+const signed = (v, unit) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(v)}${unit}`;
+
+// Held (dashed), latest run (solid), Whitby (dots), reports (triangles), over the swell's time.
+function swellPlot(sw, buoyRows, reps) {
+  const pts = [...sw.heldHourly, ...sw.latestHourly];
+  if (pts.length < 2) return '';
+  const t0 = Math.min(...pts.map((r) => r[0])), t1 = Math.max(...pts.map((r) => r[0]));
+  const rows = buoyRows.filter((r) => r[0] >= t0 && r[0] <= t1 && r[1] != null && r[2] != null && r[3] != null).map((r) => [r[0], breakFt(r[1], r[2], r[3])]);
+  const rp = reps.filter((r) => r.at >= t0 && r.at <= t1);
+  const top = Math.max(2, ...pts.map((r) => r[1]), ...rows.map((r) => r[1]), ...rp.map((r) => r.sizeFt || 0)) * 1.12;
+  const W = 320, Hh = 110, x = (t) => ((t - t0) / (t1 - t0)) * W, y = (ft) => Hh - 16 - (ft / top) * (Hh - 24);
+  const line = (list) => list.map((r, i) => `${i ? 'L' : 'M'}${x(r[0]).toFixed(1)},${y(r[1]).toFixed(1)}`).join('');
+  let g = `<line x1="0" x2="${W}" y1="${Hh - 16}" y2="${Hh - 16}" stroke="var(--hair)"/>`;
+  for (let f = 2; f < top; f += top > 12 ? 4 : 2) g += `<line x1="0" x2="${W}" y1="${y(f)}" y2="${y(f)}" stroke="var(--hair)" stroke-dasharray="2 4"/><text x="0" y="${y(f) - 2}" class="sx">${f} ft</text>`;
+  for (let t = Math.ceil(t0 / H) * H; t <= t1; t += H) if (+fUkHour.format(t) === 12) g += `<text x="${x(t).toFixed(1)}" y="${Hh - 3}" class="sx" text-anchor="middle">${fUkDay.format(t)}</text>`;
+  const now = Date.now();
+  if (now > t0 && now < t1) g += `<line x1="${x(now)}" x2="${x(now)}" y1="4" y2="${Hh - 16}" stroke="var(--paper)" stroke-opacity=".5"/><text x="${x(now) + 3}" y="10" class="sx">now</text>`;
+  if (sw.views.length > 1) g += `<path d="${line(sw.latestHourly)}" fill="none" stroke="var(--glass)" stroke-width="2"/>`;
+  g += `<path d="${line(sw.heldHourly)}" fill="none" stroke="var(--amber)" stroke-width="2" stroke-dasharray="5 4"/>`;
+  g += rows.map((r) => `<circle cx="${x(r[0]).toFixed(1)}" cy="${y(r[1]).toFixed(1)}" r="2" fill="var(--paper)"/>`).join('');
+  g += rp.map((r) => { const cx = x(r.at), cy = y(r.sizeFt || 0); return `<path d="M${cx - 5},${cy + 4}L${cx + 5},${cy + 4}L${cx},${cy - 5}Z" fill="var(--amber)"/>`; }).join('');
+  return `<svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Predicted and measured size over the swell's time">${g}</svg>` +
+    `<div class="key"><span><i style="border-color:var(--amber);border-top-style:dashed"></i>Held</span>${sw.views.length > 1 ? '<span><i style="border-color:var(--glass)"></i>Latest run</span>' : ''}` +
+    `${rows.length ? '<span>● Whitby</span>' : ''}${rp.length ? '<span style="color:var(--amber)">▲ Reports</span>' : ''}</div>`;
+}
+
+function renderSwells() {
+  const box = $('#predSwells'), note = $('#predSwNote');
+  note.textContent = heldBusy && !heldSwells ? 'loading…' : heldSwells && heldSwells.updated ? `updated ${ago(heldSwells.updated)}` : '';
+  const list = heldSwells ? heldSwells.list.slice() : [];
+  // Coming first, soonest first; then those that have been, latest first.
+  list.sort((a, b) => (b.status === 'coming') - (a.status === 'coming') || (a.status === 'coming' ? lastSeen(a).peak - lastSeen(b).peak : lastSeen(b).peak - lastSeen(a).peak));
+  if (!list.length) {
+    box.innerHTML = `<div class="d" style="color:var(--slate);font-size:14px">${heldSwells ? 'Nothing knee high or more on its way in the latest runs.' : heldBusy ? 'Loading the coming swells' : "Couldn't load the coming swells."}</div>`;
+    return;
+  }
+  const whitby = obs && obs.stations.find((s) => s.name === 'Whitby');
+  box.innerHTML = '';
+  list.forEach((sw) => {
+    const h = sw.held, last = sw.views.at(-1), seen = lastSeen(sw), past = sw.status !== 'coming';
+    const t0 = Math.min(...sw.views.filter((v) => !v.gone).map((v) => v.start)) - 6 * H, t1 = Math.max(...sw.views.filter((v) => !v.gone).map((v) => v.end)) + 12 * H;
+    const reps = reports.filter((r) => r.at >= t0 && r.at <= t1);
+    const buoyRows = sw.observed ? sw.observed.rows : whitby && whitby.hist ? whitby.hist : [];
+    const ahead = Math.round((h.peak - h.run) / (24 * H));
+    const el = document.createElement('div');
+    el.className = 'swc' + (past ? ' past' : '');
+    const head = last.gone
+      ? `<div class="ah">Gone <small>from the ${runName(last.run)} run</small></div>`
+      : `<div class="ah">${last.ft.toFixed(1)} ft <small>${sizeWord(last.ft)} · ${Math.round(last.p)} s</small></div>`;
+    const runs = sw.views.slice(-6).map((v) => `<li><b>${runName(v.run)}</b> · ` + (v.gone ? 'not in this run'
+      : `${v.ft.toFixed(1)} ft, ${Math.round(v.p)} s from ${compass(v.d)}, peak ${whenUk(v.peak)}` +
+        (v.run !== h.run ? ` (${signed(+(v.ft - h.ft).toFixed(1), ' ft')}, ${signed(Math.round((v.peak - h.peak) / H), ' h')})` : ' (held)')) + '</li>').join('');
+    const more = sw.views.length > 6 ? `<li>…and ${sw.views.length - 6} earlier</li>` : '';
+    const o = sw.observed;
+    const came = o ? `<div class="d"><b>What came:</b> ${o.buoy} peaked at ${feet(o.h)} ft (${o.h} m)${o.p ? ` at ${Math.round(o.p)} s` : ''}${o.d != null ? ` from ${compass(o.d)}` : ''}, ${whenUk(o.at)}${o.ft != null ? `: about ${o.ft} ft at Saltburn by the same sums` : ''}.</div>`
+      : past ? '<div class="d">Waiting for the Whitby readings from its time.</div>' : '';
+    const repl = reps.length ? '<ul>' + reps.sort((a, b) => a.at - b.at).map((r) => `<li><b>${escapeHtml(r.spot)}</b> · ${(SIZES.find((x) => x[0] === r.size) || [, r.size])[1]}${r.quality ? ', ' + r.quality : ''} · ${whenUk(r.at)}</li>`).join('') + '</ul>' : '';
+    el.innerHTML = `<div class="k">${past ? 'Been' : 'Peak'} ${whenUk(seen.peak)} · from ${compass(seen.d)}</div>${head}` +
+      `<div class="d">${seen.h.toFixed(1)} m at ${Math.round(seen.p)} s, from winds ${/^\d/.test(seen.where) ? 'at' : 'over'} ${escapeHtml(seen.where)}. <b>Held</b> from the ${runName(h.run)} run, ${ahead} day${ahead === 1 ? '' : 's'} ahead: ${h.ft.toFixed(1)} ft, ${Math.round(h.p)} s from ${compass(h.d)}, peak ${whenUk(h.peak)}.</div>` +
+      swellPlot(sw, buoyRows, reps) + came + `<ul>${runs}${more}</ul>` + repl;
+    box.appendChild(el);
+  });
 }
 
 function renderPredict() {
   if (!showing('predict')) return;
   renderAlerts();
+  renderSwells();
   const box = $('#predNow'), snap = snapshot(), est = estimate();
   const b = snap.buoys && snap.buoys[0], w = snap.wind, t = snap.tide;
   box.innerHTML = (est
@@ -2527,7 +2643,7 @@ function renderLocal() {
 function refreshLocal(force) {
   const now = route === 'today' || route === 'predict';
   if (route === 'buoys' || now) refreshSwell(force);
-  if (route === 'predict') { refreshAlerts(force); syncReports(); }
+  if (route === 'predict') { refreshAlerts(force); refreshHeld(force); syncReports(); }
   if (now || route === 'wind') refreshWind(force);
   if (now || route === 'tides') refreshTides(force);
 }

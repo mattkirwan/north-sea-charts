@@ -80,3 +80,25 @@ jobs:
           git add -A
           git commit -q -m "GFS charts $(python3 -c 'import json; print(json.load(open("manifest.json"))["runLabel"])')"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch"
+      - name: Keep the history
+        # Every run's swell forecast, the buoy readings, and each swell held
+        # as first predicted (scripts/history.py), on the history branch,
+        # which only ever grows. Never holds the charts up.
+        if: steps.pub.outputs.go && !inputs.quick
+        continue-on-error: true
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          [ -f "$RUNNER_TEMP/charts/forecast.json" ] || { echo 'No forecast this run'; exit 0; }
+          url="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          h="$RUNNER_TEMP/history"
+          git clone -q --depth 1 --branch history "$url" "$h"
+          curl -fsS "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/data/waves.json?t=$(date +%s)" -o "$RUNNER_TEMP/waves.json" || echo '{}' > "$RUNNER_TEMP/waves.json"
+          python scripts/history.py "$RUNNER_TEMP/charts" "$RUNNER_TEMP/waves.json" "$h"
+          cd "$h"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -q -m "History: GFS $(python3 -c 'import json; print(json.load(open("'"$RUNNER_TEMP"'/charts/manifest.json"))["runLabel"])')"
+          git push -q "$url" history
