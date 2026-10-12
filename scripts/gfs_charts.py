@@ -42,6 +42,7 @@ import xarray as xr
 from matplotlib.colors import LinearSegmentedColormap
 from PIL import Image
 from scipy.ndimage import gaussian_filter, maximum_filter, minimum_filter
+from shapely.geometry import box
 from shapely.ops import unary_union
 
 from gfs_latest import STEPS, grib_url, label, latest_run
@@ -268,6 +269,11 @@ def draw_ice(outdir):
         fig, ax = map_figure()
         fig.patch.set_alpha(0)
         ax.set_facecolor((0, 0, 0, 0))
+        # The chart's areas run under the coast (it's drawn with land on top),
+        # so cut the land out, using the same coastline as the charts.
+        area = box(-60, 55, 90, 90)
+        land = unary_union([g.buffer(0) for g in shpreader.Reader(shpreader.natural_earth('50m', 'physical', 'land')).geometries()
+                            if g.intersects(area)]).intersection(area)
         ice, counts = [], {}
         for rec in shpreader.Reader(shp).records():
             tenths = ice_tenths(rec.attributes.get('CT'))
@@ -275,12 +281,15 @@ def draw_ice(outdir):
             counts[name] = counts.get(name, 0) + 1
             if tenths is None or rec.geometry is None:
                 continue
-            ice.append(rec.geometry)
-            ax.add_geometries([rec.geometry], ccrs.PlateCarree(), facecolor=(1, 1, 1, 0.3 + 0.6 * tenths / 10),
+            g = rec.geometry.buffer(0).difference(land)
+            if g.is_empty:
+                continue
+            ice.append(g)
+            ax.add_geometries([g], ccrs.PlateCarree(), facecolor=(1, 1, 1, 0.3 + 0.6 * tenths / 10),
                               edgecolor='none', zorder=3)
         if not ice:
             raise RuntimeError('no ice polygons in the chart')
-        edge = unary_union([g.buffer(0) for g in ice])
+        edge = unary_union(ice)
         ax.add_geometries([edge], ccrs.PlateCarree(), facecolor='none', edgecolor='#0F2230', linewidth=1.2, zorder=4)
         ax.add_geometries([edge], ccrs.PlateCarree(), facecolor='none', edgecolor='white', linewidth=0.5, zorder=5)
         ax.axis('off')
