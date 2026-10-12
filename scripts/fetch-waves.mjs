@@ -16,9 +16,8 @@ import { writeFileSync } from 'node:fs';
 
 const BOX = { s: 53.5, n: 75, w: -12, e: 32 };
 const HOURS = 6; // older readings than this aren't "latest"
-// Until the secret is set, fall back to the key that was first committed here.
-const CCO_KEY = process.env.CCO_API_KEY || 'd36f6f6fcf2468bec6d79fe781ee6a03';
-console.log(`CCO key from ${process.env.CCO_API_KEY ? 'the repository secret' : 'the script (secret not set yet)'}`);
+const CCO_KEY = process.env.CCO_API_KEY || '';
+if (!CCO_KEY) console.log('No CCO_API_KEY secret: skipping the Coastal Monitoring buoys');
 
 const get = async (u) => {
   // The CCO API picks its format from Accept (it sends XML otherwise).
@@ -36,7 +35,7 @@ const irishSea = (lat, lon) => lat < 55.8 && lon < -2.2;
 
 // CCO: GeoJSON of every buoy's latest reading. Dates are "YYYYMMDD#HHMMSS" UTC;
 // hs is significant height (m), tp peak period (s), pdir peak direction (deg from).
-try {
+if (CCO_KEY) try {
   const geo = JSON.parse(await get(`https://coastalmonitoring.org/observations/waves/latest?key=${CCO_KEY}&format=json`));
   const n = (v) => (v == null || v === '' ? null : +v);
   for (const f of geo.features || []) {
