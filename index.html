@@ -729,9 +729,9 @@ function fetchWindAhead() {
   windAhead = { key, imgs: frames.map((f) => { const im = new Image(); im.referrerPolicy = 'no-referrer'; im.src = SOURCES.ours.windUrl(runMs, f.step); return im; }) };
 }
 function updateWind() {
-  const can = SOURCE === SOURCES.ours && SOURCES.ours.hasWind;
-  windBtn.hidden = !can;
-  windBtn.setAttribute('aria-pressed', String(!!opts.windLayer && can));
+  // Always offered on our charts; a run drawn before the layer existed just has none.
+  windBtn.hidden = SOURCE !== SOURCES.ours;
+  windBtn.setAttribute('aria-pressed', String(!!opts.windLayer));
   fetchWindAhead();
   showWind(frames[idx]);
 }
@@ -739,7 +739,7 @@ windBtn.addEventListener('click', () => {
   opts.windLayer = !opts.windLayer;
   saveOpts();
   updateWind();
-  toast(opts.windLayer ? 'Wind arrows on' : 'Wind arrows off');
+  toast(!opts.windLayer ? 'Wind arrows off' : SOURCES.ours.hasWind ? 'Wind arrows on' : 'Wind arrows on from the next run');
 });
 
 function renderMeta(f) {
