@@ -206,6 +206,9 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 .bfacts dt{font-size:12px;color:var(--slate)}
 .bfacts dd{margin:2px 0 0;font-size:16px;font-weight:500;font-variant-numeric:tabular-nums}
 .bcard{margin-top:12px}
+.tsun{margin-top:14px}
+.tsun .big{font-size:34px}
+.tsun .big svg{color:var(--amber);width:26px;height:26px}
 .bhint{margin:0}
 .btrend{margin-top:12px}
 .btrend .bt{font-size:12px;color:var(--slate);margin-bottom:4px}
@@ -269,6 +272,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="wsum" id="todayTideSum"></div>
     <div id="todayTide"></div>
   </section>
+  <div class="thero tsun" id="todaySun" aria-label="Sunrise and sunset"></div>
   <section class="wday" aria-labelledby="todayWindH">
     <h3 id="todayWindH">Wind <small>now until midnight</small></h3>
     <div class="wsum" id="todayWindSum"></div>
@@ -1812,6 +1816,27 @@ function nowTiles(hero, wDay, turns) {
   } else tt.insertAdjacentHTML('beforeend', `<div class="d">${tideBusy ? 'Loading' : 'No tide data yet'}</div>`);
   hero.append(wt, tt);
 }
+// Sunrise and sunset today (UK time, from the wind forecast's daily data),
+// with how long until or since, and the length of the day.
+const SUN_UP = 'M12 2v6M9 5l3-3 3 3M3 18h18M5.6 12.6l1.4 1.4M18.4 12.6L17 14M7 18a5 5 0 0 1 10 0';
+const SUN_DOWN = 'M12 8V2M9 5l3 3 3-3M3 18h18M5.6 12.6l1.4 1.4M18.4 12.6L17 14M7 18a5 5 0 0 1 10 0';
+function sunTiles(box, uk) {
+  box.innerHTML = '';
+  const si = wind && wind.sun ? wind.sun.day.indexOf(uk.day) : -1;
+  if (si < 0) { box.hidden = true; return; }
+  box.hidden = false;
+  const mins = (t) => +t.slice(11, 13) * 60 + +t.slice(14, 16), now = uk.hour * 60 + uk.min;
+  const span = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`);
+  const when = (m) => (Math.abs(m - now) < 1 ? 'now' : m > now ? `in ${span(m - now)}` : `${span(now - m)} ago`);
+  const rise = wind.sun.rise[si], set = wind.sun.set[si], day = mins(set) - mins(rise);
+  [['Sunrise', rise, SUN_UP, `Daylight ${span(day)}`], ['Sunset', set, SUN_DOWN, '']].forEach(([label, t, icon, extra]) => {
+    const el = tile(label);
+    el.insertAdjacentHTML('beforeend',
+      `<div class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${icon}"/></svg>${t.slice(11, 16)}</div>` +
+      `<div class="d">${when(mins(t))}${extra ? `<br>${extra}` : ''}</div>`);
+    box.appendChild(el);
+  });
+}
 function renderCam() {
   if (!showing('cam')) return;
   const uk = ukNow();
@@ -1822,10 +1847,7 @@ function renderToday() {
   if (!showing('today')) return;
   const now = Date.now(), uk = ukNow();
   const [y, m, d] = uk.day.split('-').map(Number), dayMs = Date.UTC(y, m - 1, d);
-  let line = `${fWindWeekday.format(dayMs)} ${fWindDate.format(dayMs)} · Saltburn`;
-  const si = wind && wind.sun ? wind.sun.day.indexOf(uk.day) : -1;
-  if (si >= 0) line += ` · sunrise ${wind.sun.rise[si].slice(11, 16)}, sunset ${wind.sun.set[si].slice(11, 16)}`;
-  $('#todayDate').textContent = line;
+  $('#todayDate').textContent = `${fWindWeekday.format(dayMs)} ${fWindDate.format(dayMs)} · Saltburn`;
   $('#todayStatus').textContent = todayStatus();
 
   const wDay = wind ? windDaysList().find((x) => x.k === uk.day) : null;
@@ -1850,6 +1872,9 @@ function renderToday() {
     $('#todayTideSum').textContent = (ranges[0] ? `Range up to ${ranges[0].toFixed(1)} m · ` : '') + rangeTrend(ranges);
     tBox.append(tideEvents(tDay, turns, now), tideCurve(tDay, turns, Math.min(...lv), Math.max(...lv), tBox.clientWidth));
   } else tBox.innerHTML = `<div class="wmsg">${tideBusy ? 'Loading the tide forecast' : "Couldn't load the tide forecast. Check your connection and tap Refresh."}</div>`;
+
+  // Sunrise and sunset: a tile each, side by side.
+  sunTiles($('#todaySun'), uk);
 
   // Wind today, every hour, eight to a row.
   const wBox = $('#todayWind');
