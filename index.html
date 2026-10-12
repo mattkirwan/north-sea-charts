@@ -197,13 +197,28 @@ body.adjust #stage{cursor:move}
 .links{display:flex;flex-wrap:wrap;gap:8px}
 a.pill{display:inline-block;color:inherit;text-decoration:none}
 .smap{margin-top:12px;border-radius:14px;overflow:hidden;background:#173242;min-height:120px}
-.smap svg{display:block;width:100%;height:auto}
+.smap{position:relative}
+.smap svg{display:block;width:100%;height:auto;touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none}
+.bzoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:6px}
+.bzoom button{width:40px;height:40px;border-radius:10px;background:rgba(15,34,48,.85);color:var(--paper);font:500 24px/1 var(--f-body);border:1px solid var(--hair)}
+.bzoom button:disabled{opacity:.35}
+.bfacts{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px 12px;margin:12px 0 0}
+.bfacts dt{font-size:12px;color:var(--slate)}
+.bfacts dd{margin:2px 0 0;font-size:16px;font-weight:500;font-variant-numeric:tabular-nums}
+.bcard{margin-top:12px}
+.bhint{margin:0}
+.btrend{margin-top:12px}
+.btrend .bt{font-size:12px;color:var(--slate);margin-bottom:4px}
+.btrend svg{display:block;width:100%;height:64px;overflow:visible}
+.btrend .tper{font:500 10px var(--f-body);fill:var(--paper);text-anchor:middle}
+.btrend .tax{font:500 10px var(--f-body);fill:var(--slate)}
 .smap .mlab{font:600 12px var(--f-body);fill:var(--amber)}
 .smap .mft{font:700 15px var(--f-cond);fill:#E8EEF1;text-anchor:middle}
 .smap .mu{font:600 10px var(--f-body);fill:#C9D5DB}
 .smap .mper{font:500 11px var(--f-body);fill:#E8EEF1;text-anchor:middle;opacity:.85}
 .olist{margin-top:14px}
-.orow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--hair)}
+.orow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 8px;margin:0 -8px;width:calc(100% + 16px);border-top:1px solid var(--hair);text-align:left;color:inherit;font:inherit;background:none;border-radius:0}
+.orow.sel{background:rgba(255,194,61,.1);box-shadow:inset 3px 0 0 var(--amber)}
 .orow .on{min-width:0}
 .orow .on b{display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .orow .on span{font-size:13px;color:var(--slate)}
@@ -245,6 +260,10 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="status" id="todayStatus"></div>
   </div>
   <div class="thero" id="todayNow"></div>
+  <section class="wday" aria-labelledby="todayWaveH">
+    <h3 id="todayWaveH">Waves <small id="todayWaveSub">latest measured</small></h3>
+    <div class="tile" id="todayWave"></div>
+  </section>
   <section class="wday" aria-labelledby="todayTideH">
     <h3 id="todayTideH">Tides</h3>
     <div class="wsum" id="todayTideSum"></div>
@@ -349,9 +368,9 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
       <div class="status" id="swellStatus"></div>
       <button class="pill" id="swellReload">Refresh</button>
     </div>
-    <div class="tile" id="swellHead" hidden></div>
     <div class="smap" id="swellMap"></div>
     <div class="hkey"><span>0 ft</span><i></i><span>15 ft+</span></div>
+    <div class="tile bcard" id="swellHead" hidden></div>
     <div class="olist" id="swellList"></div>
     <p class="fine" id="swellFine"></p>
   </section>
@@ -1502,9 +1521,9 @@ function coast() {
   });
   return coastRings;
 }
-// Frame the map on the stations that have reported, with a margin, and size
-// its height to their spread. Returns the height and a lat/lon → pixel function.
-function fitStations(st, W) {
+// Frame the map on the stations that have reported, with a margin, in a W × Hh
+// box. Returns the bounds and a lat/lon → pixel function.
+function fitStations(st, W, Hh) {
   const lats = st.map((s) => s.lat), lons = st.map((s) => s.lon);
   let s0 = Math.min(...lats) - 1, n0 = Math.max(...lats) + 1.2, w0 = Math.min(...lons) - 2.5, e0 = Math.max(...lons) + 2.5;
   const grow = (a, b, min) => { const pad = Math.max(0, (min - (b - a)) / 2); return [a - pad, b + pad]; };
@@ -1514,79 +1533,243 @@ function fitStations(st, W) {
   const frame = [[s0, w0], [s0, e0], [n0, w0], [n0, e0], [s0, (w0 + e0) / 2], [n0, (w0 + e0) / 2]].map(([a, b]) => project(a, b));
   const xs = frame.map((p) => p[0]), ys = frame.map((p) => p[1]);
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-  const Hh = Math.round(W * Math.min(1.5, Math.max(0.7, (y1 - y0) / (x1 - x0))));
   const sc = Math.min(W / (x1 - x0), Hh / (y1 - y0));
   const ox = (W - (x1 - x0) * sc) / 2 - x0 * sc, oy = (Hh - (y1 - y0) * sc) / 2 - y0 * sc;
-  return { Hh, bounds: { s: s0, n: n0, w: w0, e: e0 }, xy: (lat, lon) => { const [x, y] = project(lat, lon); return [x * sc + ox, y * sc + oy]; } };
+  return { bounds: { s: s0, n: n0, w: w0, e: e0 }, xy: (lat, lon) => { const [x, y] = project(lat, lon); return [x * sc + ox, y * sc + oy]; } };
 }
-const waveShade = (ft) => `rgba(126,214,195,${(0.12 + 0.6 * Math.min(Math.max(ft, 0) / 15, 1)).toFixed(3)})`;
+// Sea green, stronger for bigger waves, mixed onto the map's sea colour so labels are opaque.
+const waveShade = (ft) => {
+  const a = 0.12 + 0.6 * Math.min(Math.max(ft, 0) / 15, 1), mix = (c, m) => Math.round(m + (c - m) * a);
+  return `rgb(${mix(126, 0x17)},${mix(214, 0x32)},${mix(195, 0x42)})`;
+};
 const feet = (m) => (m * FT < 1 ? '<1' : String(Math.round(m * FT)));
 const arrowSvg = (deg, size) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(${Math.round(deg)}deg)"><path d="${ARROW}"/></svg>`;
 
-function renderSwell() {
-  if (!showing('buoys')) return;
-  const status = $('#swellStatus'), head = $('#swellHead'), mapEl = $('#swellMap'), list = $('#swellList');
-  head.hidden = true;
-  list.innerHTML = '';
-  if (!obs) {
-    status.textContent = 'Latest measurements';
-    mapEl.innerHTML = `<div class="wmsg">${obsBusy ? 'Loading the latest buoy and platform readings' : `Couldn't load measurements: ${obsProblem}.`}</div>`;
-    return;
+// The map moves: drag to pan, pinch, scroll or the buttons to zoom, and tap a
+// station (or a row in the list) to see its details in the card below it.
+const BMAP = { maxK: 8, bw: 46, bh: 32 };
+let buoySel = null;
+let bview = { k: 1, tx: 0, ty: 0 }, bbase = null, bframe = 0;
+
+function selectBuoy(code, centre) {
+  buoySel = code;
+  if (centre && bbase) {
+    const s = obs.stations.find((x) => x.code === code);
+    if (s) {
+      const [x, y] = bbase.xy(s.lat, s.lon);
+      const k = Math.max(bview.k, 2);
+      setView(k, bbase.W / 2 - x * k, bbase.Hh / 2 - y * k);
+    }
   }
-  const now = Date.now(), st = obs.stations;
-  status.textContent = `Latest measurements · ${st.length} station${st.length === 1 ? '' : 's'} · ` +
-    (obsBusy ? 'updating' : `collected ${ago(obs.collected)}`);
+  renderBuoyCard();
+  drawBuoyMarks();
+  document.querySelectorAll('#swellList .orow').forEach((r) => r.classList.toggle('sel', r.dataset.code === code));
+}
+function setView(k, tx, ty) {
+  if (!bbase) return;
+  const { W, Hh } = bbase;
+  k = Math.max(1, Math.min(BMAP.maxK, k));
+  bview = { k, tx: Math.min(0, Math.max(W - W * k, tx)), ty: Math.min(0, Math.max(Hh - Hh * k, ty)) };
+  if (!bframe) bframe = requestAnimationFrame(() => { bframe = 0; drawBuoyMarks(); });
+}
+function zoomAt(f, px, py) {
+  const { k, tx, ty } = bview, nk = Math.max(1, Math.min(BMAP.maxK, k * f));
+  setView(nk, px - (px - tx) * nk / k, py - (py - ty) * nk / k);
+}
 
-  // Headline: the nearest station to Saltburn.
-  const n = st[0];
-  head.hidden = false;
-  head.innerHTML = `<div class="k">Nearest: ${escapeHtml(n.name)} · ${Math.round(n.km)} km</div>` +
-    `<div class="big">${n.d != null ? arrowSvg(n.d, 30) : ''}${feet(n.h)}<small>ft</small>${n.p != null ? ` ${Math.round(n.p)}<small>s</small>` : ''}</div>` +
-    `<div class="d">${n.d != null ? `From ${compass(n.d)} · ` : ''}measured ${ago(n.ms)}</div>`;
-
-  // Map: land and graticule, then a label per station, nearest first; one that
-  // would overlap a nearer label is left to the list below.
-  const W = Math.round(mapEl.clientWidth || 340), { Hh, xy, bounds: bx } = fitStations(st, W);
-  const d = coast().map((ring) => 'M' + ring.map(([la, lo]) => xy(la, lo).map((v) => v.toFixed(1)).join(',')).join('L') + 'Z').join('');
-  const grat = [];
-  for (let la = Math.ceil(bx.s); la <= bx.n; la += 2) { const pts = []; for (let lo = bx.w - 4; lo <= bx.e + 4; lo += 1) pts.push(xy(la, lo).map((v) => v.toFixed(1)).join(',')); grat.push('M' + pts.join('L')); }
-  for (let lo = Math.ceil(bx.w / 5) * 5; lo <= bx.e; lo += 5) { const pts = []; for (let la = bx.s - 2; la <= bx.n + 2; la += 0.5) pts.push(xy(la, lo).map((v) => v.toFixed(1)).join(',')); grat.push('M' + pts.join('L')); }
-  const bw = 46, bh = 32, placed = [];
-  let marks = '', shown = 0;
+// Labels: the selected station first, then nearest first; one that would
+// overlap a label already placed shows as a dot until you zoom in.
+function drawBuoyMarks() {
+  const land = $('#bLand'), marks = $('#bMarks');
+  if (!bbase || !land || !marks) return;
+  const { W, Hh, xy } = bbase, { k, tx, ty } = bview, { bw, bh } = BMAP, now = Date.now();
+  land.setAttribute('transform', `translate(${tx.toFixed(2)},${ty.toFixed(2)}) scale(${k.toFixed(4)})`);
+  const st = obs.stations.slice().sort((a, b) => (b.code === buoySel) - (a.code === buoySel) || a.km - b.km);
+  const placed = [];
+  let dots = '', labels = '';
+  bbase.hits = [];
   st.forEach((s) => {
-    const [x, y] = xy(s.lat, s.lon);
-    if (x < 0 || x > W || y < 0 || y > Hh) return;
-    marks += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2" fill="#E8EEF1" opacity=".6"/>`;
-    // Try above the station, then below, right and left.
-    const spot = [[x - bw / 2, y - bh - 4], [x - bw / 2, y + 4], [x + 5, y - bh / 2], [x - bw - 5, y - bh / 2]]
-      .map(([l, t]) => [Math.max(1, Math.min(W - bw - 1, l)), Math.max(1, Math.min(Hh - bh - 1, t))])
-      .find(([l, t]) => !placed.some(([pl, pt]) => Math.abs(pl - l) < bw + 2 && Math.abs(pt - t) < bh + 2));
+    const [bx, by] = xy(s.lat, s.lon), x = bx * k + tx, y = by * k + ty;
+    if (x < -bw || x > W + bw || y < -bh || y > Hh + bh) return;
+    const sel = s.code === buoySel, old = now - s.ms > 3 * H;
+    const spot = [[x - bw / 2, y - bh - 5], [x - bw / 2, y + 5], [x + 6, y - bh / 2], [x - bw - 6, y - bh / 2]]
+      .find(([l, t]) => l > -bw / 2 && l < W - bw / 2 && t > -bh / 2 && t < Hh - bh / 2 &&
+        !placed.some(([pl, pt]) => Math.abs(pl - l) < bw + 3 && Math.abs(pt - t) < bh + 3));
+    bbase.hits.push({ code: s.code, x, y, box: spot });
+    dots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${spot ? 2.5 : 6}" fill="${spot ? '#E8EEF1' : waveShade(s.h * FT)}" ` +
+      `stroke="${sel ? 'var(--amber)' : 'rgba(232,238,241,.7)'}" stroke-width="${sel ? 2.5 : spot ? 0 : 1.2}"/>`;
     if (!spot) return;
-    const [left, top] = spot;
     placed.push(spot);
-    shown++;
-    const old = now - s.ms > 3 * H;
-    marks += `<g transform="translate(${left.toFixed(1)},${top.toFixed(1)})" opacity="${old ? 0.55 : 1}">` +
-      `<rect width="${bw}" height="${bh}" rx="7" fill="${waveShade(s.h * FT)}" stroke="rgba(15,34,48,.6)"/>` +
+    const [left, top] = spot;
+    labels += `<g transform="translate(${left.toFixed(1)},${top.toFixed(1)})" opacity="${old && !sel ? 0.55 : 1}">` +
+      `<rect width="${bw}" height="${bh}" rx="7" fill="${waveShade(s.h * FT)}" stroke="${sel ? 'var(--amber)' : 'rgba(15,34,48,.6)'}" stroke-width="${sel ? 2.5 : 1}"/>` +
       (s.d != null ? `<g transform="translate(10,16) rotate(${Math.round(s.d)}) scale(.55) translate(-12,-12)"><path d="${ARROW}" fill="none" stroke="#E8EEF1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></g>` : '') +
       `<text x="${s.d != null ? 29 : 23}" y="15" class="mft">${feet(s.h)}<tspan class="mu">ft</tspan></text>` +
       `<text x="${s.d != null ? 29 : 23}" y="27" class="mper">${s.p != null ? Math.round(s.p) + 's' : ''}</text></g>`;
   });
-  mapEl.innerHTML = `<svg viewBox="0 0 ${W} ${Hh}" width="${W}" height="${Hh}" role="img" aria-label="Map of the latest wave measurements">` +
-    `<rect width="${W}" height="${Hh}" fill="#173242"/><path d="${grat.join('')}" fill="none" stroke="rgba(232,238,241,.07)"/>` +
-    `<path d="${d}" fill="#29495b" stroke="rgba(232,238,241,.35)" stroke-width=".8" stroke-linejoin="round"/>` +
-    marks + '</svg>';
+  marks.innerHTML = dots + labels;
+  $('#bOut').disabled = k <= 1.001;
+  $('#bIn').disabled = k >= BMAP.maxK - 0.001;
+}
+// A tap picks the label under it, or failing that the nearest station within reach.
+function tapBuoy(px, py) {
+  if (!bbase || !bbase.hits) return;
+  const { bw, bh } = BMAP;
+  let hit = bbase.hits.slice().reverse().find((h) => h.box && px >= h.box[0] && px <= h.box[0] + bw && py >= h.box[1] && py <= h.box[1] + bh);
+  if (!hit) {
+    const near = bbase.hits.map((h) => [Math.hypot(h.x - px, h.y - py), h]).sort((a, b) => a[0] - b[0])[0];
+    if (near && near[0] < 28) hit = near[1];
+  }
+  if (hit) selectBuoy(hit.code);
+}
+function wireBuoyMap(svg) {
+  const pts = new Map();
+  let pan = null, pinch = null, lastTap = 0;
+  const at = (e) => { const r = svg.getBoundingClientRect(), s = bbase.W / r.width; return [(e.clientX - r.left) * s, (e.clientY - r.top) * s]; };
+  const startPan = () => { const [p] = pts.values(); pan = { x: p[0], y: p[1], tx: bview.tx, ty: bview.ty, moved: false }; };
+  svg.addEventListener('pointerdown', (e) => {
+    svg.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, at(e));
+    if (pts.size === 1) startPan();
+    else if (pts.size === 2) {
+      const [a, b] = pts.values();
+      pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2, ...bview };
+      pan = null;
+    }
+  });
+  svg.addEventListener('pointermove', (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, at(e));
+    if (pinch && pts.size >= 2) {
+      const [a, b] = pts.values(), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+      const nk = Math.max(1, Math.min(BMAP.maxK, pinch.k * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d));
+      setView(nk, mx - (pinch.mx - pinch.tx) * nk / pinch.k, my - (pinch.my - pinch.ty) * nk / pinch.k);
+    } else if (pan) {
+      const [p] = pts.values(), dx = p[0] - pan.x, dy = p[1] - pan.y;
+      if (Math.hypot(dx, dy) > 6) pan.moved = true;
+      if (pan.moved) setView(bview.k, pan.tx + dx, pan.ty + dy);
+    }
+  });
+  const end = (e) => {
+    if (!pts.has(e.pointerId)) return;
+    const p = pts.get(e.pointerId);
+    pts.delete(e.pointerId);
+    if (pan && !pan.moved && !pinch && e.type === 'pointerup') {
+      // A second tap soon after the first zooms in there.
+      if (Date.now() - lastTap < 300) { zoomAt(2, p[0], p[1]); lastTap = 0; }
+      else { tapBuoy(p[0], p[1]); lastTap = Date.now(); }
+    }
+    if (pts.size === 1) { pinch = null; startPan(); pan.moved = true; }
+    if (!pts.size) { pan = null; pinch = null; }
+  };
+  svg.addEventListener('pointerup', end);
+  svg.addEventListener('pointercancel', end);
+  svg.addEventListener('wheel', (e) => { e.preventDefault(); const [x, y] = at(e); zoomAt(Math.exp(-e.deltaY * 0.0025), x, y); }, { passive: false });
+}
 
-  // Every station, nearest first: the table view of the map.
-  list.innerHTML = st.map((s) => `<div class="orow">` +
+// A station's latest reading, everything it reports and, for the buoys that
+// keep one, the last 24 hours. Buoys shows the one you tap; Today the nearest.
+function buoyDetail(s, title) {
+  const facts = [];
+  if (s.hmax != null) facts.push(['Biggest wave', `${feet(s.hmax)} ft`]);
+  if (s.tz != null) facts.push(['Mean period', `${Math.round(s.tz)} s`]);
+  if (s.d != null) facts.push(['From', `${compass(s.d)} · ${Math.round(s.d)}°`]);
+  if (s.spread != null) facts.push(['Spread', `${Math.round(s.spread)}°`]);
+  if (s.sst != null) facts.push(['Sea temp', `${s.sst.toFixed(1)} °C`]);
+  if (s.ws != null) facts.push(['Platform wind', `${s.wd != null ? compass(s.wd) + ' ' : ''}${speedIn(s.ws * 1.9438)} ${UNIT_S()}`]);
+  return (title ? `<div class="k">${title}</div>` : '') +
+    `<div class="big">${s.d != null ? arrowSvg(s.d, 30) : ''}${feet(s.h)}<small>ft</small>${s.p != null ? ` ${Math.round(s.p)}<small>s</small>` : ''}</div>` +
+    `<div class="d">Measured ${ago(s.ms)}${s.p == null ? ' · height only' : ''}</div>` +
+    (facts.length ? `<dl class="bfacts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>` : '') +
+    trendSvg(s);
+}
+function renderBuoyCard() {
+  const head = $('#swellHead'), st = obs && obs.stations;
+  if (!st || !st.length) { head.hidden = true; return; }
+  const s = st.find((x) => x.code === buoySel);
+  head.hidden = false;
+  head.innerHTML = s
+    ? buoyDetail(s, `${escapeHtml(s.name)} · ${Math.round(s.km).toLocaleString('en-GB')} km · ${s.kind === 'platform' ? 'platform' : 'wave buoy'}`)
+    : '<div class="d bhint">Tap a buoy or platform on the map, or one in the list, for its details.</div>';
+}
+// Height over the last 24 hours as a filled line, with the period every few hours.
+function trendSvg(s) {
+  const h = (s.hist || []).filter((r) => r[1] != null);
+  if (h.length < 3) return '';
+  const W = 300, Hh = 64, now = Date.now(), t0 = now - 24 * H;
+  const top = Math.max(1, ...h.map((r) => r[1] * FT)) * 1.15;
+  const x = (t) => ((Math.max(t, t0) - t0) / (now - t0)) * W, y = (ft) => Hh - 14 - (ft / top) * (Hh - 26);
+  const line = h.map((r, i) => `${i ? 'L' : 'M'}${x(r[0]).toFixed(1)},${y(r[1] * FT).toFixed(1)}`).join('');
+  const area = `${line}L${x(h.at(-1)[0]).toFixed(1)},${Hh - 14}L${x(h[0][0]).toFixed(1)},${Hh - 14}Z`;
+  let per = '';
+  for (let k = 1; k <= 4; k++) {
+    const t = t0 + k * 6 * H - 3 * H, r = h.reduce((a, b) => (Math.abs(b[0] - t) < Math.abs(a[0] - t) ? b : a));
+    if (r[2] != null && Math.abs(r[0] - t) < 2 * H) per += `<text x="${x(r[0]).toFixed(1)}" y="${(y(r[1] * FT) - 5).toFixed(1)}" class="tper">${Math.round(r[2])}s</text>`;
+  }
+  const lo = Math.min(...h.map((r) => r[1])), hi = Math.max(...h.map((r) => r[1]));
+  return `<div class="btrend"><div class="bt">Last 24 hours · ${feet(lo)}–${feet(hi)} ft</div>` +
+    `<svg viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" role="img" aria-label="Wave height over the last 24 hours, from ${feet(lo)} to ${feet(hi)} feet">` +
+    `<path d="${area}" fill="rgba(126,214,195,.22)"/><path d="${line}" fill="none" stroke="var(--glass)" stroke-width="2" vector-effect="non-scaling-stroke"/>${per}` +
+    `<text x="2" y="${Hh - 2}" class="tax">24 h ago</text><text x="${W - 2}" y="${Hh - 2}" class="tax" text-anchor="end">now</text></svg></div>`;
+}
+
+function renderSwell() {
+  if (!showing('buoys')) return;
+  const status = $('#swellStatus'), head = $('#swellHead'), mapEl = $('#swellMap'), list = $('#swellList');
+  if (!obs) {
+    head.hidden = true;
+    list.innerHTML = '';
+    bbase = null;
+    status.textContent = 'Latest measurements';
+    mapEl.innerHTML = `<div class="wmsg">${obsBusy ? 'Loading the latest buoy and platform readings' : `Couldn't load measurements: ${obsProblem}.`}</div>`;
+    return;
+  }
+  const st = obs.stations;
+  if (!st.some((s) => s.code === buoySel)) buoySel = null;
+  status.textContent = `Latest measurements · ${st.length} station${st.length === 1 ? '' : 's'} · ` +
+    (obsBusy ? 'updating' : `collected ${ago(obs.collected)}`);
+  renderBuoyCard();
+
+  // The map: built once per set of readings and size, then only the view moves.
+  const W = Math.round(mapEl.clientWidth || 340);
+  const Hh = Math.round(Math.max(280, Math.min(W * 1.25, (innerHeight || 700) * 0.52)));
+  const key = `${obs.collected}|${st.length}|${W}|${Hh}`;
+  if (!bbase || bbase.key !== key || !$('#bMarks')) {
+    const same = bbase && bbase.W === W && bbase.Hh === Hh;
+    const fit = fitStations(st, W, Hh), bx = fit.bounds, xy = fit.xy;
+    const d = coast().map((ring) => 'M' + ring.map(([la, lo]) => xy(la, lo).map((v) => v.toFixed(1)).join(',')).join('L') + 'Z').join('');
+    const grat = [];
+    for (let la = Math.ceil(bx.s); la <= bx.n; la += 2) { const pts = []; for (let lo = bx.w - 4; lo <= bx.e + 4; lo += 1) pts.push(xy(la, lo).map((v) => v.toFixed(1)).join(',')); grat.push('M' + pts.join('L')); }
+    for (let lo = Math.ceil(bx.w / 5) * 5; lo <= bx.e; lo += 5) { const pts = []; for (let la = bx.s - 2; la <= bx.n + 2; la += 0.5) pts.push(xy(la, lo).map((v) => v.toFixed(1)).join(',')); grat.push('M' + pts.join('L')); }
+    mapEl.innerHTML = `<svg viewBox="0 0 ${W} ${Hh}" width="${W}" height="${Hh}" role="img" aria-label="Map of the latest wave measurements: drag to move, pinch to zoom, tap a station for its details">` +
+      `<rect width="${W}" height="${Hh}" fill="#173242"/><g id="bLand"><path d="${grat.join('')}" fill="none" stroke="rgba(232,238,241,.07)" vector-effect="non-scaling-stroke"/>` +
+      `<path d="${d}" fill="#29495b" stroke="rgba(232,238,241,.35)" stroke-width=".8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></g><g id="bMarks"></g></svg>` +
+      `<div class="bzoom"><button id="bIn" aria-label="Zoom in">+</button><button id="bOut" aria-label="Zoom out">&minus;</button></div>`;
+    bbase = { key, W, Hh, xy };
+    if (!same) bview = { k: 1, tx: 0, ty: 0 };
+    wireBuoyMap(mapEl.querySelector('svg'));
+    $('#bIn').addEventListener('click', () => zoomAt(1.8, W / 2, Hh / 2));
+    $('#bOut').addEventListener('click', () => zoomAt(1 / 1.8, W / 2, Hh / 2));
+  }
+  setView(bview.k, bview.tx, bview.ty);
+  drawBuoyMarks();
+
+  // Every station, nearest first: tap one to select it and find it on the map.
+  list.innerHTML = st.map((s) => `<button class="orow${s.code === buoySel ? ' sel' : ''}" data-code="${escapeHtml(s.code)}">` +
     `<div class="on"><b>${escapeHtml(s.name)}</b><span>${Math.round(s.km).toLocaleString('en-GB')} km · ${ago(s.ms)}</span></div>` +
-    `<div class="ov">${s.d != null ? arrowSvg(s.d, 16) : ''}<b>${feet(s.h)}</b> ft${s.p != null ? ` · ${Math.round(s.p)} s` : ''}${s.d != null ? ` · ${compass(s.d)}` : ''}</div></div>`).join('');
+    `<div class="ov">${s.d != null ? arrowSvg(s.d, 16) : ''}<b>${feet(s.h)}</b> ft${s.p != null ? ` · ${Math.round(s.p)} s` : ''}${s.d != null ? ` · ${compass(s.d)}` : ''}</div></button>`).join('');
+  list.querySelectorAll('.orow').forEach((r) => r.addEventListener('click', () => {
+    selectBuoy(r.dataset.code, true);
+    mapEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
 
   $('#swellFine').textContent = 'Measured, not forecast: the newest reading from each buoy and platform that had reported within 6 hours ' +
-    `when last collected (every half hour): wave buoys from the Coastal Monitoring network, such as Whitby, and North Sea oil and gas platforms relayed by NOAA's National Data Buoy Center, which report height only. Height is significant wave height in feet (the whole sea state, so local wind chop is included), ` +
-    'with the period in seconds and an arrow for the way the waves are travelling where the station measures them. ' +
-    `Faded labels are over 3 hours old. ${shown < st.length ? 'Some nearby stations are only in the list, to keep the map readable. ' : ''}` +
-    'There are almost no wave buoys north of Norway, so the map only covers the seas with stations reporting.';
+    `when last collected (every half hour): wave buoys from the Coastal Monitoring network, such as Whitby, and North Sea oil and gas platforms relayed by NOAA's National Data Buoy Center, which report height only. ` +
+    'Each buoy sends one set of figures for the whole sea, not separate swells: height is significant wave height in feet (so local wind chop is included), ' +
+    'the period in seconds is the peak period (the dominant swell) and the arrow shows the way the waves are travelling. ' +
+    'Biggest wave is the highest single wave in the half-hour record; spread is how wide a range of directions the waves come from, lower meaning a cleaner, more organised swell. ' +
+    'Platform wind is measured high up on the platform, so it reads stronger than at sea level. Faded labels are over 3 hours old. ' +
+    'Real time data from the Regional Coastal Monitoring Programme, made freely available under the terms of the Open Government Licence. These are real-time data and are not quality-controlled.';
 }
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -1651,6 +1834,12 @@ function renderToday() {
 
   nowTiles($('#todayNow'), wDay, turns);
 
+  // Waves: the latest reading from the nearest buoy (Whitby, usually).
+  const wave = $('#todayWave'), near = obs && obs.stations[0];
+  $('#todayWaveSub').textContent = near ? `${near.name} ${near.kind === 'platform' ? 'platform' : 'buoy'}, ${Math.round(near.km)} km` : 'latest measured';
+  wave.innerHTML = near ? buoyDetail(near)
+    : `<div class="wmsg">${obsBusy ? 'Loading the latest buoy readings' : `Couldn't load the buoy readings${obsProblem ? `: ${obsProblem}` : ''}. Tap Refresh to try again.`}</div>`;
+
   // Tides today: times, heights and the curve, scaled to today's own range.
   const tBox = $('#todayTide');
   tBox.innerHTML = '';
@@ -1681,7 +1870,9 @@ function renderToday() {
     }
   } else wBox.innerHTML = `<div class="wmsg">${windBusy ? 'Loading the wind forecast' : "Couldn't load the wind forecast. Check your connection and tap Refresh."}</div>`;
 
-  $('#todayFine').textContent = 'Wind from the Met Office models and tides from the Open-Meteo marine model, both via open-meteo.com. ' +
+  $('#todayFine').textContent = 'Waves are measured, not forecast: the newest reading from the nearest wave buoy, from the Regional Coastal Monitoring Programme (Open Government Licence; real-time data, not quality-controlled). ' +
+    'Forecast › Buoys has the rest of the North Sea. ' +
+    'Wind from the Met Office models and tides from the Open-Meteo marine model, both via open-meteo.com. ' +
     'Tide heights are above chart datum, like tide tables. Arrows on the wind point the way it blows; the amber outline is this hour. ' +
     'Forecast has the coming days: pressure charts for the swell, then wind and tides.';
 }
@@ -1704,7 +1895,7 @@ function renderWaits() {
   const W = { label: 'wind', data: wind, busy: windBusy, failed: windFailed, maxAge: WIND.maxAge };
   const T = { label: 'tides', data: tides, busy: tideBusy, failed: tideFailed, maxAge: TIDE.maxAge };
   const O = { label: 'wave measurements', data: obs, busy: obsBusy, failed: !!obsProblem, maxAge: OBS.old, problem: obsProblem };
-  if (showing('today')) waitBanner('#waitToday', [W, T]);
+  if (showing('today')) waitBanner('#waitToday', [W, T, O]);
   if (showing('cam')) waitBanner('#waitCam', [W, T]);
   if (showing('wind')) waitBanner('#waitWind', [W]);
   if (showing('tides')) waitBanner('#waitTides', [T]);
@@ -1726,7 +1917,7 @@ function renderLocal() {
 }
 function refreshLocal(force) {
   const now = route === 'today' || route === 'cam';
-  if (route === 'buoys') refreshSwell(force);
+  if (route === 'buoys' || route === 'today') refreshSwell(force);
   if (now || route === 'wind') refreshWind(force);
   if (now || route === 'tides') refreshTides(force);
 }
