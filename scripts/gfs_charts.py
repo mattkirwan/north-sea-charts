@@ -46,6 +46,7 @@ from shapely.geometry import box
 from shapely.ops import unary_union
 
 from gfs_latest import STEPS, grib_url, label, latest_run
+import swell_sources
 
 AREA = dict(w=-90, e=90, s=20, n=90)          # data we draw: well beyond the map, so colour fills it
 STORE = dict(w=-55, e=50, s=35, n=85)         # data we save: the map with a margin
@@ -383,8 +384,22 @@ def main():
     save_fields(run, steps, frames, os.path.join(outdir, 'fields.npz'))
     ice_date = draw_ice(outdir)
     write_grid(os.path.join(outdir, 'grid.json'))
+    # Saltburn's swell window, and bomb lows sending swell our way. Neither
+    # ever holds the charts up.
+    window, alerts = None, []
+    try:
+        window = swell_sources.swell_window()
+        with open(os.path.join(outdir, 'window.json'), 'w') as fh:
+            json.dump(window, fh)
+        print(f'  window.json: open past 1000 km on {swell_sources.open_sectors(window, 1000)}')
+        alerts = swell_sources.storm_alerts(run, steps, frames, window) if len(steps) > 4 else []
+        for a in alerts:
+            print(f"  alert: {a['hPa']} hPa {a['where']}, {a['drop24']} hPa in 24 h; pulses {[(p['where'], p['kn']) for p in a['pulses']]}")
+    except Exception as e:
+        print(f'  No swell window or alerts this run: {e}')
     print(f'  fields.npz: {os.path.getsize(os.path.join(outdir, "fields.npz")) // 1024} KB')
     manifest = dict(run=int(run.timestamp() * 1000), runLabel=label(run), steps=steps, file='f%03d.png', wind='w%03d.png', data='fields.npz', home=home_view(), grid='grid.json',
+                    window='window.json' if window else None, alerts=alerts,
                     ice=dict(file='ice.png', date=ice_date) if ice_date else None,
                     generated=int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000), source='NOAA GFS 0.25°',
                     pressure=dict(min=round(min(lows)), max=round(max(highs))))
