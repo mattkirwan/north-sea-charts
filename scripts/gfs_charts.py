@@ -5,7 +5,9 @@ geopotential height for each forecast hour (0-168, every 6 h) from NOAA's open
 data on AWS, using the .idx files to fetch just those two fields, and draws a
 chart per hour: sea-level pressure as bright colour (blues and purples for
 lows, oranges and reds for highs) with isobars every 4 hPa, H/L centres and
-coastlines. (500 hPa height is downloaded for the checks but not drawn.) Writes PNGs and manifest.json into the output folder.
+coastlines. (500 hPa height is downloaded for the checks but not drawn.) Writes PNGs and manifest.json into the output folder,
+plus fields.npz: the run's numbers themselves for the charted area, so we
+keep the data as well as the pictures (see save_fields).
 
 We don't forecast anything here: these are NOAA's numbers, drawn. Checks
 before publishing: every frame present, pressures within physical limits.
@@ -35,9 +37,10 @@ import xarray as xr
 from matplotlib.colors import LinearSegmentedColormap
 from scipy.ndimage import gaussian_filter, maximum_filter, minimum_filter
 
-BUCKET = 'https://noaa-gfs-bdp-pds.s3.amazonaws.com'
-STEPS = list(range(0, 169, 6))
-AREA = dict(w=-90, e=90, s=20, n=90)          # data we keep: well beyond the map, so colour fills it
+from gfs_latest import STEPS, grib_url, label, latest_run
+
+AREA = dict(w=-90, e=90, s=20, n=90)          # data we draw: well beyond the map, so colour fills it
+STORE = dict(w=-30, e=30, s=45, n=80)         # data we save: the map with a margin
 VIEW = [-20, 20, 49, 78]                       # map extent: lon W, lon E, lat S, lat N
 SALTBURN = (54.583, -0.973)
 PROJ = ccrs.LambertConformal(central_longitude=5, central_latitude=62, standard_parallels=(55, 70))
@@ -58,29 +61,6 @@ def get(url, rng=None, timeout=60):
     req = urllib.request.Request(url, headers={'Range': f'bytes={rng[0]}-{rng[1]}'} if rng else {})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
-
-
-def exists(url):
-    try:
-        urllib.request.urlopen(urllib.request.Request(url, method='HEAD'), timeout=30)
-        return True
-    except Exception:
-        return False
-
-
-def grib_url(run, step):
-    return f'{BUCKET}/gfs.{run:%Y%m%d}/{run:%H}/atmos/gfs.t{run:%H}z.pgrb2.0p25.f{step:03d}'
-
-
-def latest_run():
-    """Newest run whose last frame is on the bucket (runs finish ~4-5 h after their start)."""
-    now = dt.datetime.now(dt.timezone.utc).replace(minute=0, second=0, microsecond=0)
-    run = now.replace(hour=now.hour // 6 * 6)
-    for _ in range(8):
-        if exists(grib_url(run, STEPS[-1]) + '.idx'):
-            return run
-        run -= dt.timedelta(hours=6)
-    raise SystemExit('No complete GFS run found in the last two days')
 
 
 def fetch_fields(run, step):
@@ -106,6 +86,19 @@ def fetch_fields(run, step):
     if set(out) != set(FIELDS.values()):
         raise RuntimeError(f'f{step:03d}: missing fields, found {list(out)}')
     return out
+
+
+def save_fields(run, steps, frames, path):
+    """The run's sea-level pressure and 500 hPa height on the 0.25° grid over
+    STORE, every frame, as whole numbers: pressure in tenths of a hPa and
+    height in metres (int16, compressed; about 2 MB)."""
+    crop = lambda v: v.sel(latitude=slice(STORE['n'], STORE['s']), longitude=slice(STORE['w'], STORE['e']))
+    first = crop(frames[0]['prmsl'])
+    np.savez_compressed(
+        path, run=run.strftime('%Y-%m-%dT%HZ'), steps=np.array(steps, dtype=np.int16),
+        lat=first.latitude.values.astype(np.float32), lon=first.longitude.values.astype(np.float32),
+        mslp_dhpa=np.stack([np.rint(crop(f['prmsl']).values / 10) for f in frames]).astype(np.int16),
+        z500_m=np.stack([np.rint(crop(f['gh']).values) for f in frames]).astype(np.int16))
 
 
 def extrema(field, lons, lats, size, kind):
@@ -209,12 +202,13 @@ def main():
     run = latest_run()
     print(f'GFS run {run:%Y-%m-%d %H}z')
     # The workflow passes the run already published; nothing to do if it's this one.
-    if os.environ.get('PUBLISHED_RUN') == f'{run:%Y-%m-%d %H}z' and not do_check and not os.environ.get('FORCE'):
+    if os.environ.get('PUBLISHED_RUN') == label(run) and not do_check and not os.environ.get('FORCE'):
         print('Already published; nothing to do.')
         return
-    lows, highs = [], []
+    lows, highs, frames = [], [], []
     for step in steps:
         f = fetch_fields(run, step)
+        frames.append(f)
         path = os.path.join(outdir, f'f{step:03d}.png')
         p, lons, lats = draw(run, step, f, path)
         lo, hi = sanity(step, p)
@@ -222,7 +216,9 @@ def main():
         print(f'  f{step:03d}: {lo:.0f}-{hi:.0f} hPa, {os.path.getsize(path) // 1024} KB')
         if do_check and step in (0, 24, 72, 120):
             check(run, step, p, lons, lats, path, outdir)
-    manifest = dict(run=int(run.timestamp() * 1000), runLabel=f'{run:%Y-%m-%d %H}z', steps=steps, file='f%03d.png',
+    save_fields(run, steps, frames, os.path.join(outdir, 'fields.npz'))
+    print(f'  fields.npz: {os.path.getsize(os.path.join(outdir, "fields.npz")) // 1024} KB')
+    manifest = dict(run=int(run.timestamp() * 1000), runLabel=label(run), steps=steps, file='f%03d.png', data='fields.npz',
                     generated=int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000), source='NOAA GFS 0.25°',
                     pressure=dict(min=round(min(lows)), max=round(max(highs))))
     with open(os.path.join(outdir, 'manifest.json'), 'w') as fh:
