@@ -209,6 +209,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 .tsun{margin-top:14px}
 .tsun .big{font-size:34px}
 .tsun .big svg{color:var(--amber);width:26px;height:26px}
+.tsun .edge{font-weight:500;color:var(--paper)}
 .bhint{margin:0}
 .btrend{margin-top:12px}
 .btrend .bt{font-size:12px;color:var(--slate);margin-bottom:4px}
@@ -1816,24 +1817,42 @@ function nowTiles(hero, wDay, turns) {
   } else tt.insertAdjacentHTML('beforeend', `<div class="d">${tideBusy ? 'Loading' : 'No tide data yet'}</div>`);
   hero.append(wt, tt);
 }
-// Sunrise and sunset today (UK time, from the wind forecast's daily data),
-// with how long until or since, and the length of the day.
+// Sunrise and sunset today, and first and last light (civil twilight, when the
+// sun is 6° below the horizon), worked out for Saltburn rather than downloaded
+// so they never wait on the forecast. The usual sunrise equation, good to a
+// minute or so: the sun's position on the day gives its hour angle at the
+// altitude we want either side of solar noon.
+function sunTimes(day, alt) {
+  const r = Math.PI / 180, [y, m, d] = day.split('-').map(Number);
+  const jd = Date.UTC(y, m - 1, d, 12) / 864e5 + 2440587.5;
+  const j = Math.round(jd - 2451545) - WIND.lon / 360; // mean solar noon here, days from J2000
+  const M = (357.5291 + 0.98560028 * j) % 360;
+  const C = 1.9148 * Math.sin(M * r) + 0.02 * Math.sin(2 * M * r) + 0.0003 * Math.sin(3 * M * r);
+  const L = (M + C + 180 + 102.9372) % 360;
+  const noon = 2451545 + j + 0.0053 * Math.sin(M * r) - 0.0069 * Math.sin(2 * L * r);
+  const dec = Math.asin(Math.sin(L * r) * Math.sin(23.4397 * r)), lat = WIND.lat * r;
+  const cosW = (Math.sin(alt * r) - Math.sin(lat) * Math.sin(dec)) / (Math.cos(lat) * Math.cos(dec));
+  if (cosW < -1 || cosW > 1) return null; // never that high or low today
+  const w = Math.acos(cosW) / r / 360, ms = (jdn) => (jdn - 2440587.5) * 864e5;
+  return [ms(noon - w), ms(noon + w)];
+}
 const SUN_UP = 'M12 2v6M9 5l3-3 3 3M3 18h18M5.6 12.6l1.4 1.4M18.4 12.6L17 14M7 18a5 5 0 0 1 10 0';
 const SUN_DOWN = 'M12 8V2M9 5l3 3 3-3M3 18h18M5.6 12.6l1.4 1.4M18.4 12.6L17 14M7 18a5 5 0 0 1 10 0';
 function sunTiles(box, uk) {
   box.innerHTML = '';
-  const si = wind && wind.sun ? wind.sun.day.indexOf(uk.day) : -1;
-  if (si < 0) { box.hidden = true; return; }
+  const sun = sunTimes(uk.day, -0.833), light = sunTimes(uk.day, -6);
+  if (!sun || !light) { box.hidden = true; return; }
   box.hidden = false;
-  const mins = (t) => +t.slice(11, 13) * 60 + +t.slice(14, 16), now = uk.hour * 60 + uk.min;
+  const now = Date.now(), clock = (ms) => fUkTime.format(Math.round(ms / 60e3) * 60e3);
   const span = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`);
-  const when = (m) => (Math.abs(m - now) < 1 ? 'now' : m > now ? `in ${span(m - now)}` : `${span(now - m)} ago`);
-  const rise = wind.sun.rise[si], set = wind.sun.set[si], day = mins(set) - mins(rise);
-  [['Sunrise', rise, SUN_UP, `Daylight ${span(day)}`], ['Sunset', set, SUN_DOWN, '']].forEach(([label, t, icon, extra]) => {
+  const when = (ms) => { const m = Math.round((ms - now) / 60e3); return !m ? 'now' : m > 0 ? `in ${span(m)}` : `${span(-m)} ago`; };
+  const day = Math.round((sun[1] - sun[0]) / 60e3);
+  [['Sunrise', sun[0], SUN_UP, `First light ${clock(light[0])}`, `Daylight ${span(day)}`],
+   ['Sunset', sun[1], SUN_DOWN, `Last light ${clock(light[1])}`, '']].forEach(([label, t, icon, edge, extra]) => {
     const el = tile(label);
     el.insertAdjacentHTML('beforeend',
-      `<div class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${icon}"/></svg>${t.slice(11, 16)}</div>` +
-      `<div class="d">${when(mins(t))}${extra ? `<br>${extra}` : ''}</div>`);
+      `<div class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${icon}"/></svg>${clock(t)}</div>` +
+      `<div class="d">${when(t)}<br><b class="edge">${edge}</b>${extra ? `<br>${extra}` : ''}</div>`);
     box.appendChild(el);
   });
 }
@@ -1899,6 +1918,7 @@ function renderToday() {
     'Forecast › Buoys has the rest of the North Sea. ' +
     'Wind from the Met Office models and tides from the Open-Meteo marine model, both via open-meteo.com. ' +
     'Tide heights are above chart datum, like tide tables. Arrows on the wind point the way it blows; the amber outline is this hour. ' +
+    'First and last light are civil twilight, when the sun is 6° below the horizon and there\'s enough light to see; they and sunrise and sunset are calculated for Saltburn. ' +
     'Forecast has the coming days: pressure charts for the swell, then wind and tides.';
 }
 // A banner at the top of a view whenever it isn't showing live data yet.
