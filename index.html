@@ -53,6 +53,12 @@ body.adjust .tabbar,body.adjust .subnav{pointer-events:none;opacity:.35}
 #layer #imgIce{z-index:1;transition:none}
 body.mono #imgA,body.mono #imgB{filter:grayscale(1) contrast(1.1)}
 #travel{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.wkey{position:absolute;right:12px;top:calc(100% + 2px);width:min(56vw,230px);padding:6px 8px 4px;border-radius:10px;background:rgba(15,34,48,.78);pointer-events:none;z-index:6}
+.wkey .wk{font:600 11px var(--f-body);color:var(--paper);margin-bottom:4px}
+.wkey .wb{display:flex;height:8px;border-radius:2px;overflow:hidden}
+.wkey .wb i{flex:1}
+.wkey .wt{position:relative;height:13px;font:500 10px var(--f-body);color:var(--slate)}
+.wkey .wt span{position:absolute;transform:translateX(-50%)}
 #travel .arc{fill:none;stroke-width:2;stroke-dasharray:7 6;stroke-linecap:round}
 #travel .rule{fill:none;stroke-width:2.5;stroke-linecap:round}
 #travel .halo{stroke:rgba(15,34,48,.75);stroke-width:4.5}
@@ -101,6 +107,8 @@ body.mono #imgA,body.mono #imgB{filter:grayscale(1) contrast(1.1)}
 .btn:active{background:rgba(232,238,241,.12)}
 .btn.play{background:var(--amber);color:var(--ink);margin:0 4px}
 .btn[aria-pressed="true"]{color:var(--amber);background:rgba(255,194,61,.14)}
+.btn .wlab{position:absolute;margin:22px 0 0 24px;font:700 11px var(--f-body)}
+#waveBtn{position:relative}
 .btn svg{width:22px;height:22px}
 .run{flex:1;min-width:0;text-align:right;font-size:13px;line-height:1.35;color:var(--slate);padding-right:4px;overflow:hidden}
 .run b{color:var(--paper);font-weight:500}
@@ -404,6 +412,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="reticle" aria-hidden="true"><span>Put the UK here</span></div>
 
     <header class="top" id="top">
+      <div class="wkey" id="waveKey" hidden></div>
       <div>
         <div class="day" id="day">Loading</div>
         <div class="clock"><span id="hhmm">--:--</span><small id="tz"></small></div>
@@ -432,6 +441,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
         <button class="btn play" id="play" aria-label="Play"><svg viewBox="0 0 24 24" fill="currentColor"><path id="playIcon" d="M8 5.5v13l11-6.5z"/></svg></button>
         <button class="btn" id="next" aria-label="Next frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
         <button class="btn" id="windBtn" aria-pressed="false" aria-label="Wind arrows" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10.5a2.5 2.5 0 1 0-2.5-2.5M3 12h15.5a2.5 2.5 0 1 1-2.5 2.5M3 16h7.5a2.5 2.5 0 1 1-2.5 2.5"/></svg></button>
+        <button class="btn" id="waveBtn" aria-pressed="false" aria-label="Wave model: pressure, wave height or swell period" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9c2.5-2.5 5-2.5 7.5 0s5 2.5 7.5 0 3.5-1.5 5 0M2 15c2.5-2.5 5-2.5 7.5 0s5 2.5 7.5 0 3.5-1.5 5 0"/></svg><b class="wlab" id="waveLab"></b></button>
         <button class="btn" id="travelBtn" aria-pressed="false" aria-label="Swell window and travel times" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 3v18M19 6h-3M19 10h-5M19 14h-3M19 18h-5"/><path d="M4 8c3-2 6-2 8 0M4 14c3-2 6-2 8 0" stroke-dasharray="2 2.5"/></svg></button>
         <div class="run" id="run">Finding the latest run</div>
       </div>
@@ -645,7 +655,13 @@ SOURCES.ours = {
   only: { step: 6, runOffset: 0, days: 7 }, // options this source can't vary
   region: 'WIDE', // the wide map, from the Atlantic to Svalbard (was 'GFS', the North Sea only)
   base: 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/charts/',
-  url(runMs, step) { return `${this.base}f${String(step).padStart(3, '0')}.png?run=${runKey(runMs)}&map=wide${cacheBust ? '&v=' + cacheBust : ''}`; },
+  // The frames: the pressure charts, or with the wave layer on, NOAA's wave
+  // model drawn on the same map (height, or the longest swell's period).
+  url(runMs, step) {
+    const wave = waveOn() && this.waves[opts.waveLayer], file = wave ? wave.replace('%03d', String(step).padStart(3, '0')) : `f${String(step).padStart(3, '0')}.png`;
+    return `${this.base}${file}?run=${runKey(runMs)}&map=wide${cacheBust ? '&v=' + cacheBust : ''}`;
+  },
+  waves: null, // { height, period } frame names, when the run has the wave layer
   // The wind layer: transparent arrows the same size as the chart, from the same run.
   hasWind: false,
   ice: null, // { file, date } of the sea-ice layer, when the run has one
@@ -658,6 +674,7 @@ SOURCES.ours = {
     const m = await r.json();
     if (m.home) homeFrom(m.home);
     this.hasWind = !!m.wind;
+    this.waves = m.waves || null;
     this.ice = m.ice || null;
     this.gridFile = m.grid || null;
     return { ms: m.run, how: 'manifest' };
@@ -689,7 +706,7 @@ function homeFrom(home) {
   if (SOURCE === SOURCES.ours && !exploring) { view = loadView(); applyView(); }
 }
 const SRCS = [['ours', 'Ours'], ['wz', 'Wetterzentrale']];
-const DEFAULTS = { src: 'ours', beta: false, windLayer: false, seaIce: true, chartMono: false, travelLayer: false, swellPeriod: 10, chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
+const DEFAULTS = { src: 'ours', beta: false, windLayer: false, waveLayer: false, seaIce: true, chartMono: false, travelLayer: false, swellPeriod: 10, chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
 
 const opts = Object.assign({}, DEFAULTS, store.get('nsv.opts', {}));
 const saveOpts = () => store.set('nsv.opts', opts);
@@ -879,7 +896,7 @@ async function swapTo(f) {
     natural = { w: back.naturalWidth, h: back.naturalHeight };
     applyView();
   }
-  back.alt = `Pressure chart for ${fDay.format(f.valid)} ${fTime.format(f.valid)}`;
+  back.alt = `${waveOn() ? WAVE_NAMES[opts.waveLayer] : 'Pressure chart'} for ${fDay.format(f.valid)} ${fTime.format(f.valid)}`;
   back.classList.add('on');
   front.classList.remove('on');
   [front, back] = [back, front];
@@ -1069,7 +1086,7 @@ function updateIce() {
 }
 const iceDay = (d) => { const [y, m, dd] = d.split('-').map(Number); return new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }).format(Date.UTC(y, m - 1, dd)); };
 // Black and white for our charts (the layers over them keep their colour).
-function applyMono() { document.body.classList.toggle('mono', !!opts.chartMono && SOURCE === SOURCES.ours); }
+function applyMono() { document.body.classList.toggle('mono', !!opts.chartMono && SOURCE === SOURCES.ours && !waveOn()); }
 function updateWind() {
   // Always offered on our charts; a run drawn before the layer existed just has none.
   windBtn.hidden = SOURCE !== SOURCES.ours;
@@ -1085,6 +1102,45 @@ windBtn.addEventListener('click', async () => {
   toast(!opts.windLayer ? 'Wind arrows off' : SOURCES.ours.hasWind ? 'Wind arrows on' : 'Wind arrows on from the next run');
 });
 
+/* The wave layer: NOAA's wave model (GFS-Wave) for the same run, drawn by the
+   chart job on the same map, shown in place of the pressure charts. The
+   button goes pressure, wave height, longest swell period, and back. The
+   period map shows the longest swell present, so a small long-period swell
+   under the local wind waves still shows; played through, it can be seen
+   coming down the North Sea. */
+const waveBtn = $('#waveBtn'), WAVE_MODES = [false, 'height', 'period'];
+const WAVE_NAMES = { height: 'Wave height', period: 'Longest swell period' };
+// A declaration, so the frame URLs can ask before this part of the script has run.
+function waveOn() { return SOURCE === SOURCES.ours && !!SOURCES.ours.waves && !!opts.waveLayer; }
+// The key, matching the chart job's bands (gfs_charts.py H_LEVELS and T_LEVELS):
+// each band's colour, and labels at some band edges.
+const WAVE_KEYS = {
+  height: { unit: 'm', colours: ['#0b2350', '#11438d', '#1764ba', '#1c88bf', '#23a5b4', '#2cb998', '#5ec87a', '#a6d65a', '#dbdd52', '#ffd544', '#ffb029', '#f97f2b', '#ef4c3c', '#c63b76', '#9c2bb0'],
+    edges: [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 10, 12, 15], labels: [0, 1, 2, 3, 4, 6, 8, 10, 15] },
+  period: { unit: 's', colours: ['#1a2a4a', '#1e335a', '#233d6b', '#27477c', '#2b528c', '#2c6597', '#2e77a2', '#2f8bae', '#319da3', '#35b092', '#52c07c', '#8ece5f', '#c3d748', '#f3d33d', '#ffb730', '#ff9021', '#f9633f', '#f03269', '#e028a0', '#d020d8'],
+    edges: Array.from({ length: 20 }, (_, i) => i + 4), labels: [4, 8, 12, 16, 20] },
+};
+function updateWaveBtn() {
+  waveBtn.hidden = SOURCE !== SOURCES.ours || !SOURCES.ours.waves;
+  waveBtn.setAttribute('aria-pressed', String(waveOn()));
+  $('#waveLab').textContent = waveOn() ? (opts.waveLayer === 'height' ? 'm' : 's') : '';
+  const key = $('#waveKey'), k = waveOn() && WAVE_KEYS[opts.waveLayer];
+  key.hidden = !k;
+  if (!k) return;
+  const n = k.colours.length;
+  key.innerHTML = `<div class="wk">${WAVE_NAMES[opts.waveLayer]} (${k.unit})</div>` +
+    `<div class="wb">${k.colours.map((c) => `<i style="background:${c}"></i>`).join('')}</div>` +
+    `<div class="wt">${k.labels.map((v) => `<span style="left:${(k.edges.indexOf(v) / n) * 100}%">${v}</span>`).join('')}</div>`;
+}
+waveBtn.addEventListener('click', () => {
+  opts.waveLayer = WAVE_MODES[(WAVE_MODES.indexOf(opts.waveLayer) + 1) % WAVE_MODES.length];
+  saveOpts();
+  updateWaveBtn();
+  applyMono();
+  onOptChange('waveLayer');
+  toast(opts.waveLayer ? `${WAVE_NAMES[opts.waveLayer]}, from NOAA's wave model` : 'Pressure');
+});
+
 function renderMeta(f) {
   $('#day').textContent = fDay.format(f.valid);
   $('#hhmm').textContent = fTime.format(f.valid);
@@ -1098,6 +1154,7 @@ function renderMeta(f) {
 
 function updateRunLine() {
   applyMono();
+  updateWaveBtn();
   updateWind();
   updateIce();
   updateTravel();

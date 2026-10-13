@@ -10,7 +10,11 @@ plus ice.png, a transparent sea-ice layer from the latest ice chart (see draw_ic
 plus a matching transparent wind layer per hour (w000.png...): 10 m wind as
 arrows the way it blows, longer for stronger, which the app can lay over the chart;
 plus fields.npz: the run's numbers themselves for the charted area, so we
-keep the data as well as the pictures (see save_fields).
+keep the data as well as the pictures (see save_fields);
+plus the wave layer: NOAA's wave model (GFS-Wave) for the same run and hours,
+as two frames per hour on the same map: wave height (h000.png...) and the
+period of the longest swell present (t000.png...) (see draw_waves). The app shows them in place of the
+pressure charts.
 
 The charts are NOAA's numbers, drawn. From the same numbers (see
 swell_sources.py) come the swell window (window.json), bomb low alerts (in
@@ -41,13 +45,13 @@ import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import BoundaryNorm, LinearSegmentedColormap
 from PIL import Image
 from scipy.ndimage import gaussian_filter, maximum_filter, minimum_filter
 from shapely.geometry import box
 from shapely.ops import unary_union
 
-from gfs_latest import STEPS, grib_url, label, latest_run
+from gfs_latest import BUCKET, STEPS, grib_url, label, latest_run
 import swell_sources
 
 AREA = dict(w=-90, e=90, s=20, n=90)          # data we draw: well beyond the map, so colour fills it
@@ -76,6 +80,27 @@ P_CMAP = LinearSegmentedColormap.from_list('mslp', [
     (0.65, '#f4f1c6'),  # ~1013 hPa, about average
     (0.72, '#ffd23a'), (0.82, '#ff9a1f'), (0.92, '#f04a1c'), (1.00, '#a8101e')])
 P_LEVELS = np.arange(940, 1053, 4)
+# NOAA's wave model, the same run: significant wave height, and the model's
+# separate swells (up to three: height and period of each), for the longest
+# swell present (peak period where there's only wind sea, as under a storm).
+# Peak period alone would hide a small long-period swell under the local wind
+# waves, which is exactly the swell we're looking for.
+WAVE_FIELDS = {'HTSGW:surface': 'hs', 'PERPW:surface': 'tp', **{f'SWELL:{k} in sequence': f'sh{k}' for k in (1, 2, 3)},
+               **{f'SWPER:{k} in sequence': f'sp{k}' for k in (1, 2, 3)}}
+LONG_MIN_M = 0.1                               # a swell smaller than this doesn't count as present
+LAND = '#46525a'
+# Wave height (m): calm deep blue, through teal and green to yellow, orange,
+# red and purple for the biggest seas.
+H_LEVELS = [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 10, 12, 15]
+H_CMAP = LinearSegmentedColormap.from_list('hs', [
+    (0.00, '#0b2350'), (0.12, '#1559b8'), (0.25, '#1f9bc2'), (0.38, '#2fbf8f'), (0.50, '#a5d65a'),
+    (0.62, '#ffe14d'), (0.74, '#ffa21f'), (0.86, '#ef4b3c'), (1.00, '#9c2bb0')])
+# Peak period (s): short wind sea in muted blues, groundswell in greens and
+# yellows, and the rare long-period swell (16 s and up) in hot orange to magenta.
+T_LEVELS = np.arange(4, 24, 1)
+T_CMAP = LinearSegmentedColormap.from_list('tp', [
+    (0.00, '#1a2a4a'), (0.20, '#2b4f8a'), (0.38, '#2f8fb0'), (0.50, '#36b98a'), (0.62, '#b9d84a'),
+    (0.70, '#ffd23a'), (0.80, '#ff8a1f'), (0.90, '#f0306a'), (1.00, '#d020d8')])
 
 
 def get(url, rng=None, timeout=60):
@@ -107,6 +132,102 @@ def fetch_fields(run, step):
     if set(out) != set(FIELDS.values()):
         raise RuntimeError(f'f{step:03d}: missing fields, found {list(out)}')
     return out
+
+
+def wave_url(run, step):
+    return f'{BUCKET}/gfs.{run:%Y%m%d}/{run:%H}/wave/gridded/gfswave.t{run:%H}z.global.0p25.f{step:03d}.grib2'
+
+
+def fetch_waves(run, step):
+    """NOAA's wave model for one forecast hour: height, peak period, and each
+    separate swell's height and period, decoded and cut to the area we draw."""
+    url = wave_url(run, step)
+    idx = get(url + '.idx').decode().splitlines()
+    out = {}
+    for i, line in enumerate(idx):
+        parts = line.split(':')
+        name = f'{parts[3]}:{parts[4]}'
+        if name in WAVE_FIELDS and WAVE_FIELDS[name] not in out:
+            start = int(parts[1])
+            end = int(idx[i + 1].split(':')[1]) - 1 if i + 1 < len(idx) else ''
+            with tempfile.NamedTemporaryFile(suffix='.grib2', delete=False) as f:
+                f.write(get(url, (start, end)))
+            ds = xr.open_dataset(f.name, engine='cfgrib', backend_kwargs={'indexpath': ''})
+            var = ds[list(ds.data_vars)[0]]
+            var = var.assign_coords(longitude=((var.longitude + 180) % 360) - 180).sortby('longitude')
+            if var.latitude[0] < var.latitude[-1]:
+                var = var.sortby('latitude', ascending=False)
+            out[WAVE_FIELDS[name]] = var.sel(latitude=slice(AREA['n'], AREA['s']), longitude=slice(AREA['w'], AREA['e'])).load()
+            os.unlink(f.name)
+    if set(out) != set(WAVE_FIELDS.values()):
+        raise RuntimeError(f'waves f{step:03d}: missing fields, found {list(out)}')
+    return out
+
+
+_wave_land = {}
+
+
+def wave_land():
+    """The land and coast (and Saltburn) as an image the size of the map, made
+    once and laid over every wave frame."""
+    if not _wave_land:
+        fig, ax = map_figure()
+        fig.patch.set_alpha(0)
+        ax.set_facecolor((0, 0, 0, 0))
+        ax.add_feature(cfeature.LAND.with_scale('50m'), facecolor=LAND, edgecolor='none')
+        ax.add_feature(cfeature.COASTLINE.with_scale('50m'), edgecolor=PAPER, linewidth=0.5, alpha=0.6)
+        ax.plot(SALTBURN[1], SALTBURN[0], 'o', ms=6, color='#FFC23D', mec=COAST, mew=1, transform=ccrs.PlateCarree())
+        ax.axis('off')
+        fig.canvas.draw()
+        _wave_land['img'] = np.asarray(fig.canvas.buffer_rgba()).copy()
+        _wave_land['extent'] = ax.get_extent()
+        plt.close(fig)
+    return _wave_land
+
+
+def draw_waves(run, step, w, hpath, tpath):
+    """Two frames from the wave model: height, and the period of the longest
+    swell present (of the model's separate swells, any of LONG_MIN_M or more;
+    where there's only wind sea, its peak period),
+    each as colour over the sea with its scale in the corner, and for period a
+    white line where swell of 16 s or more has reached. Same map as the
+    pressure charts, pixel for pixel; played in turn, the swell can be seen
+    moving."""
+    hs = w['hs'].values
+    per = np.stack([np.where(np.nan_to_num(w[f'sh{k}'].values) >= LONG_MIN_M, w[f'sp{k}'].values, np.nan) for k in (1, 2, 3)])
+    tp = np.where(np.isfinite(hs), np.nan_to_num(np.nanmax(np.where(np.isfinite(per), per, -1), axis=0), nan=-1), np.nan)
+    tp = np.where(tp > 0, tp, w['tp'].values)  # no swell, only wind sea: its peak period
+    lons, lats = w['hs'].longitude.values, w['hs'].latitude.values
+    if np.nanmax(hs) > 25 or np.nanmax(tp) > 35:
+        raise RuntimeError(f'waves f{step:03d}: implausible, {np.nanmax(hs):.1f} m, {np.nanmax(tp):.0f} s')
+    land = wave_land()
+    valid = run + dt.timedelta(hours=step)
+    for field, levels, cmap, label_, unit, path in ((hs, H_LEVELS, H_CMAP, 'Wave height', 'm', hpath),
+                                                     (tp, T_LEVELS, T_CMAP, 'Longest swell period', 's', tpath)):
+        fig, ax = map_figure()
+        ax.set_facecolor(INK)
+        # Each band its own colour, evenly through the scale (the app's key matches).
+        cf = ax.contourf(lons, lats, field, levels=levels, cmap=cmap, norm=BoundaryNorm(levels, cmap.N, extend='max'), extend='max',
+                         transform=ccrs.PlateCarree(), zorder=2, antialiased=False)
+        cf.set_edgecolor('face')
+        if unit == 's':
+            cs = ax.contour(lons, lats, gaussian_filter(np.nan_to_num(field), 1), levels=[16], colors='white', linewidths=1.3,
+                            transform=ccrs.PlateCarree(), zorder=4)
+            for t in ax.clabel(cs, fmt='%d s', fontsize=9, inline=True, colors='white'):
+                t.set_path_effects([pe.withStroke(linewidth=2.5, foreground=COAST)])
+        ax.imshow(land['img'], extent=land['extent'], origin='upper', transform=PROJ, zorder=3, interpolation='nearest')
+        ax.set_extent(land['extent'], crs=PROJ)
+        cax = fig.add_axes([0.60, 0.05, 0.37, 0.016])
+        cb = fig.colorbar(cf, cax=cax, orientation='horizontal', ticks=levels[::2] if unit == 's' else [0, 1, 2, 3, 4, 6, 8, 10, 12, 15])
+        cb.outline.set_edgecolor(PAPER)
+        cb.ax.tick_params(labelsize=8, colors=PAPER, length=2)
+        cb.ax.xaxis.set_label_position('top')
+        cb.set_label(f'{label_} ({unit})', color=PAPER, fontsize=9, labelpad=3)
+        ax.text(0.012, 0.008, f'NOAA wave model · run {run:%Hz %d %b} +{step}h · valid {valid:%a %d %b %H}z', transform=ax.transAxes,
+                color=PAPER, fontsize=9, zorder=6, path_effects=[pe.withStroke(linewidth=2.5, foreground=INK)])
+        ax.axis('off')
+        save_png(fig, path, facecolor=INK)
+    return float(np.nanmax(hs)), float(np.nanmax(tp))
 
 
 def save_fields(run, steps, frames, path):
@@ -390,6 +511,7 @@ def main():
         print('Already published; nothing to do.')
         return
     lows, highs, frames = [], [], []
+    waves_ok = True
     for step in steps:
         f = fetch_fields(run, step)
         frames.append(f)
@@ -402,6 +524,13 @@ def main():
         print(f'  f{step:03d}: {lo:.0f}-{hi:.0f} hPa, {os.path.getsize(path) // 1024} KB; wind to {top:.0f} kn, {os.path.getsize(wpath) // 1024} KB')
         if do_check and step in (0, 24, 72, 120):
             check(run, step, p, lons, lats, path, outdir)
+        if waves_ok:  # the wave layer never holds the charts up: one failure and the run goes without
+            try:
+                hmax, tmax = draw_waves(run, step, fetch_waves(run, step), os.path.join(outdir, f'h{step:03d}.png'), os.path.join(outdir, f't{step:03d}.png'))
+                print(f'  waves f{step:03d}: up to {hmax:.1f} m, {tmax:.0f} s')
+            except Exception as e:
+                print(f'  No wave layer this run: {e}')
+                waves_ok = False
     save_fields(run, steps, frames, os.path.join(outdir, 'fields.npz'))
     winds = None
     try:
@@ -436,6 +565,7 @@ def main():
     print(f'  fields.npz: {os.path.getsize(os.path.join(outdir, "fields.npz")) // 1024} KB')
     manifest = dict(run=int(run.timestamp() * 1000), runLabel=label(run), steps=steps, file='f%03d.png', wind='w%03d.png', data='fields.npz', home=home_view(), grid='grid.json',
                     window='window.json' if window else None, alerts=alerts, forecast=forecast,
+                    waves=dict(height='h%03d.png', period='t%03d.png', source='NOAA GFS-Wave 0.25°') if waves_ok else None,
                     ice=dict(file='ice.png', date=ice_date) if ice_date else None,
                     generated=int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000), source='NOAA GFS 0.25°',
                     pressure=dict(min=round(min(lows)), max=round(max(highs))))
