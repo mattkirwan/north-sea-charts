@@ -653,7 +653,7 @@ SOURCES.ours = {
   model: 'GFS',
   cycleH: 6,
   maxStep: 168,
-  only: { step: 6, runOffset: 0, days: 7 }, // options this source can't vary
+  only: { step: 6, runOffset: 0, days: 7 }, // options this source can't vary (step can, once a run has 3-hourly frames)
   region: 'WIDE', // the wide map, from the Atlantic to Svalbard (was 'GFS', the North Sea only)
   base: 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/charts/',
   // The frames: the pressure charts, or with the wave layer on, NOAA's wave
@@ -676,6 +676,8 @@ SOURCES.ours = {
     if (m.home) homeFrom(m.home);
     this.hasWind = !!m.wind;
     this.waves = m.waves || null;
+    // Every 3 hours when the run has them (from Oct 2026), else every 6.
+    if ((m.steps || []).includes(3)) delete this.only.step; else this.only.step = 6;
     this.ice = m.ice || null;
     this.gridFile = m.grid || null;
     return { ms: m.run, how: 'manifest' };
@@ -1540,7 +1542,7 @@ function renderSettings() {
 }
 // Our charts come in one style and area, every 6 hours for 7 days, latest run only.
 function showSourceFields() {
-  ['#segChart', '#segRegion', '#segRun', '#segDays', '#segStep'].forEach((q) => { $(q).closest('.field').hidden = SOURCE === SOURCES.ours; });
+  ['#segChart', '#segRegion', '#segRun', '#segDays'].forEach((q) => { $(q).closest('.field').hidden = SOURCE === SOURCES.ours; });
   $('#segWind').closest('.field').hidden = SOURCE !== SOURCES.ours;
   ['#segIce', '#segMono'].forEach((q) => { $(q).closest('.field').hidden = SOURCE !== SOURCES.ours; });
   ['#segTravel', '#segPeriod'].forEach((q) => { $(q).closest('.field').hidden = SOURCE !== SOURCES.ours; });
