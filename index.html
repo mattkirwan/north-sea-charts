@@ -296,6 +296,13 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 .smap .mu{font:600 10px var(--f-body);fill:#C9D5DB}
 .smap .mper{font:500 11px var(--f-body);fill:#E8EEF1;text-anchor:middle;opacity:.85}
 .olist{margin-top:14px}
+.down{margin-top:22px}
+.down h3{font-family:var(--f-cond);font-weight:600;font-size:22px;margin:0 0 8px}
+.down h3 small{display:block;font-family:var(--f-body);font-size:13px;font-weight:400;color:var(--slate);margin-top:2px}
+.down svg{display:block;width:100%;height:auto;overflow:visible}
+.down .dn{font:600 12px var(--f-body);fill:var(--paper)}
+.down .dk{font:500 10px var(--f-body);fill:var(--slate)}
+.down .dv{font:600 11px var(--f-body);fill:var(--paper);text-anchor:end}
 .orow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 8px;margin:0 -8px;width:calc(100% + 16px);border-top:1px solid var(--hair);text-align:left;color:inherit;font:inherit;background:none;border-radius:0}
 .orow.sel{background:rgba(255,194,61,.1);box-shadow:inset 3px 0 0 var(--amber)}
 .orow .on{min-width:0}
@@ -440,6 +447,11 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="hkey"><span>0 ft</span><i></i><span>15 ft+</span></div>
     <div class="tile bcard" id="swellHead" hidden></div>
     <div class="olist" id="swellList"></div>
+    <section class="down" aria-labelledby="downH">
+      <h3 id="downH">Down the North Sea <small>last 48 hours, north to south</small></h3>
+      <div id="swellDown"></div>
+      <p class="fine">Each row is one buoy or platform, scaled to its own range, with its highest reading marked. A swell coming south shows as that high point arriving later the further down the rows you go. Platforms give height only.</p>
+    </section>
     <p class="fine" id="swellFine"></p>
   </section>
 
@@ -2088,9 +2100,9 @@ function renderBuoyCard() {
 }
 // Height over the last 24 hours as a filled line, with the period every few hours.
 function trendSvg(s) {
-  const h = (s.hist || []).filter((r) => r[1] != null);
-  if (h.length < 3) return '';
   const W = 300, Hh = 64, now = Date.now(), t0 = now - 24 * H;
+  const h = (s.hist || []).filter((r) => r[1] != null && r[0] >= t0);
+  if (h.length < 3) return '';
   const top = Math.max(1, ...h.map((r) => r[1] * FT)) * 1.15;
   const x = (t) => ((Math.max(t, t0) - t0) / (now - t0)) * W, y = (ft) => Hh - 14 - (ft / top) * (Hh - 26);
   const line = h.map((r, i) => `${i ? 'L' : 'M'}${x(r[0]).toFixed(1)},${y(r[1] * FT).toFixed(1)}`).join('');
@@ -2105,6 +2117,40 @@ function trendSvg(s) {
     `<svg viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" role="img" aria-label="Wave height over the last 24 hours, from ${feet(lo)} to ${feet(hi)} feet">` +
     `<path d="${area}" fill="rgba(126,214,195,.22)"/><path d="${line}" fill="none" stroke="var(--glass)" stroke-width="2" vector-effect="non-scaling-stroke"/>${per}` +
     `<text x="2" y="${Hh - 2}" class="tax">24 h ago</text><text x="${W - 2}" y="${Hh - 2}" class="tax" text-anchor="end">now</text></svg></div>`;
+}
+
+// Every station's last 48 hours, one row each from north to south, each
+// scaled to its own range with its highest reading marked: a swell coming
+// down the North Sea shows as that high point arriving later row by row.
+function renderDown(st) {
+  const box = $('#swellDown'), now = Date.now(), t0 = now - 48 * H;
+  const rows = st.map((s) => ({ s, h: (s.hist || []).filter((r) => r[1] != null && r[0] >= t0) }))
+    .filter((r) => r.h.length >= 3).sort((a, b) => b.s.lat - a.s.lat);
+  if (!rows.length) { box.innerHTML = '<div class="d" style="color:var(--slate);font-size:14px">The stations\' history builds up over the next day or two.</div>'; return; }
+  const W = 360, L = 104, R = 352, RH = 38, top = 4, Hh = top + rows.length * RH + 22;
+  const x = (t) => L + ((t - t0) / (now - t0)) * (R - L);
+  let g = '';
+  for (let t = Math.ceil(t0 / H) * H; t <= now; t += H) {
+    const h = +fUkHour.format(t);
+    if (h % 12) continue;
+    g += `<line x1="${x(t).toFixed(1)}" x2="${x(t).toFixed(1)}" y1="${top}" y2="${Hh - 18}" stroke="var(--hair)"${h ? ' stroke-dasharray="2 4"' : ''}/>` +
+      `<text x="${x(t).toFixed(1)}" y="${Hh - 6}" class="dk" text-anchor="middle">${h ? 'noon' : fUkDay.format(t)}</text>`;
+  }
+  g += `<text x="${R}" y="${Hh - 6}" class="dk" text-anchor="end">now</text>`;
+  rows.forEach(({ s, h }, i) => {
+    const y0 = top + i * RH, base = y0 + RH - 6, lo = Math.min(...h.map((r) => r[1])), hi = Math.max(...h.map((r) => r[1]));
+    const span = Math.max(hi - lo, 0.3), y = (v) => base - ((v - lo) / span) * (RH - 14);
+    const line = h.map((r, k) => `${k ? 'L' : 'M'}${x(r[0]).toFixed(1)},${y(r[1]).toFixed(1)}`).join('');
+    const pk = h.reduce((a, b) => (b[1] > a[1] ? b : a));
+    const [km, brg] = distBearing(WIND.lat, WIND.lon, s.lat, s.lon);
+    g += `<line x1="${L}" x2="${R}" y1="${base}" y2="${base}" stroke="var(--hair)"/>` +
+      `<path d="${line}L${x(h.at(-1)[0]).toFixed(1)},${base}L${x(h[0][0]).toFixed(1)},${base}Z" fill="rgba(126,214,195,.16)"/>` +
+      `<path d="${line}" fill="none" stroke="var(--glass)" stroke-width="1.6"/>` +
+      `<circle cx="${x(pk[0]).toFixed(1)}" cy="${y(pk[1]).toFixed(1)}" r="3" fill="var(--amber)"/>` +
+      `<text x="0" y="${y0 + 15}" class="dn">${escapeHtml(s.name.length > 15 ? s.name.slice(0, 14) + '…' : s.name)}</text>` +
+      `<text x="0" y="${y0 + 28}" class="dk">${Math.round(km)} km ${compass(brg)} · ${feet(lo)}–${feet(hi)} ft</text>`;
+  });
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Wave height over the last 48 hours at each station, north to south">${g}</svg>`;
 }
 
 function renderSwell() {
@@ -2123,6 +2169,7 @@ function renderSwell() {
   status.textContent = `Latest measurements · ${st.length} station${st.length === 1 ? '' : 's'} · ` +
     (obsBusy ? 'updating' : `collected ${ago(obs.collected)}`);
   renderBuoyCard();
+  renderDown(st);
 
   // The map: built once per set of readings and size, then only the view moves.
   const W = Math.round(mapEl.clientWidth || 340);
