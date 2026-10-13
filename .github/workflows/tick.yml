@@ -1,7 +1,8 @@
 # Keeps the data fresh. GitHub's own schedules are unreliable on a quiet
 # repository (they fire hours late or not at all), so this runs as a loop:
-# every half hour it starts the wave collector, and as soon as NOAA has a new
-# complete GFS run it starts the chart job. After about five and a half hours
+# every half hour it starts the wave collector, as soon as NOAA has a new
+# complete GFS run it starts the chart job, and as soon as NOAA's wave model
+# has the run out it starts the swell forecast. After about five and a half hours
 # it starts the next copy of itself (GitHub lets a workflow start another with
 # workflow_dispatch). Its own schedule is only a backstop to restart the loop
 # if it ever stops; the concurrency group keeps it to one loop at a time.
@@ -26,13 +27,14 @@ jobs:
     timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
-      - name: Waves every half hour, charts after each GFS run
+      - name: Waves every half hour, charts and the forecast after each run
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           end=$(( $(date +%s) + 330 * 60 ))
           last_waves=0
           last_charts=0
+          last_fc=0
           while [ "$(date +%s)" -lt "$end" ]; do
             now=$(date +%s)
             if [ $(( now - last_waves )) -ge 1800 ]; then
@@ -43,6 +45,11 @@ jobs:
             latest=$(python3 scripts/gfs_latest.py 2>/dev/null || true)
             if [ -n "$latest" ] && [ "$published" != "$latest" ] && [ $(( now - last_charts )) -ge 1800 ]; then
               gh workflow run charts.yml --ref main && last_charts=$now && echo "$(date -u +%H:%M) charts started for $latest (published: ${published:-none})"
+            fi
+            wave=$(python3 scripts/gfs_latest.py wave 2>/dev/null || true)
+            if [ -n "$wave" ] && [ $(( now - last_fc )) -ge 1800 ] && \
+               ! curl -fsSI "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/history/forecasts/${wave}.json?t=${now}" > /dev/null 2>&1; then
+              gh workflow run forecast.yml --ref main && last_fc=$now && echo "$(date -u +%H:%M) forecast started for $wave"
             fi
             sleep 300
           done

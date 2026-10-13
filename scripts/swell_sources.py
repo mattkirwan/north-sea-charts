@@ -519,9 +519,13 @@ def swell_forecast(run, winds, window, ice=None, days=8):
             series.append(dict(t=hr, ft=round(ft, 2), h=round(pk[1], 2), p=round(pk[2], 1), d=round(pk[3]), src=(pk[4], pk[5]), made=pk[6]))
         else:
             series.append(dict(t=hr, ft=0.0, h=0.0, p=None, d=None, src=None, made=None))
-    # Swell events: each peak, out to where it falls under EVENT_FT (or under
-    # 40% of the peak, or the dip before the next one). The hourly sizes are
-    # smoothed a little first: neighbouring paths take turns being biggest.
+    return series, find_events(series)
+
+
+def find_events(series):
+    """Swell events: each peak, out to where it falls under EVENT_FT (or under
+    40% of the peak, or the dip before the next one). The hourly sizes are
+    smoothed a little first: neighbouring paths take turns being biggest."""
     ft = maximum_filter1d(np.array([r['ft'] for r in series]), 3)
     peaks, _ = find_peaks(np.concatenate(([0], ft, [0])), height=EVENT_FT, distance=EVENT_APART, prominence=EVENT_RISE)
     peaks = list(peaks - 1)
@@ -539,15 +543,17 @@ def swell_forecast(run, winds, window, ice=None, days=8):
             continue
         pk = max(series[a:b + 1], key=lambda r: r['ft'])
         events.append(dict(start=series[a]['t'], end=series[b]['t'], peak=pk['t'], ft=pk['ft'], h=pk['h'], p=pk['p'], d=pk['d'],
-                           where=place(*pk['src']), made=pk['made']))
-    return series, events
+                           where=place(*pk['src']) if pk['src'] else None, made=pk['made']))
+    return events
 
 
-def forecast_json(run, series, events):
+def forecast_json(run, series, events, model='v0'):
+    """hourly: [time, size ft, height m, period s, from deg], and for the
+    NOAA model, each swell reaching Saltburn: [[m, s, from, ft], ...]."""
     ms = lambda d: int(d.replace(tzinfo=dt.timezone.utc).timestamp() * 1000)
     return dict(
-        run=ms(run), model='v0',
-        hourly=[[ms(r['t']), r['ft'], r['h'], r['p'], r['d']] for r in series],
+        run=ms(run), model=model,
+        hourly=[[ms(r['t']), r['ft'], r['h'], r['p'], r['d']] + ([r['swells']] if 'swells' in r else []) for r in series],
         events=[dict(start=ms(e['start']), end=ms(e['end']), peak=ms(e['peak']), ft=e['ft'], h=e['h'], p=e['p'], d=e['d'],
                      where=e['where'], made=ms(e['made'])) for e in events])
 

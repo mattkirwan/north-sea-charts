@@ -1,16 +1,22 @@
 """Keep the record our swell predictions are judged against.
 
-Run by the chart job after each new GFS run is published, on a checkout of
-the `history` branch (which only ever grows):
+Run by the forecast job (.github/workflows/forecast.yml) after each run of
+NOAA's wave model, on a checkout of the `history` branch (which only ever
+grows):
 
-  python scripts/history.py CHARTS_DIR WAVES_JSON HISTORY_DIR
+  python scripts/history.py FORECAST_JSON V0_JSON WAVES_JSON HISTORY_DIR
+
+FORECAST_JSON is the run's forecast from NOAA's wave model (wave_model.py);
+V0_JSON our own from the winds (the chart job's forecast.json), kept beside it
+for comparison when it's from the same run.
 
 Every run forecasts every hour of the next 8 days, so every hour gets ~32
 predictions, made from 8 days ahead down to the hour itself. Those, the buoy
 readings and the reports from the beach (on the `reports` branch) show how
 good the forecast is, and how that changes with how far ahead it was made.
 
-- forecasts/<run>.json: every run's swell forecast (forecast.json), as made.
+- forecasts/<run>.json: every run's swell forecast, as made.
+- forecasts-v0/<run>.json: our own forecast from the winds for the same run.
 - days/<date>.json: every prediction made for each hour of that day (UTC), from
   every run: rows of [hour, run, ft, m, s, from]. The app reads these to show
   what was predicted for the time of a report.
@@ -69,19 +75,17 @@ def keep_buoys(waves, out):
 
 
 def keep_hours(fc, out):
-    """File each of the run's hourly predictions under the day it's for.
-    Returns the number added (none if the run is already in)."""
+    """File each of the run's hourly predictions under the day it's for,
+    replacing any filed before for the same run. Returns the number filed."""
     run, by_day = fc['run'], {}
-    for t, ft, h, p, d in fc['hourly']:
+    for t, ft, h, p, d, *_ in fc['hourly']:
         if t >= run:
             by_day.setdefault(utc(t).strftime('%Y-%m-%d'), []).append([t, run, ft, h, p, d])
     added = 0
     for day, rows in by_day.items():
         path = os.path.join(out, 'days', f'{day}.json')
         f = load(path, dict(date=day, rows=[]))
-        if any(r[1] == run for r in f['rows']):
-            continue
-        f['rows'] = sorted(f['rows'] + rows, key=lambda r: (r[0], r[1]))
+        f['rows'] = sorted([r for r in f['rows'] if r[1] != run] + rows, key=lambda r: (r[0], r[1]))
         save(path, f)
         added += len(rows)
     return added
@@ -125,14 +129,17 @@ def verify(out, names, now):
 
 
 def main():
-    charts, waves_path, out = sys.argv[1:4]
-    fc = load(os.path.join(charts, 'forecast.json'), None)
+    fc_path, v0_path, waves_path, out = sys.argv[1:5]
+    fc = load(fc_path, None)
     if not fc:
         print('No forecast this run; nothing to keep.')
         return
     now = int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000)
     label = utc(fc['run']).strftime('%Y-%m-%d-%Hz')
     save(os.path.join(out, 'forecasts', f'{label}.json'), fc)
+    v0 = load(v0_path, None)
+    if v0 and v0.get('run') == fc['run']:
+        save(os.path.join(out, 'forecasts-v0', f'{label}.json'), v0)
     names = keep_buoys(load(waves_path, {}), out)
     added = keep_hours(fc, out)
     v = verify(out, names, now)

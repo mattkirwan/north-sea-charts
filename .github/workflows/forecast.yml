@@ -1,0 +1,65 @@
+# Our swell forecast for Saltburn from each run of NOAA's wave model
+# (scripts/wave_model.py), and the record it's judged against
+# (scripts/history.py): every run's forecast, every hour's predictions from
+# every run, the buoy readings and how far out it's been, on the `history`
+# branch, which only ever grows. Our own forecast from the winds (the chart
+# job's forecast.json) is filed beside it when it's from the same run.
+#
+# Started by the loop in tick.yml once the run's bulletins are out on NOAA's
+# bucket, about 5½ hours after the run (an hour after the GFS charts).
+name: Swell forecast
+
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: 'Run to forecast, as 2026-10-13-00z (default: the newest)'
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: history
+  cancel-in-progress: false
+
+jobs:
+  forecast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: pip install -q numpy scipy shapely pyshp
+      - name: Forecast
+        id: fc
+        env:
+          RUN: ${{ inputs.run }}
+        run: |
+          run=${RUN:-$(python scripts/gfs_latest.py wave)}
+          [ -n "$run" ] || { echo 'No wave model run out yet'; exit 1; }
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          python scripts/wave_model.py forecast "$run" "$RUNNER_TEMP/forecast.json"
+      - name: Keep the history
+        env:
+          TOKEN: ${{ github.token }}
+          RUN: ${{ steps.fc.outputs.run }}
+        run: |
+          url="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          raw="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}"
+          h="$RUNNER_TEMP/history"
+          git clone -q --depth 1 --branch history "$url" "$h"
+          curl -fsS "$raw/data/waves.json?t=$(date +%s)" -o "$RUNNER_TEMP/waves.json" || echo '{}' > "$RUNNER_TEMP/waves.json"
+          curl -fsS "$raw/charts/forecast.json?t=$(date +%s)" -o "$RUNNER_TEMP/v0.json" || echo '{}' > "$RUNNER_TEMP/v0.json"
+          python scripts/history.py "$RUNNER_TEMP/forecast.json" "$RUNNER_TEMP/v0.json" "$RUNNER_TEMP/waves.json" "$h"
+          cd "$h"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -q -m "History: wave model $RUN"
+          git push -q "$url" history
