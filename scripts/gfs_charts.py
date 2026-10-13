@@ -1,10 +1,11 @@
 """Draw our own North Sea pressure charts from NOAA's GFS model.
 
 For the newest complete GFS run, downloads sea-level pressure and 500 hPa
-geopotential height for each forecast hour (0-384: hourly for 2 days, then
-every 3, 6 and 12 hours; see DRAW_STEPS) from NOAA's open
+geopotential height for every forecast hour the model gives (hourly to +120 h,
+then every 3 hours to +384 h; see DRAW_STEPS) from NOAA's open
 data on AWS, using the .idx files to fetch just those two fields, and draws a
-chart per hour: sea-level pressure as bright colour (blues and purples for
+chart per hour of the North Sea and Saltburn's swell window, portrait, for a
+phone (see PROJ and EXTENT): sea-level pressure as bright colour (blues and purples for
 lows, oranges and reds for highs) with isobars every 4 hPa, H/L centres and
 coastlines. (500 hPa height is downloaded for the checks but not drawn.) Writes PNGs and manifest.json into the output folder,
 plus ice.png, a transparent sea-ice layer from the latest ice chart (see draw_ice), with ice.zip, the chart itself;
@@ -51,7 +52,7 @@ import numpy as np
 import xarray as xr
 from matplotlib.colors import BoundaryNorm, LinearSegmentedColormap
 from PIL import Image
-from scipy.ndimage import gaussian_filter, maximum_filter, minimum_filter
+from scipy.ndimage import distance_transform_edt, gaussian_filter, maximum_filter, minimum_filter
 from shapely.geometry import box
 from shapely.ops import unary_union
 
@@ -59,18 +60,31 @@ from gfs_latest import BUCKET, STEPS, grib_url, label, latest_run
 import swell_sources
 
 AREA = dict(w=-90, e=90, s=20, n=90)          # data we draw: well beyond the map, so colour fills it
-STORE = dict(w=-55, e=50, s=35, n=85)         # data we save: the map with a margin
-# Map extent (lon W, lon E, lat S, lat N): out west over Iceland into the
-# Atlantic for lows on their way, all of Svalbard, and down to Biscay.
-VIEW = [-40, 35, 42, 82]
-HOME = [-20, 20, 49, 78]                       # the app's default framing: the North Sea, as the map used to be
+STORE = dict(w=-55, e=50, s=35, n=85)         # data we save: well beyond the map, for the swell forecast
 SALTBURN = (54.583, -0.973)
-PROJ = ccrs.LambertConformal(central_longitude=5, central_latitude=62, standard_parallels=(55, 70))
+# The map: the North Sea and Saltburn's swell window, portrait. A clean crop
+# just off the coasts: Iceland's west coast, Svalbard's east coast (Edgeøya)
+# and north coast, and the UK's south coast (the Lizard). Turned so north is
+# up along 6°E, which brings Denmark and the Skagerrak inside Svalbard's line.
+# Drawn PX_W px across: sharp across a phone, with room to zoom in.
+PROJ = ccrs.LambertConformal(central_longitude=6, central_latitude=63, standard_parallels=(56, 72))
+MAP_NAME = 'north-sea'                          # changes with the map, so phones don't reuse old frames
+PX_W, DPI = 1440, 270                           # pixels across; dots per inch sizes the text and lines to suit
+MARGIN_M = 40e3                                 # sea left beyond each coast
+
+
+def _at(lon, lat):
+    return PROJ.transform_point(lon, lat, ccrs.PlateCarree())
+
+
+EXTENT = (_at(-23.98, 64.82)[0] - MARGIN_M, _at(24.9, 77.76)[0] + MARGIN_M,     # in PROJ: x west, east,
+          _at(-5.23, 50.02)[1] - MARGIN_M, _at(23.01, 80.47)[1] + MARGIN_M)     # y south, north
+MAP_ASPECT = (EXTENT[1] - EXTENT[0]) / (EXTENT[3] - EXTENT[2])                  # width over height, about 0.55
 FIELDS = {'PRMSL:mean sea level': 'prmsl', 'HGT:500 mb': 'gh', 'UGRD:10 m above ground': 'u10', 'VGRD:10 m above ground': 'v10'}
 KN = 1.943844                                  # knots per m/s
-# Frames drawn: every hour for 2 days, every 3 hours to day 7, every 6 to day
-# 12 and every 12 to day 16 (the end of the run), closer where it matters.
-DRAW_STEPS = list(range(0, 49)) + list(range(51, 169, 3)) + list(range(174, 289, 6)) + list(range(300, 385, 12))
+# Frames drawn: every hour the model gives, hourly to +120 h (day 5) and then
+# every 3 hours to +384 h (day 16, the end of the run). 209 frames.
+DRAW_STEPS = list(range(0, 121)) + list(range(123, 385, 3))
 FIRST = 168                                    # the first pass, published as soon as it's drawn; --rest adds the hours after
 WAIT_MIN = 75                                  # how long a frame waits for NOAA to publish its hour
 ANALYSIS_DAYS = 5                              # how far back the swell forecast starts
@@ -191,16 +205,14 @@ _wave_land = {}
 
 
 def wave_land():
-    """What every wave frame shares, made once: the land and coast (and
-    Saltburn) as an image the size of the map, and where each of its pixels
-    falls in lon/lat."""
+    """What every wave frame shares, made once: the land and coast as an
+    image the size of the map, and where each of its pixels falls in lon/lat."""
     if not _wave_land:
         fig, ax = map_figure()
         fig.patch.set_alpha(0)
         ax.set_facecolor((0, 0, 0, 0))
         ax.add_feature(cfeature.LAND.with_scale('50m'), facecolor=LAND, edgecolor='none')
         ax.add_feature(cfeature.COASTLINE.with_scale('50m'), edgecolor=PAPER, linewidth=0.5, alpha=0.6)
-        ax.plot(SALTBURN[1], SALTBURN[0], 'o', ms=6, color='#FFC23D', mec=COAST, mew=1, transform=ccrs.PlateCarree())
         ax.axis('off')
         fig.canvas.draw()
         img = np.asarray(fig.canvas.buffer_rgba()).astype(np.float32) / 255
@@ -224,11 +236,25 @@ def to_pixels(field, lons, lats, land):
             a * (1 - b) * field[i0 + 1, j0] + a * b * field[i0 + 1, j0 + 1])
 
 
+def to_coast(field, cells=2):
+    """The wave model's sea stops a cell or two short of the coast (its grid
+    is 0.25°, 28 km): carry the nearest sea value on up to the coastline, so
+    the land drawn over it meets the colour cleanly. Bigger gaps, like sea
+    ice, stay empty."""
+    gap = ~np.isfinite(field)
+    if not gap.any():
+        return field
+    dist, (iy, ix) = distance_transform_edt(gap, return_indices=True)
+    out = field[iy, ix]
+    out[dist > cells] = np.nan
+    return out
+
+
 def draw_waves(run, step, w, hpath, tpath):
     """Two frames from the wave model: height, and the period of the longest
     swell present (of the model's separate swells, any of LONG_MIN_M or more;
     where there's only wind sea, its peak period), each as colour over the sea
-    with its scale in the corner, and for period a white line where swell of
+    (the app shows the scale), and for period a white line where swell of
     16 s or more has reached. Same map as the pressure charts, pixel for
     pixel; played in turn, the swell can be seen moving. The colour is worked
     out pixel by pixel from the model's grid, which is much quicker than
@@ -246,7 +272,7 @@ def draw_waves(run, step, w, hpath, tpath):
     for field, levels, cmap, label_, unit, path in ((hs, H_LEVELS, H_CMAP, 'Wave height', 'm', hpath),
                                                      (tp, T_LEVELS, T_CMAP, 'Longest swell period', 's', tpath)):
         norm = BoundaryNorm(levels, cmap.N, extend='max')
-        px = to_pixels(field, lons, lats, land)
+        px = to_pixels(to_coast(field), lons, lats, land)
         rgba = cmap(norm(np.nan_to_num(px, nan=levels[0])))
         rgba[~np.isfinite(px)] = ink
         rgba[..., :3] = rgba[..., :3] * (1 - land['img'][..., 3:]) + land['img'][..., :3] * land['img'][..., 3:]
@@ -258,15 +284,9 @@ def draw_waves(run, step, w, hpath, tpath):
                             transform=ccrs.PlateCarree(), zorder=4)
             for t in ax.clabel(cs, fmt='%d s', fontsize=9, inline=True, colors='white'):
                 t.set_path_effects([pe.withStroke(linewidth=2.5, foreground=COAST)])
-        cax = fig.add_axes([0.60, 0.05, 0.37, 0.016])
-        cb = fig.colorbar(matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax, orientation='horizontal',
-                          ticks=levels[::2] if unit == 's' else [0, 1, 2, 3, 4, 6, 8, 10, 12, 15])
-        cb.outline.set_edgecolor(PAPER)
-        cb.ax.tick_params(labelsize=8, colors=PAPER, length=2)
-        cb.ax.xaxis.set_label_position('top')
-        cb.set_label(f'{label_} ({unit})', color=PAPER, fontsize=9, labelpad=3)
-        ax.text(0.012, 0.008, f'NOAA wave model · run {run:%Hz %d %b} +{step}h · valid {valid:%a %d %b %H}z', transform=ax.transAxes,
-                color=PAPER, fontsize=9, zorder=6, path_effects=[pe.withStroke(linewidth=2.5, foreground=INK)])
+        ax.text(0.988, 0.006, f'{label_} ({unit}), NOAA wave model\nrun {run:%Hz %d %b} +{step}h · valid {valid:%a %d %b %H}z',
+                transform=ax.transAxes, ha='right', va='bottom', color=PAPER, fontsize=6, zorder=6,
+                path_effects=[pe.withStroke(linewidth=2, foreground=INK)])
         ax.axis('off')
         save_png(fig, path, facecolor=INK)
     return float(np.nanmax(hs)), float(np.nanmax(tp))
@@ -316,31 +336,12 @@ def keep_analyses(run, frames_path, out_path):
     return swell_sources.join_winds(swell_sources.winds_from_npz(np.load(out_path)), now)
 
 
-def map_box(box):
-    """The projected rectangle that set_extent(box) shows."""
-    probe = plt.figure()
-    ax = probe.add_axes([0, 0, 1, 1], projection=PROJ)
-    ax.set_extent(box, crs=ccrs.PlateCarree())
-    ext = ax.get_extent()
-    plt.close(probe)
-    return ext
-
-
-def home_view():
-    """Where HOME sits in the map, as the app's crop: centre (fractions of
-    width and height from the top left), visible height, and its width."""
-    x0, x1, y0, y1 = map_box(VIEW)
-    h0, h1, k0, k1 = map_box(HOME)
-    return dict(cx=round(((h0 + h1) / 2 - x0) / (x1 - x0), 4), cy=round((y1 - (k0 + k1) / 2) / (y1 - y0), 4),
-                span=round((k1 - k0) / (y1 - y0), 4), w=round((h1 - h0) / (x1 - x0), 4))
-
-
 def write_grid(path):
     """Where each whole 2° of latitude and longitude falls on the chart, as
     fractions of its width and height from the top left, so the app can draw
     its own lines (the swell travel times) exactly on the map by
     interpolating."""
-    x0, x1, y0, y1 = map_box(VIEW)
+    x0, x1, y0, y1 = EXTENT
     lons, lats = np.arange(-60, 72, 2.0), np.arange(30, 90, 2.0)
     lon, lat = np.meshgrid(lons, lats)
     xy = PROJ.transform_points(ccrs.PlateCarree(), lon, lat)
@@ -356,7 +357,7 @@ def extrema(field, lons, lats, size, kind):
     filt = maximum_filter if kind == 'H' else minimum_filter
     peaks = np.argwhere(sm == filt(sm, size=size, mode='nearest'))
     wide = filt(sm, size=size * 2, mode='nearest')  # keep only centres that dominate a wider area
-    x0, x1, y0, y1 = map_box(VIEW)
+    x0, x1, y0, y1 = EXTENT
     mx, my = (x1 - x0) * 0.03, (y1 - y0) * 0.04  # and more at the bottom, clear of the caption
     out = []
     for y, x in peaks:
@@ -369,15 +370,12 @@ def extrema(field, lons, lats, size, kind):
 
 
 def map_figure():
-    """A figure exactly the map's shape (no empty margins). 11 in at 155 dpi:
-    about 1700 px across, so the North Sea framing the app opens on is as
-    sharp as the old North Sea-only chart. The wind layer uses the same, so
-    the two line up pixel for pixel."""
-    x0, x1, y0, y1 = map_box(VIEW)
-    width = 11.0
-    fig = plt.figure(figsize=(width, width * (y1 - y0) / (x1 - x0)), dpi=155)
+    """A figure exactly the map's shape (no empty margins), PX_W pixels
+    across. Every layer uses it, so they line up pixel for pixel."""
+    width = PX_W / DPI
+    fig = plt.figure(figsize=(width, width / MAP_ASPECT), dpi=DPI)
     ax = fig.add_axes([0, 0, 1, 1], projection=PROJ)
-    ax.set_extent(VIEW, crs=ccrs.PlateCarree())
+    ax.set_extent(EXTENT, crs=PROJ)
     return fig, ax
 
 
@@ -411,10 +409,9 @@ def draw(run, step, f, path):
         for lo, la, v in extrema(p, lons, lats, 48, kind):
             ax.text(lo, la, kind, color=colour, fontsize=24, fontweight='bold', ha='center', va='center', transform=ccrs.PlateCarree(), zorder=5, path_effects=white)
             ax.text(lo, la - 0.9, f'{v:.0f}', color=colour, fontsize=11, fontweight='bold', ha='center', va='top', transform=ccrs.PlateCarree(), zorder=5, path_effects=white)
-    ax.plot(SALTBURN[1], SALTBURN[0], 'o', ms=6, color='#FFC23D', mec=COAST, mew=1, transform=ccrs.PlateCarree(), zorder=6)
     valid = run + dt.timedelta(hours=step)
-    ax.text(0.012, 0.008, f'Run {run:%Hz %d %b} +{step}h · valid {valid:%a %d %b %H}z', transform=ax.transAxes,
-            color=COAST, fontsize=9, zorder=6)
+    ax.text(0.988, 0.006, f'NOAA GFS · run {run:%Hz %d %b} +{step}h · valid {valid:%a %d %b %H}z', transform=ax.transAxes,
+            ha='right', va='bottom', color=COAST, fontsize=6, zorder=6)
     ax.axis('off')
     save_png(fig, path, facecolor=INK)
     return p, lons, lats
@@ -588,7 +585,7 @@ def main():
         return rest(outdir)
     steps = [0, 24, 72] if os.environ.get('QUICK') else [s for s in DRAW_STEPS if s <= FIRST]  # QUICK: a preview of the look
     run = latest_run()
-    print(f'GFS run {run:%Y-%m-%d %H}z; home view {home_view()}')
+    print(f'GFS run {run:%Y-%m-%d %H}z')
     # The workflow passes the run already published; nothing to do if it's this one.
     if os.environ.get('PUBLISHED_RUN') == label(run) and not do_check and not os.environ.get('FORCE'):
         print('Already published; nothing to do.')
@@ -641,7 +638,7 @@ def main():
     except Exception as e:
         print(f'  No swell forecast this run: {e}')
     print(f'  fields.npz: {os.path.getsize(os.path.join(outdir, "fields.npz")) // 1024} KB')
-    manifest = dict(run=int(run.timestamp() * 1000), runLabel=label(run), steps=steps, file='f%03d.png', data='fields.npz', home=home_view(), grid='grid.json',
+    manifest = dict(run=int(run.timestamp() * 1000), runLabel=label(run), steps=steps, file='f%03d.png', data='fields.npz', map=MAP_NAME, grid='grid.json',
                     window='window.json' if window else None, alerts=alerts, forecast=forecast,
                     waves=dict(height='h%03d.png', period='t%03d.png', source='NOAA GFS-Wave 0.25°') if waves_ok else None,
                     ice=dict(file='ice.png', date=ice_date) if ice_date else None,

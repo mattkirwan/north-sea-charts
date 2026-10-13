@@ -4,9 +4,9 @@
 # the repo doesn't grow.
 #
 # Timed to NOAA: a run starts at 00, 06, 12 and 18 UTC and reaches hour 168 on
-# their bucket 4 h 15-35 min later. The first week is drawn and published then
-# (hourly for 2 days, 3-hourly after); a second pass adds days 8-16 (6- then
-# 12-hourly) as NOAA publishes them, about an hour later. Started by the loop
+# their bucket 4 h 15-35 min later. Every hour the model gives is drawn (hourly
+# to day 5, 3-hourly after): the first week is drawn and published then, and a
+# second pass adds days 8-16 as NOAA publishes them, about an hour later. Started by the loop
 # in tick.yml; these schedules are a backstop. A try that finds nothing new
 # stops before installing.
 name: Draw GFS charts

@@ -42,7 +42,6 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .tabbar svg{width:24px;height:24px}
 .tabbar button[aria-selected="true"]{color:var(--paper)}
 .tabbar button[aria-selected="true"] svg{color:var(--amber)}
-body.adjust .tabbar,body.adjust .subnav{pointer-events:none;opacity:.35}
 
 /* Chart stage */
 #stage{position:absolute;inset:0;overflow:hidden;touch-action:none;background:#173242;cursor:grab}
@@ -123,26 +122,11 @@ body.bare .top,body.bare .bottom{opacity:0;pointer-events:none}
 .toast{position:absolute;left:50%;top:calc(var(--subh) + 120px);transform:translateX(-50%);background:var(--ink-90);
   padding:8px 14px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}
 .toast.show{opacity:1}
-.hint{position:absolute;left:50%;bottom:172px;transform:translateX(-50%);width:min(340px,90vw);
-  background:var(--ink-90);border:1px solid var(--hair);border-radius:16px;padding:14px 16px}
-.hint p{margin:0 0 10px;font-size:15px;line-height:1.4}
-.hint div{display:flex;gap:8px}
 
 /* Shared pill buttons */
 .pill{padding:10px 14px;border-radius:12px;background:rgba(232,238,241,.1);font-size:15px}
 .pill.primary{background:var(--amber);color:var(--ink);font-weight:600}
 
-/* Framing mode */
-.adjustbar{display:none;position:absolute;left:0;right:0;top:0;align-items:center;gap:8px;
-  padding:10px calc(var(--sr) + 14px) 10px calc(var(--sl) + 16px);background:var(--ink-90)}
-.adjustbar p{flex:1;margin:0;font-size:14px;line-height:1.35}
-.reticle{display:none;position:absolute;left:50%;top:72%;width:38%;height:20%;transform:translate(-50%,-50%);
-  border:2px dashed rgba(255,194,61,.9);border-radius:18px;pointer-events:none}
-.reticle span{position:absolute;left:50%;bottom:-24px;transform:translateX(-50%);white-space:nowrap;font-size:13px;color:var(--amber)}
-body.adjust .adjustbar{display:flex}
-body.adjust .reticle{display:block}
-body.adjust .top,body.adjust .bottom,body.adjust .hint,body.adjust #waitPressure{display:none}
-body.adjust #stage{cursor:move}
 
 /* Settings */
 .sgroup{margin-top:22px}
@@ -402,7 +386,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 
   <div class="sub" id="sPressure" role="tabpanel" hidden>
     <div class="wait" id="waitPressure" role="status" hidden></div>
-    <div id="stage" aria-label="Weather chart. Drag sideways to move through time; pinch with two fingers to frame the map.">
+    <div id="stage" aria-label="Weather chart of the North Sea. Drag sideways to move through time and up and down to move the map; pinch with two fingers to zoom in, double tap to fit it again.">
       <div id="layer">
         <img id="imgA" alt="" referrerpolicy="no-referrer" draggable="false">
         <img id="imgB" alt="" referrerpolicy="no-referrer" draggable="false">
@@ -410,7 +394,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
       </div>
       <svg id="travel" aria-hidden="true"></svg>
     </div>
-    <div class="reticle" aria-hidden="true"><span>Put the UK here</span></div>
 
     <header class="top" id="top">
       <div class="wkey" id="waveKey" hidden></div>
@@ -425,10 +408,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
       </div>
     </header>
 
-    <div class="hint" id="hint" hidden>
-      <p>Frame the North Sea once and every frame keeps that crop.</p>
-      <div><button class="pill primary" id="hintGo">Adjust view</button><button class="pill" id="hintNo">Not now</button></div>
-    </div>
     <div class="notice" id="notice" hidden></div>
 
     <footer class="bottom">
@@ -447,11 +426,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
       </div>
     </footer>
 
-    <div class="adjustbar">
-      <p>Drag and pinch until the UK sits in the box.</p>
-      <button class="pill" id="adjReset">Reset</button>
-      <button class="pill primary" id="adjDone">Done</button>
-    </div>
   </div>
 
   <section class="sub panel" id="sSwell" role="tabpanel" aria-label="Latest wave measurements" hidden>
@@ -571,12 +545,10 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <h3 id="setChartH">Pressure charts</h3>
     <div class="field"><span>How far ahead</span><div class="seg" id="segDays"></div></div>
     <div class="field"><span>Chart colours</span><div class="seg" id="segMono"></div></div>
-    <div class="field"><span>Sea ice</span><div class="seg" id="segIce"></div></div>
     <div class="field"><span>Swell window &amp; travel times</span><div class="seg" id="segTravel"></div></div>
     <div class="field"><span>Swell period for travel times</span><div class="seg" id="segPeriod"></div></div>
     <div class="field"><span>Playback speed</span><div class="seg" id="segSpeed"></div></div>
     <div class="actions">
-      <button class="pill" id="actAdjust">Adjust view</button>
       <button class="pill" id="actReload">Reload charts</button>
       <button class="pill" id="actFull" hidden>Full screen</button>
     </div>
@@ -621,9 +593,9 @@ const runKey = (ms) => { const d = new Date(ms); return `${d.getUTCFullYear()}${
 const SOURCES = {};
 // Our own charts, drawn from NOAA's GFS data after each run by a GitHub Action
 // (scripts/gfs_charts.py) onto the repo's `charts` branch. Only the newest run
-// is kept, out to +384 h: hourly for 2 days, then every 3, 6 and 12 hours;
-// manifest.json lists the hours, says which run it is and where the North Sea
-// sits in the (much wider) map, which is where we start.
+// is kept, out to +384 h: every hour the model gives, hourly to day 5 and
+// every 3 hours after. manifest.json lists the hours, says which run it is
+// and names the map (a portrait map of the North Sea and its swell window).
 SOURCES.ours = {
   name: 'NOAA GFS, drawn by this app',
   model: 'GFS',
@@ -631,14 +603,14 @@ SOURCES.ours = {
   maxStep: 384,
   only: { runOffset: 0 }, // the newest run only
   steps: null, // the run's hours, from the manifest
-  region: 'WIDE', // the wide map, from the Atlantic to Svalbard (was 'GFS', the North Sea only)
   base: 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/charts/',
   // The frames: the pressure charts, or with the wave layer on, NOAA's wave
   // model drawn on the same map (height, or the longest swell's period).
   url(runMs, step) {
     const wave = waveOn() && this.waves[opts.waveLayer], file = wave ? wave.replace('%03d', String(step).padStart(3, '0')) : `f${String(step).padStart(3, '0')}.png`;
-    return `${this.base}${file}?run=${runKey(runMs)}&map=wide${cacheBust ? '&v=' + cacheBust : ''}`;
+    return `${this.base}${file}?run=${runKey(runMs)}&map=${this.map}${cacheBust ? '&v=' + cacheBust : ''}`;
   },
+  map: 'north-sea', // the map's name, in the frames' addresses: a new map never shows an old map's frames kept on the phone
   waves: null, // { height, period } frame names, when the run has the wave layer
   ice: null, // { file, date } of the sea-ice layer, when the run has one
   iceUrl(runMs) { return `${this.base}${this.ice.file}?run=${runKey(runMs)}${cacheBust ? '&v=' + cacheBust : ''}`; },
@@ -647,7 +619,7 @@ SOURCES.ours = {
     const r = await fetchT(`${this.base}manifest.json?t=${Math.floor(Date.now() / 300e3)}`, { cache: 'no-store' }, 15e3);
     if (!r.ok) throw new Error(`manifest ${r.status}`);
     const m = await r.json();
-    if (m.home) homeFrom(m.home);
+    this.map = m.map || 'wide'; // runs drawn before Oct 2026 are on the wide map
     this.waves = m.waves || null;
     this.steps = m.steps || null;
     this.ice = m.ice || null;
@@ -658,25 +630,11 @@ SOURCES.ours = {
 
 const DAYS = [[2, '2 days'], [7, '7 days'], [16, '16 days']];
 const SPEEDS = [[700, 'Slow'], [420, 'Normal'], [220, 'Fast']];
-const ICE_LAYER = [[false, 'Off'], [true, 'On']];
 const MONO = [[false, 'Colour'], [true, 'Black & white']];
 const BETA = [[false, 'Off'], [true, 'On']];
-const TRAVEL_LAYER = ICE_LAYER;
+const TRAVEL_LAYER = [[false, 'Off'], [true, 'On']];
 const PERIODS = [[8, '8 s'], [10, '10 s'], [12, '12 s'], [14, '14 s']];
-// Starting crop as a fraction of the source image: centre point and visible height.
-const DEFAULT_VIEWS = { EU: { cx: 0.53, cy: 0.34, span: 0.68 }, UK: { cx: 0.5, cy: 0.5, span: 1.02 }, WIDE: { cx: 0.5309, cy: 0.4806, span: 0.705 } };
-// Our wide map's North Sea framing, from its manifest. A crop saved on the old
-// North Sea-only map is moved onto the wide one, so it frames the same area.
-function homeFrom(home) {
-  DEFAULT_VIEWS.WIDE = { cx: home.cx, cy: home.cy, span: home.span };
-  const old = store.get('nsv.view.GFS', null);
-  if (old && home.w && !store.get('nsv.view.WIDE', null)) {
-    store.set('nsv.view.WIDE', { cx: home.cx + (old.cx - 0.5) * home.w, cy: home.cy + (old.cy - 0.5) * home.span, span: old.span * home.span });
-  }
-  if (old) store.set('nsv.view.GFS', null);
-  if (SOURCE === SOURCES.ours && !exploring) { view = loadView(); applyView(); }
-}
-const DEFAULTS = { beta: false, waveLayer: false, seaIce: true, chartMono: false, travelLayer: false, swellPeriod: 10, days: 7, speed: 420, speedUnit: 'mph' };
+const DEFAULTS = { beta: false, waveLayer: false, chartMono: false, travelLayer: false, swellPeriod: 10, days: 7, speed: 420, speedUnit: 'mph' };
 
 const opts = Object.assign({}, DEFAULTS, store.get('nsv.opts', {}));
 const saveOpts = () => store.set('nsv.opts', opts);
@@ -685,7 +643,6 @@ const SOURCE = SOURCES.ours;
 if (!DAYS.some(([d]) => d === opts.days)) opts.days = 7;
 // An option's value as the current source uses it (ours has fixed steps and one run).
 const opt = (k) => (SOURCE.only && k in SOURCE.only ? SOURCE.only[k] : opts[k]);
-const viewRegion = () => SOURCE.region || opts.region;
 
 /* ---------------- Time formatting ---------------- */
 const TZ = (Intl.DateTimeFormat().resolvedOptions().timeZone) || 'UTC';
@@ -726,16 +683,15 @@ let frames = [];
 let idx = 0;
 let runMs = 0, latestMs = 0, runHow = 'schedule';
 let natural = null;
-let view = null;
+let view = null; // the map's place on screen: { s: scale, tx, ty: offset in px }
 let loadToken = 0;
 let playing = false, playTimer = 0;
 let lastCheck = 0;
-let adjusting = false;
 
 const stage = $('#stage'), layer = $('#layer');
 let front = $('#imgA'), back = $('#imgB');
 const tl = $('#tl'), barsEl = $('#bars'), daysEl = $('#days'), nowEl = $('#now');
-const notice = $('#notice'), toastEl = $('#toast'), hint = $('#hint');
+const notice = $('#notice'), toastEl = $('#toast');
 
 /* ---------------- Working out which run is on the server ---------------- */
 const cycleStart = (ms) => {
@@ -760,7 +716,7 @@ async function load({ keepValid = true, latest = null } = {}) {
   runMs = latestMs - opt('runOffset') * SOURCE.cycleH * H;
   lastCheck = Date.now();
 
-  // The run's hours (every 6 to +168 for a run drawn before Oct 2026), as far ahead as set.
+  // The run's hours (every frame the chart job drew), as far ahead as set.
   const maxStep = Math.min(opts.days * 24, SOURCE.maxStep);
   const hours = SOURCE.steps || Array.from({ length: 29 }, (_, k) => k * 6);
   frames = hours.filter((h) => h <= maxStep).map((h) => ({ step: h, valid: runMs + h * H, url: SOURCE.url(runMs, h, opts), status: 'pending', img: null }));
@@ -836,7 +792,8 @@ async function swapTo(f) {
   if (seq !== swapSeq || !back.naturalWidth) return;
   if (!natural || natural.w !== back.naturalWidth || natural.h !== back.naturalHeight) {
     natural = { w: back.naturalWidth, h: back.naturalHeight };
-    applyView();
+    fitted = true;
+    reframe();
   }
   back.alt = `${waveOn() ? WAVE_NAMES[opts.waveLayer] : 'Pressure chart'} for ${fDay.format(f.valid)} ${fTime.format(f.valid)}`;
   back.classList.add('on');
@@ -899,7 +856,7 @@ const hoursLabel = (h) => { const d = Math.floor(h / 24), r = h % 24; return d ?
 let travelWindow = null;
 function drawTravel() {
   if (!travelOn() || !travelGrid || !natural || !view) { travelSvg.innerHTML = ''; return; }
-  const t = viewToT(view), W = natural.w, Hh = natural.h;
+  const t = view, W = natural.w, Hh = natural.h;
   const scr = (lat, lon) => { const [fx, fy] = onChart(lat, lon); return [fx * W * t.s + t.tx, fy * Hh * t.s + t.ty]; };
   const pt = (p) => p.map((v) => v.toFixed(1)).join(',');
   const kmh = swellKmH(opts.swellPeriod);
@@ -992,12 +949,12 @@ travelBtn.addEventListener('click', async () => {
   toast(!opts.travelLayer ? 'Swell window off' : travelGrid ? `Swell window, and travel times for a ${opts.swellPeriod} s swell` : "Couldn't load the swell window; check your connection");
 });
 
-/* Sea ice: one layer for the whole run, from the latest ice chart. On unless
-   turned off in Settings. */
+/* Sea ice: one layer for the whole run, from the latest ice chart, always on
+   over every frame (waves can't build under it). */
 const iceImg = $('#imgIce');
 function updateIce() {
   const ours = SOURCE === SOURCES.ours, ice = SOURCES.ours.ice;
-  if (!ours || !opts.seaIce || !ice || !runMs) { iceImg.classList.remove('on'); return; }
+  if (!ours || !ice || !runMs) { iceImg.classList.remove('on'); return; }
   const url = SOURCES.ours.iceUrl(runMs);
   if (iceImg.dataset.url !== url) {
     iceImg.dataset.url = url;
@@ -1087,9 +1044,8 @@ function updateRunLine() {
 /* ---------------- Timeline ---------------- */
 let curBar = null;
 /* Each frame's block is wider the more time it covers (hourly for the first
-   2 days, then 3, 6 and 12 hours), but not in proportion, or the hourly
-   frames would be too thin to touch: 1 + 0.55·log2(hours), so 1, 1.9, 2.4
-   and 3. edges[i] is where frame i starts along the timeline (0 to 1). */
+   5 days, then 3 hours), but not in proportion, or the hourly frames would be
+   too thin to touch: 1 + 0.55·log2(hours), so 1 and 1.9. edges[i] is where frame i starts along the timeline (0 to 1). */
 let edges = [0, 1];
 const frameHours = (i) => (frames[i + 1] ? frames[i + 1].step - frames[i].step : i ? frames[i].step - frames[i - 1].step : 6);
 function layoutWeights() {
@@ -1202,63 +1158,78 @@ $('#play').addEventListener('click', togglePlay);
 $('#prev').addEventListener('click', () => { stopPlay(); step(-1); });
 $('#next').addEventListener('click', () => { stopPlay(); step(1); });
 
-/* ---------------- Crop / view ---------------- */
-const viewKey = () => `nsv.view.${viewRegion()}`;
-const loadView = () => Object.assign({}, DEFAULT_VIEWS[viewRegion()], store.get(viewKey(), {}));
+/* ---------------- The map on screen ----------------
+   The chart is one portrait map of the North Sea and its swell window. It
+   opens fitted to the screen (on a phone, filling its width; on a wide screen,
+   all of it showing), with its bottom, the UK and the North Sea, clear of the
+   timeline. Dragging up and down moves it, pinching or the mouse wheel zooms
+   in (up to 4 times: past that the picture goes soft), and two fingers move
+   it, always within the map, which can go as far as the clock at the top and
+   the timeline at the bottom so every part of it can be seen clear of them. A
+   double tap fits it again. */
+let fitted = true;
 function stageSize() { return { w: stage.clientWidth, h: stage.clientHeight }; }
-function viewToT(v) {
-  const { w, h } = stageSize();
-  const s = h / (v.span * natural.h);
-  return { s, tx: w / 2 - v.cx * natural.w * s, ty: h / 2 - v.cy * natural.h * s };
+// How much of the screen the clock (top) and the timeline (bottom) cover.
+function overlays() {
+  const st = stage.getBoundingClientRect();
+  const top = Math.max(0, ...[...$('#top').children].filter((c) => !c.classList.contains('wkey')).map((c) => c.getBoundingClientRect().bottom - st.top));
+  return { top, bottom: Math.max(0, st.bottom - tl.getBoundingClientRect().top) };
 }
-function tToView(t) {
-  const { w, h } = stageSize();
-  return { span: h / (t.s * natural.h), cx: (w / 2 - t.tx) / (natural.w * t.s), cy: (h / 2 - t.ty) / (natural.h * t.s) };
+// The smallest the map goes: filling the screen, unless that would hide much
+// of it (a wide screen), then all of it showing.
+function minScale() {
+  const { w, h } = stageSize(), contain = Math.min(w / natural.w, h / natural.h), cover = Math.max(w / natural.w, h / natural.h);
+  return cover / contain <= 1.3 ? cover : contain;
 }
-function clampScale(s) {
-  const { h } = stageSize();
-  return Math.min(Math.max(s, h / (3 * natural.h)), h / (0.08 * natural.h));
+const maxScale = () => minScale() * 4;
+// Keep the map's edges off the screen's (centred across where it's narrower
+// than the screen); up and down it can go as far as the clock and timeline.
+function clampT(t) {
+  const { w, h } = stageSize(), o = overlays(), s = Math.min(Math.max(t.s, minScale()), maxScale());
+  const mw = natural.w * s, mh = natural.h * s;
+  const tx = mw <= w ? (w - mw) / 2 : Math.min(0, Math.max(w - mw, t.tx));
+  const ty = mh <= h - o.top - o.bottom ? (o.top + h - o.bottom - mh) / 2 : Math.min(o.top, Math.max(h - o.bottom - mh, t.ty));
+  return { s, tx, ty };
+}
+function fitView() {
+  const { w, h } = stageSize(), s = minScale();
+  return clampT({ s, tx: (w - natural.w * s) / 2, ty: h - overlays().bottom - natural.h * s });
 }
 function applyView() {
   if (!natural || !view) return;
-  const t = viewToT(view);
   layer.style.width = natural.w + 'px';
   layer.style.height = natural.h + 'px';
-  layer.style.transform = `translate(${t.tx}px, ${t.ty}px) scale(${t.s})`;
+  layer.style.transform = `translate(${view.tx}px, ${view.ty}px) scale(${view.s})`;
   if (opts.travelLayer) drawTravel();
 }
-// Pinching and dragging the chart explores without changing the saved framing;
-// only Adjust view saves one. A double tap goes back to it.
-let saveTimer = 0, exploring = false;
-function setT(t) {
-  view = tToView(t);
+// After the screen or the map changes size: fit again, or keep the zoom inside the map.
+function reframe() {
+  const { w, h } = stageSize();
+  if (!natural || !w || !h) return; // hidden: wait until Pressure is showing
+  view = fitted || !view ? fitView() : clampT(view);
   applyView();
-  if (!adjusting) { exploring = true; return; }
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveView, 400);
+}
+function setT(t) {
+  view = clampT(t);
+  fitted = false;
+  applyView();
 }
 function homeView() {
-  exploring = false;
-  view = loadView();
-  applyView();
-}
-function saveView() {
-  store.set(viewKey(), view);
-  store.set('nsv.framed', true);
-  hint.hidden = true;
+  fitted = true;
+  reframe();
 }
 
 /* Gestures on the chart:
-   one finger sideways = move through time, tap = hide/show controls,
-   two fingers (or the mouse wheel) = pan and zoom around the map,
-   double tap = back to the saved framing. In Adjust view, one finger pans and
-   the result is saved as the framing. */
+   one finger sideways = move through time, up and down = move the map,
+   tap = hide/show controls,
+   two fingers (or the mouse wheel) = zoom and move around the map,
+   double tap = fit the map to the screen again. */
 const pointers = new Map();
 let g = null, lastTap = 0;
 function baseline() {
   const pts = [...pointers.values()];
-  if (!natural || !pts.length) return null;
-  const t = viewToT(view);
+  if (!natural || !view || !pts.length) return null;
+  const t = view;
   if (pts.length >= 2) {
     const [a, b] = pts;
     return { t, mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, n: 2 };
@@ -1276,7 +1247,7 @@ function moveTransform(base) {
   } else if (base.n === 1 && pts.length === 1) {
     mid = pts[0];
   } else return;
-  const s = clampScale(base.t.s * k);
+  const s = Math.min(Math.max(base.t.s * k, minScale()), maxScale());
   const r = s / base.t.s;
   setT({ s, tx: mid.x - (base.mid.x - base.t.tx) * r, ty: mid.y - (base.mid.y - base.t.ty) * r });
 }
@@ -1284,7 +1255,7 @@ function moveTransform(base) {
 stage.addEventListener('pointerdown', (e) => {
   try { stage.setPointerCapture(e.pointerId); } catch {}
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (adjusting || pointers.size >= 2) {
+  if (pointers.size >= 2) {
     stopPlay();
     g = { mode: 'frame', base: baseline() };
   } else {
@@ -1298,9 +1269,11 @@ stage.addEventListener('pointermove', (e) => {
   if (g.mode === 'frame') { moveTransform(g.base); return; }
   const dx = e.clientX - g.x0, dy = e.clientY - g.y0;
   if (g.mode === 'pending' && Math.hypot(dx, dy) > 10) {
-    g.mode = Math.abs(dx) > Math.abs(dy) ? 'time' : 'none';
+    g.mode = Math.abs(dx) > Math.abs(dy) ? 'time' : view ? 'pan' : 'none';
     if (g.mode === 'time') stopPlay();
+    if (g.mode === 'pan') g.t = view;
   }
+  if (g.mode === 'pan') { setT({ s: g.t.s, tx: g.t.tx, ty: g.t.ty + dy }); return; }
   if (g.mode === 'time') {
     const i = g.i0 - Math.round(dx / 26);
     if (i !== idx) show(i);
@@ -1317,7 +1290,7 @@ function pointerEnd(e) {
   if (g.mode === 'pending' && e.type === 'pointerup' && performance.now() - g.t0 < 350) {
     const now = performance.now();
     if (now - lastTap < 320) {
-      // Second tap: undo the first tap's toggle and go back to the framing.
+      // Second tap: undo the first tap's toggle and fit the map again.
       document.body.classList.toggle('bare');
       homeView();
       lastTap = 0;
@@ -1332,33 +1305,13 @@ stage.addEventListener('pointerup', pointerEnd);
 stage.addEventListener('pointercancel', pointerEnd);
 stage.addEventListener('wheel', (e) => {
   e.preventDefault();
-  if (!natural) return;
-  const t = viewToT(view);
-  const s = clampScale(t.s * Math.exp(-e.deltaY * 0.0015));
+  if (!natural || !view) return;
+  const t = view;
+  const s = Math.min(Math.max(t.s * Math.exp(-e.deltaY * 0.0015), minScale()), maxScale());
   const r = s / t.s;
   setT({ s, tx: e.clientX - (e.clientX - t.tx) * r, ty: e.clientY - (e.clientY - t.ty) * r });
 }, { passive: false });
 
-function enterAdjust() {
-  exploring = false;
-  if (route !== 'pressure') go('pressure');
-  hint.hidden = true;
-  stopPlay();
-  adjusting = true;
-  document.body.classList.remove('bare');
-  document.body.classList.add('adjust');
-}
-function exitAdjust() {
-  adjusting = false;
-  document.body.classList.remove('adjust');
-  if (view) saveView();
-  toast('Crop saved');
-}
-$('#adjDone').addEventListener('click', exitAdjust);
-$('#adjReset').addEventListener('click', () => { view = Object.assign({}, DEFAULT_VIEWS[viewRegion()]); applyView(); });
-$('#hintGo').addEventListener('click', enterAdjust);
-$('#hintNo').addEventListener('click', () => { hint.hidden = true; store.set('nsv.framed', true); });
-function maybeHint() { hint.hidden = !(viewRegion() === 'EU' && !store.get('nsv.framed', false)); }
 
 /* ---------------- Messages ---------------- */
 function showNotice(msg, quiet) { notice.textContent = msg; notice.classList.toggle('quiet', !!quiet); notice.hidden = false; }
@@ -1392,7 +1345,6 @@ function seg(el, key, items) {
 function onOptChange(key) {
   if (key === 'speed') return;
   if (key === 'speedUnit') { renderLocal(); return; }
-  if (key === 'seaIce') { updateIce(); return; }
   if (key === 'chartMono') { applyMono(); return; }
   if (key === 'beta') { showBeta(); renderSettings(); return; }
   if (key === 'travelLayer' || key === 'swellPeriod') { updateTravel(); return; }
@@ -1403,8 +1355,9 @@ function renderFine() {
   const f = frames[idx];
   const p = $('#fine');
   {
-    p.textContent = 'New charts four times a day, about five hours after each model run (00, 06, 12 and 18 UTC): hourly for the first 2 days, then every 3 hours to day 7, every 6 to day 12 and every 12 to day 16 (those last days follow about an hour later). ' +
-      'Colour is sea-level pressure: blues and purples for low pressure, oranges and reds for high, with isobars every 4 hPa and the yellow dot at Saltburn. ' +
+    p.textContent = 'New charts four times a day, about five hours after each model run (00, 06, 12 and 18 UTC): every hour the model gives, hourly for the first 5 days and then every 3 hours to day 16 (the days after the first week follow about an hour later). ' +
+      'Colour is sea-level pressure: blues and purples for low pressure, oranges and reds for high, with isobars every 4 hPa. ' +
+      (SOURCES.ours.ice ? `Sea ice is from the Norwegian Ice Service's chart of ${iceDay(SOURCES.ours.ice.date)}. ` : '') +
       'Before publishing, each run is checked for missing frames and impossible pressures. ';
   }
   if (isIOS && !standalone) p.append(document.createElement('br'), 'On iPhone, use Share, then Add to Home Screen, to open this full screen.');
@@ -1416,20 +1369,16 @@ function renderSettings() {
   seg($('#segUnit'), 'speedUnit', UNITS);
   seg($('#segDays'), 'days', DAYS);
   seg($('#segSpeed'), 'speed', SPEEDS);
-  seg($('#segIce'), 'seaIce', ICE_LAYER);
   seg($('#segMono'), 'chartMono', MONO);
   seg($('#segBeta'), 'beta', BETA);
   $('#tokField').hidden = !opts.beta;
   $('#ghToken').value = store.get('nsv.ghToken', '') || '';
-  const ice = SOURCES.ours.ice;
-  $('#segIce').previousElementSibling.textContent = ice ? `Sea ice (${iceDay(ice.date)} ice chart)` : 'Sea ice';
   seg($('#segTravel'), 'travelLayer', TRAVEL_LAYER);
   seg($('#segPeriod'), 'swellPeriod', PERIODS);
   $('#actFull').hidden = !document.fullscreenEnabled;
   $('#actFull').textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
   renderFine();
 }
-$('#actAdjust').addEventListener('click', enterAdjust);
 $('#actReload').addEventListener('click', () => {
   cacheBust = Date.now();
   chartsStarted = true;
@@ -3101,10 +3050,9 @@ function syncRoute() {
   if (r === 'pressure') {
     if (!chartsStarted) { chartsStarted = true; load({ keepValid: false }); }
     updateRunLine();
-    requestAnimationFrame(() => { applyView(); layoutDays(); placeNow(); });
+    requestAnimationFrame(() => { reframe(); layoutDays(); placeNow(); });
   } else {
     stopPlay();
-    if (adjusting) exitAdjust();
   }
   if (r !== prev) { const pane = { today: '#vToday', predict: '#vPredict', settings: '#vSettings', buoys: '#sSwell', wind: '#sWind', tides: '#sTides' }[r]; if (pane) $(pane).scrollTop = 0; }
   refreshLocal();
@@ -3126,7 +3074,6 @@ $('#swellReload').addEventListener('click', () => refreshSwell(true));
 /* ---------------- Keyboard ---------------- */
 document.addEventListener('keydown', (e) => {
   if (route !== 'pressure') return;
-  if (adjusting) { if (e.key === 'Escape' || e.key === 'Enter') exitAdjust(); return; }
   if (e.key === 'ArrowRight') { stopPlay(); step(1); e.preventDefault(); }
   else if (e.key === 'ArrowLeft') { stopPlay(); step(-1); e.preventDefault(); }
   else if (e.key === ' ' && !e.target.closest('button')) { togglePlay(); e.preventDefault(); }
@@ -3155,7 +3102,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) chec
 
 /* ---------------- Periodic refresh ---------------- */
 async function checkForNewRun() {
-  if (adjusting || !runMs) return;
+  if (!runMs) return;
   const latest = await resolveLatest();
   lastCheck = Date.now();
   if (latest.ms !== latestMs) {
@@ -3175,14 +3122,15 @@ document.addEventListener('visibilitychange', () => {
 });
 let resizeTimer = 0;
 window.addEventListener('resize', () => {
-  applyView();
+  reframe();
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => { layoutDays(); placeNow(); renderLocal(); }, 120);
 });
 
 /* ---------------- Start ---------------- */
-view = loadView();
-maybeHint();
+// Keep the charts on the phone (sw.js): each frame downloaded once a run, and
+// the last run there to see with no signal.
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 syncRoute();
 checkForUpdate();
 })();
