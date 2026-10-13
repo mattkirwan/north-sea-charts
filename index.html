@@ -250,6 +250,20 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 .swc li.day{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .swc li.day .r{white-space:nowrap;font-size:12px}
 .ladder{margin:4px 0 12px}
+.swc .zoomable{display:block;width:100%;padding:0;margin:0;background:none;border:0;color:inherit;cursor:zoom-in;text-align:left}
+.zoomsheet{position:fixed;inset:0;z-index:100;background:var(--ink);display:flex;flex-direction:column;gap:10px;
+  padding:calc(var(--st) + 12px) 16px calc(var(--sb) + 16px);overflow-y:auto}
+.zhead{display:flex;justify-content:space-between;align-items:center}
+.zhead h2{font-family:var(--f-cond);font-weight:700;font-size:26px;margin:0}
+.zscroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;border-radius:12px;background:rgba(232,238,241,.04);touch-action:pan-x}
+.zscroll svg{display:block;cursor:crosshair}
+.zoomsheet .sx{font:500 11px var(--f-body);fill:var(--slate)}
+.zoomsheet .key{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--slate)}
+.zoomsheet .key i{display:inline-block;width:14px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
+.zread{font-size:14px;color:var(--slate);line-height:1.45;font-variant-numeric:tabular-nums;min-height:4.4em}
+.zread b{color:var(--paper);font-weight:600}
+.zread .big{font-family:var(--f-cond);font-weight:700;font-size:28px;color:var(--paper);line-height:1.1}
+.zread ul{list-style:none;margin:6px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:2px 12px}
 .swell{border-top:1px solid var(--hair);padding-top:12px}
 .swell>.k{display:flex;justify-content:space-between;font-size:15px;font-weight:600}
 .swell>.k button{font-size:13px;color:var(--slate);background:none;border:0;padding:0;text-decoration:underline;font-weight:400}
@@ -490,6 +504,13 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div id="predHist"></div>
     <div class="links" style="margin-top:12px"><button class="pill" id="repExport">Export all</button><button class="pill" id="repPull">Sync with GitHub</button></div>
   </section>
+  <div class="zoomsheet" id="rollZoom" role="dialog" aria-modal="true" aria-labelledby="zoomTitle" hidden>
+    <div class="zhead"><h2 id="zoomTitle">Forecast</h2><button type="button" class="pill" id="zoomClose">Done</button></div>
+    <div class="seg" id="zoomSpan"></div>
+    <div class="zscroll" id="zoomScroll"></div>
+    <div class="key" id="zoomKey"></div>
+    <div class="zread" id="zoomRead"></div>
+  </div>
   <section class="wday" aria-labelledby="predAccH">
     <h3 id="predAccH">How far out <small>by how far ahead</small></h3>
     <div class="tile" id="predAcc"></div>
@@ -2308,33 +2329,118 @@ function rollNow() {
 }
 const swellText = (ft, p, d) => (ft < 0.5 || p == null ? 'flat' : `${ft.toFixed(1)} ft, ${Math.round(p)} s from ${compass(d)}`);
 
-// The latest run (amber), the runs before it (fading), Whitby (dots), reports (triangles).
-function rollPlot(ks) {
-  const now = Date.now(), t0 = now - 36 * H, t1 = now + 7 * DAY;
+// The latest run (amber), the runs before it (fading), Whitby (dots), reports
+// (their range). o: {t0, t1, W, Hh, fine}: fine marks every 6 hours and repeats
+// the size scale each day, for the zoomed view.
+function rollChart(ks, o) {
+  const now = Date.now(), { t0, t1, W, Hh, fine } = o;
   const lines = ks.map((k) => roll.runs[k].filter((r) => r[0] >= t0 && r[0] <= t1)).filter((l) => l.length > 1);
   const whitby = obs && obs.stations.find((s) => s.name === 'Whitby');
   const rows = ((whitby && whitby.hist) || []).filter((r) => r[0] >= t0 && r[1] != null && r[2] != null && r[3] != null).map((r) => [r[0], breakFt(r[1], r[2], r[3])]);
   const rp = reports.filter((r) => r.at >= t0 && r.at <= t1);
-  const top = Math.max(2, ...lines.flat().map((r) => r[1]), ...rows.map((r) => r[1]), ...rp.map((r) => r.sizeFt || 0)) * 1.12;
-  const W = 320, Hh = 120, x = (t) => ((t - t0) / (t1 - t0)) * W, y = (ft) => Hh - 16 - (ft / top) * (Hh - 24);
+  // The size scale fits what's in view (o.fit: [from, to]), or the whole chart.
+  const [fa, fb] = o.fit || [t0, t1], inFit = (t) => t >= fa && t <= fb;
+  const top = Math.max(2, ...lines.flat().filter((r) => inFit(r[0])).map((r) => r[1]), ...rows.filter((r) => inFit(r[0])).map((r) => r[1]),
+    ...rp.filter((r) => inFit(r.at)).map((r) => r.sizeHi ?? r.sizeFt ?? 0)) * 1.12;
+  const base = Hh - (fine ? 30 : 16), x = (t) => ((t - t0) / (t1 - t0)) * W, y = (ft) => base - (ft / top) * (base - 8);
   const path = (l) => l.map((r, i) => `${i ? 'L' : 'M'}${x(r[0]).toFixed(1)},${y(r[1]).toFixed(1)}`).join('');
-  let g = `<line x1="0" x2="${W}" y1="${Hh - 16}" y2="${Hh - 16}" stroke="var(--hair)"/>`;
-  for (let f = 2; f < top; f += top > 12 ? 4 : 2) g += `<line x1="0" x2="${W}" y1="${y(f)}" y2="${y(f)}" stroke="var(--hair)" stroke-dasharray="2 4"/><text x="0" y="${y(f) - 2}" class="sx">${f} ft</text>`;
-  for (let t = Math.ceil(t0 / H) * H; t <= t1; t += H) if (+fUkHour.format(t) === 12) g += `<text x="${x(t).toFixed(1)}" y="${Hh - 3}" class="sx" text-anchor="middle">${fUkDay.format(t)}</text>`;
-  g += `<line x1="${x(now)}" x2="${x(now)}" y1="4" y2="${Hh - 16}" stroke="var(--paper)" stroke-opacity=".5"/><text x="${x(now) + 3}" y="10" class="sx">now</text>`;
-  for (let i = lines.length - 1; i > 0; i--) g += `<path d="${path(lines[i])}" fill="none" stroke="var(--glass)" stroke-opacity="${(0.15 + 0.45 * (1 - i / lines.length)).toFixed(2)}" stroke-width="1.2"/>`;
-  if (lines.length) g += `<path d="${path(lines[0])}" fill="none" stroke="var(--amber)" stroke-width="2"/>`;
-  g += rows.map((r) => `<circle cx="${x(r[0]).toFixed(1)}" cy="${y(r[1]).toFixed(1)}" r="2" fill="var(--paper)"/>`).join('');
+  const step = top > 12 ? 4 : top > 6 ? 2 : 1;
+  let g = `<line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="var(--hair)"/>`;
+  for (let f = step; f < top; f += step) g += `<line x1="0" x2="${W}" y1="${y(f)}" y2="${y(f)}" stroke="var(--hair)" stroke-dasharray="2 4"/>` + (fine ? '' : `<text x="0" y="${y(f) - 2}" class="sx">${f} ft</text>`);
+  for (let t = Math.ceil(t0 / H) * H; t <= t1; t += H) {
+    const h = +fUkHour.format(t), tx = x(t).toFixed(1);
+    if (!fine) { if (h === 12) g += `<text x="${tx}" y="${Hh - 3}" class="sx" text-anchor="middle">${fUkDay.format(t)}</text>`; continue; }
+    if (h === 0) {
+      g += `<line x1="${tx}" x2="${tx}" y1="0" y2="${base}" stroke="var(--hair)"/><text x="${+tx + 4}" y="${Hh - 4}" class="sx" style="fill:var(--paper)">${fUkDay.format(t)} ${fUkDate.format(t).slice(8)}</text>`;
+      for (let f = step; f < top; f += step) g += `<text x="${+tx + 3}" y="${y(f) - 3}" class="sx">${f} ft</text>`;
+    }
+    if (h % 6 === 0) g += `<line x1="${tx}" x2="${tx}" y1="${base}" y2="${base + 4}" stroke="var(--slate)"/><text x="${tx}" y="${base + 14}" class="sx" text-anchor="middle">${h === 0 ? '' : h === 12 ? 'noon' : h < 12 ? h + 'am' : h - 12 + 'pm'}</text>`;
+  }
+  if (now > t0 && now < t1) g += `<line x1="${x(now)}" x2="${x(now)}" y1="4" y2="${base}" stroke="var(--paper)" stroke-opacity=".5"/><text x="${x(now) + 3}" y="12" class="sx">now</text>`;
+  for (let i = lines.length - 1; i > 0; i--) g += `<path d="${path(lines[i])}" fill="none" stroke="var(--glass)" stroke-opacity="${(0.15 + 0.45 * (1 - i / lines.length)).toFixed(2)}" stroke-width="${fine ? 1.5 : 1.2}"/>`;
+  if (lines.length) g += `<path d="${path(lines[0])}" fill="none" stroke="var(--amber)" stroke-width="${fine ? 2.5 : 2}"/>`;
+  g += rows.map((r) => `<circle cx="${x(r[0]).toFixed(1)}" cy="${y(r[1]).toFixed(1)}" r="${fine ? 2.5 : 2}" fill="var(--paper)"/>`).join('');
   g += rp.map((r) => {
     const cx = x(r.at).toFixed(1);
     if (r.sizeLo == null) { const cy = y(r.sizeFt || 0); return `<path d="M${cx - 5},${cy + 4}L${+cx + 5},${cy + 4}L${cx},${cy - 5}Z" fill="var(--amber)"/>`; }
     const a = y(r.sizeHi).toFixed(1), b = y(r.sizeLo).toFixed(1);
     return `<path d="M${cx},${a}V${b}M${cx - 4},${a}H${+cx + 4}M${cx - 4},${b}H${+cx + 4}" stroke="var(--amber)" stroke-width="2.5" stroke-linecap="round"/>`;
   }).join('');
-  return `<svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Forecast breaking size at Saltburn over the next week, from the latest run and the ones before">${g}</svg>` +
-    `<div class="key"><span><i style="border-color:var(--amber)"></i>Latest run</span>${lines.length > 1 ? '<span><i style="border-color:var(--glass)"></i>Earlier runs</span>' : ''}` +
-    `${rows.length ? '<span>● Whitby</span>' : ''}${rp.length ? '<span style="color:var(--amber)">┃ Reports</span>' : ''}</div>`;
+  if (fine) g += `<line id="zcur" x1="-10" x2="-10" y1="0" y2="${base}" stroke="var(--amber)" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+  const key = `<span><i style="border-color:var(--amber)"></i>Latest run</span>${lines.length > 1 ? '<span><i style="border-color:var(--glass)"></i>Earlier runs</span>' : ''}` +
+    `${rows.length ? '<span>● Whitby</span>' : ''}${rp.length ? '<span style="color:var(--amber)">┃ Reports</span>' : ''}`;
+  return { g, key, x, lines, rows, rp, top };
 }
+function rollPlot(ks) {
+  const now = Date.now(), W = 320, Hh = 120, c = rollChart(ks, { t0: now - 36 * H, t1: now + 7 * DAY, W, Hh });
+  return `<button type="button" class="zoomable" id="rollOpen" aria-label="Zoom in to the forecast"><svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Forecast breaking size at Saltburn over the next week, from the latest run and the ones before">${c.g}</svg></button>` +
+    `<div class="key">${c.key}<span>Tap to zoom</span></div>`;
+}
+
+/* The zoomed forecast: the whole stretch the runs cover, wider than the
+   screen and scrolled sideways, with every 6 hours marked. Tap or drag for
+   every run's numbers at that hour. */
+const ZOOM_SPANS = [['1.5', '1½ days'], ['3', '3 days'], ['6', '6 days']];
+let rollSpan = '1.5', rollAt = null, zoomTop = 0, zoomFit = 0;
+function renderZoom(keepScroll) {
+  const ks = rollRuns(), sc = $('#zoomScroll');
+  if (!ks.length) return;
+  const all = ks.flatMap((k) => roll.runs[k]);
+  const t0 = Math.max(Math.min(...all.map((r) => r[0])), Date.now() - 2 * DAY), t1 = Math.max(...all.map((r) => r[0]));
+  const view = sc.clientWidth || 360, W = Math.round(view * (t1 - t0) / (+rollSpan * DAY)), Hh = Math.min(340, Math.max(220, Math.round(innerHeight * 0.42)));
+  const frac = keepScroll && sc.scrollWidth ? (sc.scrollLeft + view / 2) / sc.scrollWidth : null;
+  const left = frac != null ? frac * W - view / 2 : ((Date.now() - t0) / (t1 - t0)) * W - view * 0.25;
+  const tAt = (px) => t0 + (Math.min(Math.max(px, 0), W) / W) * (t1 - t0);
+  const c = rollChart(ks, { t0, t1, W, Hh, fine: true, fit: [tAt(left), tAt(left + view)] });
+  zoomTop = c.top;
+  sc.innerHTML = `<svg width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Forecast breaking size at Saltburn, zoomed">${c.g}</svg>`;
+  $('#zoomKey').innerHTML = c.key;
+  sc.scrollLeft = left;
+  sc.onscroll = () => {
+    // Once scrolling stops, refit the size scale to what's now in view.
+    clearTimeout(zoomFit);
+    zoomFit = setTimeout(() => {
+      const f = rollChart(ks, { t0, t1, W, Hh, fine: true, fit: [tAt(sc.scrollLeft), tAt(sc.scrollLeft + view)] });
+      if (Math.abs(f.top - zoomTop) / zoomTop > 0.15) renderZoom(true);
+    }, 200);
+  };
+  const svg = sc.querySelector('svg');
+  const pick = (e) => {
+    const r = svg.getBoundingClientRect();
+    rollAt = Math.round((t0 + ((e.clientX - r.left) / r.width) * (t1 - t0)) / H) * H;
+    readZoom(ks, c);
+  };
+  svg.addEventListener('pointerdown', pick);
+  svg.addEventListener('pointermove', (e) => { if (e.buttons || e.pointerType === 'mouse') pick(e); });
+  readZoom(ks, c);
+}
+function readZoom(ks, c) {
+  const box = $('#zoomRead'), cur = $('#zcur');
+  if (rollAt == null) { box.innerHTML = 'Tap or drag along the chart for every run\'s numbers at that hour.'; return; }
+  cur.setAttribute('x1', c.x(rollAt)); cur.setAttribute('x2', c.x(rollAt));
+  const at = (k) => roll.runs[k].find((r) => r[0] === rollAt);
+  const latest = ks.map((k) => [k, at(k)]).find(([, r]) => r);
+  const runs = ks.map((k) => [k, at(k)]).filter(([, r]) => r);
+  const near = (list, t, f) => list.filter((v) => Math.abs(f(v) - t) <= 45 * 60e3).sort((a, b) => Math.abs(f(a) - t) - Math.abs(f(b) - t))[0];
+  const whitby = obs && obs.stations.find((s) => s.name === 'Whitby');
+  const w = whitby && near((whitby.hist || []).filter((r) => r[1] != null), rollAt, (r) => r[0]);
+  const rep = near(reports, rollAt, (r) => r.at);
+  box.innerHTML = `<b>${fUkDay.format(rollAt)} ${whenUk(rollAt).split(' ')[1]}</b>` +
+    (latest ? `<div class="big">${latest[1][1].toFixed(1)} ft</div>${latest[1][3] == null ? '' : `${latest[1][2]} m at ${latest[1][3]} s from ${compass(latest[1][4])} (${latest[1][4]}°) · `}latest run, ${runName(latest[0])}`
+      : '<div>No run covers this hour.</div>') +
+    (w ? `<div>Whitby: ${w[1]} m${w[2] ? ` at ${Math.round(w[2])} s` : ''}${w[3] != null ? ` from ${compass(w[3])}` : ''}${w[2] && w[3] != null ? `, about ${breakFt(w[1], w[2], w[3]).toFixed(1)} ft by our sums` : ''}</div>` : '') +
+    (rep ? `<div>Your report: ${rep.swells ? rep.swells.map(swellReport).join(' + ') : (SIZES.find((x) => x[0] === rep.size) || [, rep.size])[1]}</div>` : '') +
+    (runs.length > 1 ? `<ul>${runs.map(([k, r]) => `<li>${runName(k)}: <b>${r[1].toFixed(1)}</b> ft</li>`).join('')}</ul>` : '');
+}
+function openZoom() {
+  $('#rollZoom').hidden = false;
+  chips($('#zoomSpan'), ZOOM_SPANS, { get v() { return rollSpan; }, set v(x) { rollSpan = x || rollSpan; renderZoom(true); } }, 'v');
+  renderZoom(false);
+  $('#zoomClose').focus();
+}
+function closeZoom() { $('#rollZoom').hidden = true; rollAt = null; }
+$('#zoomClose').addEventListener('click', closeZoom);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#rollZoom').hidden) closeZoom(); });
 
 /* The 8am check: what every run has predicted for 8am, today until noon and
    tomorrow's after, with a report for 8am to set against it. Ad hoc reports
@@ -2393,6 +2499,7 @@ function renderRoll() {
       (others.length > 1 ? `<span class="r">runs ${lo.toFixed(1)}–${hi.toFixed(1)}</span>` : '') + '</li>' });
   }
   box.innerHTML = `<div class="swc">${rollPlot(ks)}<ul>${days.map((d) => d.html).join('')}</ul></div>`;
+  $('#rollOpen').addEventListener('click', openZoom);
 }
 
 // Every prediction made for an hour, from the history branch's file for its day.
