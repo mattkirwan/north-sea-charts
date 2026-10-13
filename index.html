@@ -2212,12 +2212,12 @@ function renderAlerts() {
    estimates were. Reports are kept on the phone and, with a GitHub token in
    Settings, as one JSON file each on the repo's `reports` branch. */
 const REPO = 'mattkirwan/north-sea-charts', REPORTS_BRANCH = 'reports';
-const BEACH_FACES = 25; // Saltburn's beach faces NNE: the pier points 25°
+const BEACH_FACES = 20; // Saltburn's beach faces NNE: the pier points 20° (true, from its mapped outline)
 const SPOTS = ['Saltburn', 'Sandsend', 'Long Sands', 'Scarborough N Bay', 'Cayton Bay', 'Other'];
 // Reports are what's measurable: each swell's face height as a range in feet
 // against a body (1-2 ft is shin to thigh; 6 ft is head high on a 6 ft
 // person), its kind, its period (time between crests passing a pier leg) and
-// the range of bearings it comes from (the pier points 25°). Early reports
+// the range of bearings it comes from (the pier points 20°). Early reports
 // had a size word, a compass point and the surface instead.
 const SIZES = [['flat', 'Flat'], ['ankle', 'Ankle'], ['knee', 'Knee'], ['waist', 'Waist'], ['chest', 'Chest'], ['head', 'Head'], ['overhead', 'Overhead'], ['double', 'Double overhead+']];
 const KINDS = [['local', 'Local'], ['mid', 'Mid-distance'], ['ground', 'Groundswell']];
@@ -2530,7 +2530,7 @@ function swellFields(n) {
     '<input type="number" inputmode="decimal" step="0.5" min="0" max="40" class="hi" placeholder="high" aria-label="High, feet"></div></div>' +
     '<div class="field"><span>Kind</span><div class="seg kind"></div></div>' +
     '<div class="field"><span>Period, s <small>time between crests passing a pier leg</small></span><input type="number" inputmode="decimal" step="0.1" min="2" max="25" class="per" style="max-width:96px"></div>' +
-    '<div class="field"><span>From, ° <small>the pier points 25°</small></span><div class="range">' +
+    '<div class="field"><span>From, ° <small>the pier points 20° true</small></span><div class="range">' +
     '<input type="number" inputmode="numeric" step="1" min="0" max="359" class="flo" placeholder="from" aria-label="From bearing, degrees"><span>to</span>' +
     '<input type="number" inputmode="numeric" step="1" min="0" max="359" class="fhi" placeholder="to" aria-label="To bearing, degrees"></div></div>';
   const sel = { kind: null };
