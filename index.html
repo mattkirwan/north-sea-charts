@@ -53,12 +53,13 @@ body.adjust .tabbar,body.adjust .subnav{pointer-events:none;opacity:.35}
 #layer #imgIce{z-index:1;transition:none}
 body.mono #imgA,body.mono #imgB{filter:grayscale(1) contrast(1.1)}
 #travel{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
-.wkey{position:absolute;right:12px;top:calc(100% + 2px);width:min(56vw,230px);padding:6px 8px 4px;border-radius:10px;background:rgba(15,34,48,.78);pointer-events:none;z-index:6}
-.wkey .wk{font:600 11px var(--f-body);color:var(--paper);margin-bottom:4px}
-.wkey .wb{display:flex;height:8px;border-radius:2px;overflow:hidden}
+.wkey{position:absolute;right:10px;top:calc(100% + 6px);display:flex;flex-direction:column;align-items:flex-end;gap:4px;padding:6px 6px 6px 4px;border-radius:10px;background:rgba(15,34,48,.72);pointer-events:none;z-index:6}
+.wkey .wk{font:700 11px var(--f-body);color:var(--paper)}
+.wkey .wkc{display:flex;gap:4px}
+.wkey .wb{display:flex;flex-direction:column-reverse;width:9px;height:min(34vh,230px);border-radius:2px;overflow:hidden}
 .wkey .wb i{flex:1}
-.wkey .wt{position:relative;height:13px;font:500 10px var(--f-body);color:var(--slate)}
-.wkey .wt span{position:absolute;transform:translateX(-50%)}
+.wkey .wt{position:relative;width:20px;font:500 10px var(--f-body);color:var(--slate);text-align:right}
+.wkey .wt span{position:absolute;right:0;transform:translateY(50%)}
 #travel .arc{fill:none;stroke-width:2;stroke-dasharray:7 6;stroke-linecap:round}
 #travel .rule{fill:none;stroke-width:2.5;stroke-linecap:round}
 #travel .halo{stroke:rgba(15,34,48,.75);stroke-width:4.5}
@@ -1128,9 +1129,11 @@ function updateWaveBtn() {
   key.hidden = !k;
   if (!k) return;
   const n = k.colours.length;
-  key.innerHTML = `<div class="wk">${WAVE_NAMES[opts.waveLayer]} (${k.unit})</div>` +
-    `<div class="wb">${k.colours.map((c) => `<i style="background:${c}"></i>`).join('')}</div>` +
-    `<div class="wt">${k.labels.map((v) => `<span style="left:${(k.edges.indexOf(v) / n) * 100}%">${v}</span>`).join('')}</div>`;
+  // Upright down the right-hand side: biggest at the top.
+  key.setAttribute('aria-label', `${WAVE_NAMES[opts.waveLayer]} key, in ${k.unit === 'm' ? 'metres' : 'seconds'}`);
+  key.innerHTML = `<div class="wk">${k.unit}</div><div class="wkc">` +
+    `<div class="wt">${k.labels.map((v) => `<span style="bottom:${(k.edges.indexOf(v) / n) * 100}%">${v}</span>`).join('')}</div>` +
+    `<div class="wb">${k.colours.map((c) => `<i style="background:${c}"></i>`).join('')}</div></div>`;
 }
 waveBtn.addEventListener('click', () => {
   opts.waveLayer = WAVE_MODES[(WAVE_MODES.indexOf(opts.waveLayer) + 1) % WAVE_MODES.length];
