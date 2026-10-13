@@ -17,14 +17,19 @@ falling at least 24 hPa in 24 hours, scaled for latitude, as forecasters
 define it) whose winds are aimed straight down the window at Saltburn, and
 works out when that swell would arrive: the first long-period energy and the
 main pulses, from the deep-water group speed g*T/4pi. Swell doesn't bend far
-in deep water, so winds aimed well away (south of Iceland, at Norway) count
-for nothing here; the alert just notes where the storm's strongest winds
-were, if they missed.
+in deep water, so winds aimed well away (at Norway, say) count for nothing
+here; the alert just notes where the storm's strongest winds were, if they
+missed.
 
-Two bends are allowed for, at the window's edges, and come out smaller:
+Three bends are allowed for, and come out smaller:
 - North-west, round the Aberdeenshire corner: up to NW_FAN degrees, which
   reaches the sea off east Iceland and the Faroes (a groundswell's spread of
   directions, and diffraction round the corner).
+- Through the gap between Orkney and Shetland (GAP), from GAP_FAN: the
+  Atlantic south of Iceland. Swell from storms there heading for Norway
+  spills through the gap and turns down the North Sea to us from the north,
+  as NOAA's wave model had it on 15 Oct 2026 and the buoys saw on 16 Mar 2026
+  (18-22 s, the rarest and best swell we get).
 - South-east, along the Yorkshire coast: SE swell from the southern North
   Sea bends in round the headlands in the shallows. Rays ignore land in the
   first SE_SHORE_KM (out past Flamborough Head) for up to SE_FAN degrees
@@ -78,6 +83,9 @@ STEP_DEG, MAX_KM, RAY_KM = 0.5, 3500, 4
 ISLAND_KM2 = 3000  # islands smaller than this don't block the window
 NW_FAN, SE_FAN, SE_SHORE_KM = 30, 45, 85
 SE_ARRIVE = 105    # the most side-on (degrees) swell bending in from the south-east arrives
+GAP = (59.5, -1.9)                   # sea between Orkney and Fair Isle
+GAP_FAN = (265, 340)                 # bearings from the gap out to the Atlantic south of Iceland
+GAP_SHARE = 0.35                     # less gets through and round than at the other bends
 KN = 1.943844
 R = 6371.0
 
@@ -178,6 +186,13 @@ def swell_window():
     r = rays(*ORIGIN, MAX_KM, SE_SHORE_KM)
     r = np.where(r > SE_SHORE_KM, r, 0)
     bends.append(dict(name='along the Yorkshire coast', lat=ORIGIN[0], lon=ORIGIN[1], km=0, start=SE_SHORE_KM,
+                      reach=[int(v) for v in np.where(fan, r, 0)]))
+    # North: through the gap between Orkney and Shetland, which Saltburn sees
+    # straight up the North Sea.
+    fan = (bearings >= GAP_FAN[0]) & (bearings <= GAP_FAN[1])
+    r = rays(*GAP, MAX_KM)
+    bends.append(dict(name='through the gap between Orkney and Shetland', lat=GAP[0], lon=GAP[1],
+                      km=int(gc_dist(GAP[0], GAP[1], ORIGIN[0], ORIGIN[1])), start=0, share=GAP_SHARE,
                       reach=[int(v) for v in np.where(fan, r, 0)]))
     return dict(origin=list(ORIGIN), step=step, maxKm=MAX_KM, reach=[int(v) for v in reach], bends=bends)
 
@@ -433,7 +448,7 @@ def _paths(window):
             r = gr[int(round(b / step)) % len(gr)]
             if r > max(g['start'], 60):
                 out.append(dict(lat=g['lat'], lon=g['lon'], b=b, start=g['start'], end=min(r, MAX_KM - g['km']), km=g['km'],
-                                share=0.5, arrive=arrive if arrive is not None else min(b, SE_ARRIVE)))
+                                share=g.get('share', 0.5), arrive=arrive if arrive is not None else min(b, SE_ARRIVE)))
     return out
 
 
