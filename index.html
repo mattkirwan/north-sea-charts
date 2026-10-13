@@ -49,7 +49,6 @@ body.adjust .tabbar,body.adjust .subnav{pointer-events:none;opacity:.35}
 #layer{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
 #layer img{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:none;-webkit-user-drag:none}
 #layer img.on{opacity:1}
-#layer #imgWind{z-index:2;transition:none}
 #layer #imgIce{z-index:1;transition:none}
 body.mono #imgA,body.mono #imgB{filter:grayscale(1) contrast(1.1)}
 #travel{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
@@ -101,6 +100,8 @@ body.mono #imgA,body.mono #imgB{filter:grayscale(1) contrast(1.1)}
 .bar.ok{background:rgba(232,238,241,.5)}
 .bar.missing{background:transparent;box-shadow:inset 0 0 0 1px rgba(232,238,241,.22)}
 .bar.cur{background:var(--amber);height:28px}
+.bars.dense{gap:0}
+.bars.dense .bar{border-radius:0;box-shadow:inset -1px 0 0 rgba(0,0,0,.18)}
 .now{position:absolute;top:18px;bottom:0;width:2px;margin-left:-1px;background:var(--glass);pointer-events:none}
 .now::before{content:"";position:absolute;top:-3px;left:-2px;width:6px;height:6px;border-radius:50%;background:var(--glass)}
 .controls{display:flex;align-items:center;gap:2px;margin-top:6px}
@@ -406,7 +407,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
         <img id="imgA" alt="" referrerpolicy="no-referrer" draggable="false">
         <img id="imgB" alt="" referrerpolicy="no-referrer" draggable="false">
         <img id="imgIce" alt="" referrerpolicy="no-referrer" draggable="false">
-        <img id="imgWind" alt="" referrerpolicy="no-referrer" draggable="false">
       </div>
       <svg id="travel" aria-hidden="true"></svg>
     </div>
@@ -441,7 +441,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
         <button class="btn" id="prev" aria-label="Previous frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
         <button class="btn play" id="play" aria-label="Play"><svg viewBox="0 0 24 24" fill="currentColor"><path id="playIcon" d="M8 5.5v13l11-6.5z"/></svg></button>
         <button class="btn" id="next" aria-label="Next frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
-        <button class="btn" id="windBtn" aria-pressed="false" aria-label="Wind arrows" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10.5a2.5 2.5 0 1 0-2.5-2.5M3 12h15.5a2.5 2.5 0 1 1-2.5 2.5M3 16h7.5a2.5 2.5 0 1 1-2.5 2.5"/></svg></button>
         <button class="btn" id="waveBtn" aria-pressed="false" aria-label="Wave model: pressure, wave height or swell period" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9c2.5-2.5 5-2.5 7.5 0s5 2.5 7.5 0 3.5-1.5 5 0M2 15c2.5-2.5 5-2.5 7.5 0s5 2.5 7.5 0 3.5-1.5 5 0"/></svg><b class="wlab" id="waveLab"></b></button>
         <button class="btn" id="travelBtn" aria-pressed="false" aria-label="Swell window and travel times" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 3v18M19 6h-3M19 10h-5M19 14h-3M19 18h-5"/><path d="M4 8c3-2 6-2 8 0M4 14c3-2 6-2 8 0" stroke-dasharray="2 2.5"/></svg></button>
         <div class="run" id="run">Finding the latest run</div>
@@ -570,13 +569,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
   </section>
   <section class="sgroup" aria-labelledby="setChartH">
     <h3 id="setChartH">Pressure charts</h3>
-    <div class="field"><span>Charts</span><div class="seg" id="segSrc"></div></div>
-    <div class="field"><span>Chart</span><div class="seg" id="segChart"></div></div>
-    <div class="field"><span>Map</span><div class="seg" id="segRegion"></div></div>
-    <div class="field"><span>Model run</span><div class="seg" id="segRun"></div></div>
     <div class="field"><span>How far ahead</span><div class="seg" id="segDays"></div></div>
-    <div class="field"><span>Time between frames</span><div class="seg" id="segStep"></div></div>
-    <div class="field"><span>Wind arrows</span><div class="seg" id="segWind"></div></div>
     <div class="field"><span>Chart colours</span><div class="seg" id="segMono"></div></div>
     <div class="field"><span>Sea ice</span><div class="seg" id="segIce"></div></div>
     <div class="field"><span>Swell window &amp; travel times</span><div class="seg" id="segTravel"></div></div>
@@ -620,40 +613,24 @@ const store = {
 };
 
 /* ------------------------------------------------------------------
-   Source adapter. wetterzentrale.de renders NOAA GFS 0.25° data.
-   Files are named by run slot (00/06/12/18), not by date, and each
-   slot is overwritten daily, so the run date is worked out here.
-   To add a source, copy this object and change url()/page()/timings.
+   Where the charts come from: our own, drawn from NOAA's GFS after each run
+   (see SOURCES.ours). (Wetterzentrale's charts were an option until Oct 2026.)
 ------------------------------------------------------------------- */
 let cacheBust = 0;
 const runKey = (ms) => { const d = new Date(ms); return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}${pad2(d.getUTCHours())}`; };
 const SOURCES = {};
-SOURCES.wz = {
-  name: 'wetterzentrale.de',
-  model: 'GFS',
-  cycleH: 6,
-  maxStep: 384,
-  earliestLagH: 3.75, // first frames of a run appear ~3.5 h after init
-  scheduleLagH: 5,    // whole run is normally there ~5 h after init
-  url(runMs, step, o) {
-    const hh = pad2(new Date(runMs).getUTCHours());
-    return `https://wetterzentrale.de/maps/GFSOP${o.region}${hh}_${step}_${o.chart}.png?run=${runKey(runMs)}${cacheBust ? '&v=' + cacheBust : ''}`;
-  },
-  page(runMs, step, o) {
-    const map = o.region === 'UK' ? 20 : 1;
-    return `https://wetterzentrale.de/en/topkarten.php?map=${map}&model=gfs&var=${o.chart}&time=${step}&run=${new Date(runMs).getUTCHours()}&lid=OP&h=0&mv=0&tr=${o.step}`;
-  }
-};
 // Our own charts, drawn from NOAA's GFS data after each run by a GitHub Action
 // (scripts/gfs_charts.py) onto the repo's `charts` branch. Only the newest run
-// is kept, every 6 hours out to +168 h; manifest.json says which run it is and
-// where the North Sea sits in the (much wider) map, which is where we start.
+// is kept, out to +384 h: hourly for 2 days, then every 3, 6 and 12 hours;
+// manifest.json lists the hours, says which run it is and where the North Sea
+// sits in the (much wider) map, which is where we start.
 SOURCES.ours = {
   name: 'NOAA GFS, drawn by this app',
   model: 'GFS',
   cycleH: 6,
-  maxStep: 168,
-  only: { step: 6, runOffset: 0, days: 7 }, // options this source can't vary (step can, once a run has 3-hourly frames)
+  maxStep: 384,
+  only: { runOffset: 0 }, // the newest run only
+  steps: null, // the run's hours, from the manifest
   region: 'WIDE', // the wide map, from the Atlantic to Svalbard (was 'GFS', the North Sea only)
   base: 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/charts/',
   // The frames: the pressure charts, or with the wave layer on, NOAA's wave
@@ -663,37 +640,28 @@ SOURCES.ours = {
     return `${this.base}${file}?run=${runKey(runMs)}&map=wide${cacheBust ? '&v=' + cacheBust : ''}`;
   },
   waves: null, // { height, period } frame names, when the run has the wave layer
-  // The wind layer: transparent arrows the same size as the chart, from the same run.
-  hasWind: false,
   ice: null, // { file, date } of the sea-ice layer, when the run has one
   iceUrl(runMs) { return `${this.base}${this.ice.file}?run=${runKey(runMs)}${cacheBust ? '&v=' + cacheBust : ''}`; },
-  windUrl(runMs, step) { return `${this.base}w${String(step).padStart(3, '0')}.png?run=${runKey(runMs)}${cacheBust ? '&v=' + cacheBust : ''}`; },
   page() { return 'https://github.com/mattkirwan/north-sea-charts/tree/charts'; },
   async latest() {
     const r = await fetchT(`${this.base}manifest.json?t=${Math.floor(Date.now() / 300e3)}`, { cache: 'no-store' }, 15e3);
     if (!r.ok) throw new Error(`manifest ${r.status}`);
     const m = await r.json();
     if (m.home) homeFrom(m.home);
-    this.hasWind = !!m.wind;
     this.waves = m.waves || null;
-    // Every 3 hours when the run has them (from Oct 2026), else every 6.
-    if ((m.steps || []).includes(3)) delete this.only.step; else this.only.step = 6;
+    this.steps = m.steps || null;
     this.ice = m.ice || null;
     this.gridFile = m.grid || null;
     return { ms: m.run, how: 'manifest' };
   }
 };
 
-const CHARTS = [['1', 'Pressure + 500 hPa'], ['9', '10 m wind']];
-const REGIONS = [['EU', 'North Sea crop'], ['UK', 'UK map']];
-const DAYS = [[5, '5 days'], [7, '7 days'], [10, '10 days'], [16, '16 days']];
-const STEPS = [[6, '6 hours'], [3, '3 hours']];
+const DAYS = [[2, '2 days'], [7, '7 days'], [16, '16 days']];
 const SPEEDS = [[700, 'Slow'], [420, 'Normal'], [220, 'Fast']];
-const WIND_LAYER = [[false, 'Off'], [true, 'On']];
-const ICE_LAYER = WIND_LAYER;
+const ICE_LAYER = [[false, 'Off'], [true, 'On']];
 const MONO = [[false, 'Colour'], [true, 'Black & white']];
 const BETA = [[false, 'Off'], [true, 'On']];
-const TRAVEL_LAYER = WIND_LAYER;
+const TRAVEL_LAYER = ICE_LAYER;
 const PERIODS = [[8, '8 s'], [10, '10 s'], [12, '12 s'], [14, '14 s']];
 // Starting crop as a fraction of the source image: centre point and visible height.
 const DEFAULT_VIEWS = { EU: { cx: 0.53, cy: 0.34, span: 0.68 }, UK: { cx: 0.5, cy: 0.5, span: 1.02 }, WIDE: { cx: 0.5309, cy: 0.4806, span: 0.705 } };
@@ -708,12 +676,13 @@ function homeFrom(home) {
   if (old) store.set('nsv.view.GFS', null);
   if (SOURCE === SOURCES.ours && !exploring) { view = loadView(); applyView(); }
 }
-const SRCS = [['ours', 'Ours'], ['wz', 'Wetterzentrale']];
-const DEFAULTS = { src: 'ours', beta: false, windLayer: false, waveLayer: false, seaIce: true, chartMono: false, travelLayer: false, swellPeriod: 10, chart: '1', region: 'EU', runOffset: 0, days: 7, step: 6, speed: 420, speedUnit: 'mph' };
+const DEFAULTS = { beta: false, waveLayer: false, seaIce: true, chartMono: false, travelLayer: false, swellPeriod: 10, days: 7, speed: 420, speedUnit: 'mph' };
 
 const opts = Object.assign({}, DEFAULTS, store.get('nsv.opts', {}));
 const saveOpts = () => store.set('nsv.opts', opts);
-let SOURCE = SOURCES[opts.src] || SOURCES.ours;
+const SOURCE = SOURCES.ours;
+// Settings saved before Oct 2026 may have Wetterzentrale's choices.
+if (!DAYS.some(([d]) => d === opts.days)) opts.days = 7;
 // An option's value as the current source uses it (ours has fixed steps and one run).
 const opt = (k) => (SOURCE.only && k in SOURCE.only ? SOURCE.only[k] : opts[k]);
 const viewRegion = () => SOURCE.region || opts.region;
@@ -762,7 +731,6 @@ let loadToken = 0;
 let playing = false, playTimer = 0;
 let lastCheck = 0;
 let adjusting = false;
-const probeCache = new Map();
 
 const stage = $('#stage'), layer = $('#layer');
 let front = $('#imgA'), back = $('#imgB');
@@ -775,37 +743,9 @@ const cycleStart = (ms) => {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), Math.floor(d.getUTCHours() / SOURCE.cycleH) * SOURCE.cycleH);
 };
 
-// Reads the last frame's Last-Modified date. Only works if the server allows
-// cross-origin reads; otherwise returns 'unknown' and the schedule is used.
-async function probe(rMs) {
-  const lastStep = Math.min(opt('days') * 24, SOURCE.maxStep);
-  const url = SOURCE.url(rMs, lastStep, opts);
-  if (probeCache.has(url)) return probeCache.get(url);
-  let res = 'unknown';
-  try {
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), 6000);
-    const r = await fetch(url, { method: 'HEAD', mode: 'cors', cache: 'no-store', referrerPolicy: 'no-referrer', signal: ctl.signal });
-    clearTimeout(t);
-    const lm = Date.parse(r.headers.get('last-modified') || '');
-    if (r.ok && lm) res = lm >= rMs + 2 * H ? 'ok' : 'stale';
-    else if (r.status === 404) res = 'stale';
-  } catch { res = 'unknown'; }
-  if (res !== 'stale') probeCache.set(url, res);
-  return res;
-}
-
 async function resolveLatest() {
-  const now = Date.now();
-  if (SOURCE.latest) {
-    try { return await SOURCE.latest(); }
-    catch { return { ms: cycleStart(now - 5 * H), how: 'schedule' }; }
-  }
-  const optimistic = cycleStart(now - SOURCE.earliestLagH * H);
-  const v = await probe(optimistic);
-  if (v === 'ok') return { ms: optimistic, how: 'server' };
-  if (v === 'stale') return { ms: optimistic - SOURCE.cycleH * H, how: 'server' };
-  return { ms: cycleStart(now - SOURCE.scheduleLagH * H), how: 'schedule' };
+  try { return await SOURCE.latest(); }
+  catch { return { ms: cycleStart(Date.now() - 5 * H), how: 'schedule' }; }
 }
 
 /* ---------------- Loading frames ---------------- */
@@ -820,11 +760,10 @@ async function load({ keepValid = true, latest = null } = {}) {
   runMs = latestMs - opt('runOffset') * SOURCE.cycleH * H;
   lastCheck = Date.now();
 
-  const maxStep = Math.min(opt('days') * 24, SOURCE.maxStep);
-  frames = [];
-  for (let h = 0; h <= maxStep; h += opt('step')) {
-    frames.push({ step: h, valid: runMs + h * H, url: SOURCE.url(runMs, h, opts), status: 'pending', img: null });
-  }
+  // The run's hours (every 6 to +168 for a run drawn before Oct 2026), as far ahead as set.
+  const maxStep = Math.min(opts.days * 24, SOURCE.maxStep);
+  const hours = SOURCE.steps || Array.from({ length: 29 }, (_, k) => k * 6);
+  frames = hours.filter((h) => h <= maxStep).map((h) => ({ step: h, valid: runMs + h * H, url: SOURCE.url(runMs, h, opts), status: 'pending', img: null }));
   idx = nearestIndex(jumpTo || (keepValid && prevValid ? prevValid : Date.now()));
   jumpTo = null;
   front.dataset.url = '';
@@ -903,29 +842,8 @@ async function swapTo(f) {
   back.classList.add('on');
   front.classList.remove('on');
   [front, back] = [back, front];
-  showWind(f);
 }
 
-/* Wind arrows: a layer over our charts, on or off with the button by the run
-   line (or in Settings). The new frame's arrows replace the old once decoded,
-   and every frame's are fetched ahead while the layer is on, so playback
-   keeps up. */
-const windImg = $('#imgWind'), windBtn = $('#windBtn');
-let windAhead = { key: '', imgs: [] };
-const windOn = () => opts.windLayer && SOURCE === SOURCES.ours && SOURCES.ours.hasWind;
-function showWind(f) {
-  if (!windOn() || !f) { windImg.classList.remove('on'); return; }
-  const url = SOURCES.ours.windUrl(runMs, f.step);
-  if (windImg.dataset.url === url) { windImg.classList.add('on'); return; }
-  windImg.dataset.url = url;
-  windImg.src = url;
-  windImg.decode().then(() => { if (windImg.dataset.url === url) windImg.classList.add('on'); }).catch(() => {});
-}
-function fetchWindAhead() {
-  const key = `${runMs}|${frames.length}|${cacheBust}`;
-  if (!windOn() || windAhead.key === key) return;
-  windAhead = { key, imgs: frames.map((f) => { const im = new Image(); im.referrerPolicy = 'no-referrer'; im.src = SOURCES.ours.windUrl(runMs, f.step); return im; }) };
-}
 /* The swell window and travel times to Saltburn. The window is the open sea
    swell can cross to reach us in a straight line (see window.json above).
    Travel times: dashed arcs of equal travel time across
@@ -1090,21 +1008,6 @@ function updateIce() {
 const iceDay = (d) => { const [y, m, dd] = d.split('-').map(Number); return new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }).format(Date.UTC(y, m - 1, dd)); };
 // Black and white for our charts (the layers over them keep their colour).
 function applyMono() { document.body.classList.toggle('mono', !!opts.chartMono && SOURCE === SOURCES.ours && !waveOn()); }
-function updateWind() {
-  // Always offered on our charts; a run drawn before the layer existed just has none.
-  windBtn.hidden = SOURCE !== SOURCES.ours;
-  windBtn.setAttribute('aria-pressed', String(!!opts.windLayer));
-  fetchWindAhead();
-  showWind(frames[idx]);
-}
-windBtn.addEventListener('click', async () => {
-  opts.windLayer = !opts.windLayer;
-  saveOpts();
-  if (opts.windLayer && !SOURCES.ours.hasWind) await freshManifest();
-  updateWind();
-  toast(!opts.windLayer ? 'Wind arrows off' : SOURCES.ours.hasWind ? 'Wind arrows on' : 'Wind arrows on from the next run');
-});
-
 /* The wave layer: NOAA's wave model (GFS-Wave) for the same run, drawn by the
    chart job on the same map, shown in place of the pressure charts. The
    button goes pressure, wave height, longest swell period, and back. The
@@ -1160,7 +1063,6 @@ function renderMeta(f) {
 function updateRunLine() {
   applyMono();
   updateWaveBtn();
-  updateWind();
   updateIce();
   updateTravel();
   // Banner until the first chart is on screen, or if none could be loaded.
@@ -1184,11 +1086,25 @@ function updateRunLine() {
 
 /* ---------------- Timeline ---------------- */
 let curBar = null;
+/* Each frame's block is wider the more time it covers (hourly for the first
+   2 days, then 3, 6 and 12 hours), but not in proportion, or the hourly
+   frames would be too thin to touch: 1 + 0.55·log2(hours), so 1, 1.9, 2.4
+   and 3. edges[i] is where frame i starts along the timeline (0 to 1). */
+let edges = [0, 1];
+const frameHours = (i) => (frames[i + 1] ? frames[i + 1].step - frames[i].step : i ? frames[i].step - frames[i - 1].step : 6);
+function layoutWeights() {
+  const w = frames.map((_, i) => 1 + 0.55 * Math.log2(Math.max(1, frameHours(i))));
+  const total = w.reduce((a, b) => a + b, 0);
+  edges = [0];
+  w.forEach((x) => edges.push(edges.at(-1) + x / total));
+  return w;
+}
 function buildTimeline() {
   barsEl.innerHTML = '';
   curBar = null;
   const frag = document.createDocumentFragment();
-  frames.forEach(() => { const b = document.createElement('span'); b.className = 'bar'; frag.appendChild(b); });
+  layoutWeights().forEach((w) => { const b = document.createElement('span'); b.className = 'bar'; b.style.flex = `${w} 1 0`; frag.appendChild(b); });
+  barsEl.classList.toggle('dense', frames.length > 60); // too many for gaps between them
   barsEl.appendChild(frag);
   tl.setAttribute('aria-valuemax', String(frames.length - 1));
   layoutDays();
@@ -1206,9 +1122,10 @@ function layoutDays() {
   groups.forEach((g, gi) => {
     const el = document.createElement('span');
     el.className = 'dlab' + (gi % 2 ? ' alt' : '') + (g.k === today ? ' today' : '');
-    el.style.left = (g.start / n * 100) + '%';
-    el.style.width = ((g.end - g.start) / n * 100) + '%';
-    const px = w * (g.end - g.start) / n;
+    const a = edges[g.start], b = edges[g.end];
+    el.style.left = (a * 100) + '%';
+    el.style.width = ((b - a) * 100) + '%';
+    const px = w * (b - a);
     el.textContent = px >= 46 ? `${fWeekday.format(g.ms)} ${fDate.format(g.ms)}` : px >= 18 ? fDate.format(g.ms) : '';
     daysEl.appendChild(el);
   });
@@ -1227,17 +1144,20 @@ function markCurrent() {
 }
 function placeNow() {
   if (frames.length < 2) { nowEl.hidden = true; return; }
-  const fi = (Date.now() - frames[0].valid) / (opt('step') * H);
-  if (fi < -0.5 || fi > frames.length - 0.5) { nowEl.hidden = true; return; }
+  // Within the frame now falls in, by how far through its hours it is.
+  const now = Date.now(), i = frames.findIndex((f, k) => now >= f.valid && now < f.valid + frameHours(k) * H);
+  if (i < 0) { nowEl.hidden = true; return; }
   nowEl.hidden = false;
-  nowEl.style.left = ((fi + 0.5) / frames.length * 100) + '%';
+  const part = (now - frames[i].valid) / (frameHours(i) * H);
+  nowEl.style.left = ((edges[i] + part * (edges[i + 1] - edges[i])) * 100) + '%';
 }
 
 let scrubbing = false;
 function idxFromX(x) {
   const r = barsEl.getBoundingClientRect();
-  const p = Math.min(Math.max(x - r.left, 0), r.width - 0.01);
-  return Math.floor(p / r.width * frames.length);
+  const p = Math.min(Math.max(x - r.left, 0), r.width - 0.01) / r.width;
+  const i = edges.findIndex((e, k) => k > 0 && p < e) - 1;
+  return i < 0 ? frames.length - 1 : i;
 }
 tl.addEventListener('pointerdown', (e) => {
   if (!frames.length) return;
@@ -1472,44 +1392,20 @@ function seg(el, key, items) {
 function onOptChange(key) {
   if (key === 'speed') return;
   if (key === 'speedUnit') { renderLocal(); return; }
-  if (key === 'windLayer') { updateWind(); return; }
   if (key === 'seaIce') { updateIce(); return; }
   if (key === 'chartMono') { applyMono(); return; }
   if (key === 'beta') { showBeta(); renderSettings(); return; }
   if (key === 'travelLayer' || key === 'swellPeriod') { updateTravel(); return; }
-  if (key === 'src') { SOURCE = SOURCES[opts.src] || SOURCES.ours; showSourceFields(); }
-  if (key === 'region' || key === 'src') { view = loadView(); natural = null; maybeHint(); }
-  if (key !== 'runOffset') probeCache.clear();
   // Charts load on the first visit to Pressure; until then there's nothing to redo.
   if (chartsStarted) load({ keepValid: true }).then(renderFine);
-}
-function runItems() {
-  if (!latestMs) return [[0, 'Latest']];
-  return [0, 1, 2].map((o) => {
-    const ms = latestMs - o * SOURCE.cycleH * H;
-    return [o, `${fRunShort.format(ms)} ${runLabel(ms)}${o === 0 ? ' (latest)' : ''}`];
-  });
 }
 function renderFine() {
   const f = frames[idx];
   const p = $('#fine');
-  if (SOURCE === SOURCES.ours) {
-    p.textContent = 'New charts four times a day, about five hours after each model run (00, 06, 12 and 18 UTC). ' +
+  {
+    p.textContent = 'New charts four times a day, about five hours after each model run (00, 06, 12 and 18 UTC): hourly for the first 2 days, then every 3 hours to day 7, every 6 to day 12 and every 12 to day 16 (those last days follow about an hour later). ' +
       'Colour is sea-level pressure: blues and purples for low pressure, oranges and reds for high, with isobars every 4 hPa and the yellow dot at Saltburn. ' +
       'Before publishing, each run is checked for missing frames and impossible pressures. ';
-  } else {
-    const how = runHow === 'server'
-      ? "The run time is confirmed from the server's file dates."
-      : "The run time is worked out from the model's schedule.";
-    p.textContent = `${how} New runs are checked every 10 minutes while this page is open. `;
-  }
-  if (f && SOURCE === SOURCES.wz) {
-    const a = document.createElement('a');
-    a.href = SOURCE.page(runMs, f.step, opts);
-    a.target = '_blank';
-    a.rel = 'noopener';
-    a.textContent = 'Open this frame full size';
-    p.append(a);
   }
   if (isIOS && !standalone) p.append(document.createElement('br'), 'On iPhone, use Share, then Add to Home Screen, to open this full screen.');
 }
@@ -1518,15 +1414,8 @@ const standalone = window.navigator.standalone === true || matchMedia('(display-
 function renderSettings() {
   if (!showing('settings')) return;
   seg($('#segUnit'), 'speedUnit', UNITS);
-  seg($('#segSrc'), 'src', SRCS);
-  showSourceFields();
-  seg($('#segChart'), 'chart', CHARTS);
-  seg($('#segRegion'), 'region', REGIONS);
-  seg($('#segRun'), 'runOffset', runItems());
   seg($('#segDays'), 'days', DAYS);
-  seg($('#segStep'), 'step', STEPS);
   seg($('#segSpeed'), 'speed', SPEEDS);
-  seg($('#segWind'), 'windLayer', WIND_LAYER);
   seg($('#segIce'), 'seaIce', ICE_LAYER);
   seg($('#segMono'), 'chartMono', MONO);
   seg($('#segBeta'), 'beta', BETA);
@@ -1540,17 +1429,9 @@ function renderSettings() {
   $('#actFull').textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
   renderFine();
 }
-// Our charts come in one style and area, every 6 hours for 7 days, latest run only.
-function showSourceFields() {
-  ['#segChart', '#segRegion', '#segRun', '#segDays'].forEach((q) => { $(q).closest('.field').hidden = SOURCE === SOURCES.ours; });
-  $('#segWind').closest('.field').hidden = SOURCE !== SOURCES.ours;
-  ['#segIce', '#segMono'].forEach((q) => { $(q).closest('.field').hidden = SOURCE !== SOURCES.ours; });
-  ['#segTravel', '#segPeriod'].forEach((q) => { $(q).closest('.field').hidden = SOURCE !== SOURCES.ours; });
-}
 $('#actAdjust').addEventListener('click', enterAdjust);
 $('#actReload').addEventListener('click', () => {
   cacheBust = Date.now();
-  probeCache.clear();
   chartsStarted = true;
   load({ keepValid: true }).then(() => { toast('Charts reloaded'); renderSettings(); });
 });

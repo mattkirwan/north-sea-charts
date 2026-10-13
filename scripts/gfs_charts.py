@@ -1,14 +1,13 @@
 """Draw our own North Sea pressure charts from NOAA's GFS model.
 
 For the newest complete GFS run, downloads sea-level pressure and 500 hPa
-geopotential height for each forecast hour (0-168, every 3 h) from NOAA's open
+geopotential height for each forecast hour (0-384: hourly for 2 days, then
+every 3, 6 and 12 hours; see DRAW_STEPS) from NOAA's open
 data on AWS, using the .idx files to fetch just those two fields, and draws a
 chart per hour: sea-level pressure as bright colour (blues and purples for
 lows, oranges and reds for highs) with isobars every 4 hPa, H/L centres and
 coastlines. (500 hPa height is downloaded for the checks but not drawn.) Writes PNGs and manifest.json into the output folder,
 plus ice.png, a transparent sea-ice layer from the latest ice chart (see draw_ice), with ice.zip, the chart itself;
-plus a matching transparent wind layer per hour (w000.png...): 10 m wind as
-arrows the way it blows, longer for stronger, which the app can lay over the chart;
 plus fields.npz: the run's numbers themselves for the charted area, so we
 keep the data as well as the pictures (see save_fields);
 plus the wave layer: NOAA's wave model (GFS-Wave) for the same run and hours,
@@ -21,7 +20,8 @@ swell_sources.py) come the swell window (window.json), bomb low alerts (in
 the manifest) and our own swell forecast for Saltburn (forecast.json). Checks
 before publishing: every frame present, pressures within physical limits.
 
-  python scripts/gfs_charts.py OUT_DIR [--check]
+  python scripts/gfs_charts.py OUT_DIR [--check]   # the first week (to FIRST)
+  python scripts/gfs_charts.py OUT_DIR --rest      # then the rest of the run, added
 
 --check also writes check/ images placing our chart beside Wetterzentrale's
 for the same run and hour, and prints our pressure at Saltburn beside
@@ -34,6 +34,8 @@ import multiprocessing as mp
 import os
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 from concurrent.futures import ProcessPoolExecutor
@@ -66,7 +68,11 @@ SALTBURN = (54.583, -0.973)
 PROJ = ccrs.LambertConformal(central_longitude=5, central_latitude=62, standard_parallels=(55, 70))
 FIELDS = {'PRMSL:mean sea level': 'prmsl', 'HGT:500 mb': 'gh', 'UGRD:10 m above ground': 'u10', 'VGRD:10 m above ground': 'v10'}
 KN = 1.943844                                  # knots per m/s
-DRAW_STEPS = list(range(0, 169, 3))           # frames drawn: every 3 hours to a week (the app can show every other)
+# Frames drawn: every hour for 2 days, every 3 hours to day 7, every 6 to day
+# 12 and every 12 to day 16 (the end of the run), closer where it matters.
+DRAW_STEPS = list(range(0, 49)) + list(range(51, 169, 3)) + list(range(174, 289, 6)) + list(range(300, 385, 12))
+FIRST = 168                                    # the first pass, published as soon as it's drawn; --rest adds the hours after
+WAIT_MIN = 75                                  # how long a frame waits for NOAA to publish its hour
 ANALYSIS_DAYS = 5                              # how far back the swell forecast starts
 PUBLISHED = f"https://raw.githubusercontent.com/{os.environ.get('GITHUB_REPOSITORY', 'mattkirwan/north-sea-charts')}/charts/"
 # The Norwegian Ice Service's latest chart of the European Arctic: drawn by
@@ -112,10 +118,24 @@ def get(url, rng=None, timeout=60):
         return r.read()
 
 
+def get_idx(url):
+    """A GRIB file's index, waiting up to WAIT_MIN minutes for NOAA to publish
+    it: the chart job starts when the run reaches +168 h, and the later hours
+    follow over the next hour or so."""
+    end = time.time() + WAIT_MIN * 60
+    while True:
+        try:
+            return get(url + '.idx').decode().splitlines()
+        except urllib.error.HTTPError as e:
+            if e.code not in (403, 404) or time.time() > end:
+                raise
+            time.sleep(60)
+
+
 def fetch_fields(run, step):
-    """Download just our two fields for one forecast hour and decode them."""
+    """Download just our fields for one forecast hour and decode them."""
     url = grib_url(run, step)
-    idx = get(url + '.idx').decode().splitlines()
+    idx = get_idx(url)
     out = {}
     for i, line in enumerate(idx):
         parts = line.split(':')
@@ -145,7 +165,7 @@ def fetch_waves(run, step):
     """NOAA's wave model for one forecast hour: height, peak period, and each
     separate swell's height and period, decoded and cut to the area we draw."""
     url = wave_url(run, step)
-    idx = get(url + '.idx').decode().splitlines()
+    idx = get_idx(url)
     out = {}
     for i, line in enumerate(idx):
         parts = line.split(':')
@@ -171,8 +191,9 @@ _wave_land = {}
 
 
 def wave_land():
-    """The land and coast (and Saltburn) as an image the size of the map, made
-    once and laid over every wave frame."""
+    """What every wave frame shares, made once: the land and coast (and
+    Saltburn) as an image the size of the map, and where each of its pixels
+    falls in lon/lat."""
     if not _wave_land:
         fig, ax = map_figure()
         fig.patch.set_alpha(0)
@@ -182,20 +203,36 @@ def wave_land():
         ax.plot(SALTBURN[1], SALTBURN[0], 'o', ms=6, color='#FFC23D', mec=COAST, mew=1, transform=ccrs.PlateCarree())
         ax.axis('off')
         fig.canvas.draw()
-        _wave_land['img'] = np.asarray(fig.canvas.buffer_rgba()).copy()
-        _wave_land['extent'] = ax.get_extent()
+        img = np.asarray(fig.canvas.buffer_rgba()).astype(np.float32) / 255
+        x0, x1, y0, y1 = ax.get_extent()
         plt.close(fig)
+        h, w = img.shape[:2]
+        xs, ys = np.meshgrid(x0 + (np.arange(w) + 0.5) / w * (x1 - x0), y1 - (np.arange(h) + 0.5) / h * (y1 - y0))
+        ll = ccrs.PlateCarree().transform_points(PROJ, xs.ravel(), ys.ravel())
+        _wave_land.update(img=img, extent=(x0, x1, y0, y1), lon=ll[:, 0].reshape(h, w), lat=ll[:, 1].reshape(h, w))
     return _wave_land
+
+
+def to_pixels(field, lons, lats, land):
+    """A lon/lat field sampled at every pixel of the map (bilinear; NaN stays NaN)."""
+    fi = (land['lat'] - lats[0]) / (lats[1] - lats[0])
+    fj = (land['lon'] - lons[0]) / (lons[1] - lons[0])
+    i0 = np.clip(np.floor(fi).astype(int), 0, len(lats) - 2)
+    j0 = np.clip(np.floor(fj).astype(int), 0, len(lons) - 2)
+    a, b = np.clip(fi - i0, 0, 1), np.clip(fj - j0, 0, 1)
+    return ((1 - a) * (1 - b) * field[i0, j0] + (1 - a) * b * field[i0, j0 + 1] +
+            a * (1 - b) * field[i0 + 1, j0] + a * b * field[i0 + 1, j0 + 1])
 
 
 def draw_waves(run, step, w, hpath, tpath):
     """Two frames from the wave model: height, and the period of the longest
     swell present (of the model's separate swells, any of LONG_MIN_M or more;
-    where there's only wind sea, its peak period),
-    each as colour over the sea with its scale in the corner, and for period a
-    white line where swell of 16 s or more has reached. Same map as the
-    pressure charts, pixel for pixel; played in turn, the swell can be seen
-    moving."""
+    where there's only wind sea, its peak period), each as colour over the sea
+    with its scale in the corner, and for period a white line where swell of
+    16 s or more has reached. Same map as the pressure charts, pixel for
+    pixel; played in turn, the swell can be seen moving. The colour is worked
+    out pixel by pixel from the model's grid, which is much quicker than
+    drawing contours."""
     hs = w['hs'].values
     per = np.stack([np.where(np.nan_to_num(w[f'sh{k}'].values) >= LONG_MIN_M, w[f'sp{k}'].values, np.nan) for k in (1, 2, 3)])
     tp = np.where(np.isfinite(hs), np.nan_to_num(np.nanmax(np.where(np.isfinite(per), per, -1), axis=0), nan=-1), np.nan)
@@ -204,24 +241,26 @@ def draw_waves(run, step, w, hpath, tpath):
     if np.nanmax(hs) > 25 or np.nanmax(tp) > 35:
         raise RuntimeError(f'waves f{step:03d}: implausible, {np.nanmax(hs):.1f} m, {np.nanmax(tp):.0f} s')
     land = wave_land()
+    ink = np.array(matplotlib.colors.to_rgba(INK))
     valid = run + dt.timedelta(hours=step)
     for field, levels, cmap, label_, unit, path in ((hs, H_LEVELS, H_CMAP, 'Wave height', 'm', hpath),
                                                      (tp, T_LEVELS, T_CMAP, 'Longest swell period', 's', tpath)):
+        norm = BoundaryNorm(levels, cmap.N, extend='max')
+        px = to_pixels(field, lons, lats, land)
+        rgba = cmap(norm(np.nan_to_num(px, nan=levels[0])))
+        rgba[~np.isfinite(px)] = ink
+        rgba[..., :3] = rgba[..., :3] * (1 - land['img'][..., 3:]) + land['img'][..., :3] * land['img'][..., 3:]
         fig, ax = map_figure()
-        ax.set_facecolor(INK)
-        # Each band its own colour, evenly through the scale (the app's key matches).
-        cf = ax.contourf(lons, lats, field, levels=levels, cmap=cmap, norm=BoundaryNorm(levels, cmap.N, extend='max'), extend='max',
-                         transform=ccrs.PlateCarree(), zorder=2, antialiased=False)
-        cf.set_edgecolor('face')
+        ax.imshow(rgba, extent=land['extent'], origin='upper', transform=PROJ, interpolation='nearest', zorder=2)
+        ax.set_extent(land['extent'], crs=PROJ)
         if unit == 's':
             cs = ax.contour(lons, lats, gaussian_filter(np.nan_to_num(field), 1), levels=[16], colors='white', linewidths=1.3,
                             transform=ccrs.PlateCarree(), zorder=4)
             for t in ax.clabel(cs, fmt='%d s', fontsize=9, inline=True, colors='white'):
                 t.set_path_effects([pe.withStroke(linewidth=2.5, foreground=COAST)])
-        ax.imshow(land['img'], extent=land['extent'], origin='upper', transform=PROJ, zorder=3, interpolation='nearest')
-        ax.set_extent(land['extent'], crs=PROJ)
         cax = fig.add_axes([0.60, 0.05, 0.37, 0.016])
-        cb = fig.colorbar(cf, cax=cax, orientation='horizontal', ticks=levels[::2] if unit == 's' else [0, 1, 2, 3, 4, 6, 8, 10, 12, 15])
+        cb = fig.colorbar(matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax, orientation='horizontal',
+                          ticks=levels[::2] if unit == 's' else [0, 1, 2, 3, 4, 6, 8, 10, 12, 15])
         cb.outline.set_edgecolor(PAPER)
         cb.ax.tick_params(labelsize=8, colors=PAPER, length=2)
         cb.ax.xaxis.set_label_position('top')
@@ -381,31 +420,6 @@ def draw(run, step, f, path):
     return p, lons, lats
 
 
-def draw_wind(step, f, path):
-    """10 m wind as arrows on a transparent layer the size of the chart: evenly
-    spaced across the map, pointing the way the wind blows, length in
-    proportion to speed (a key arrow shows 30 kn). Calm spots get none."""
-    u, v = f['u10'].values * KN, f['v10'].values * KN
-    lons, lats = f['u10'].longitude.values, f['u10'].latitude.values
-    speed = np.hypot(u, v)
-    if np.isnan(speed).any() or speed.max() > 200:
-        raise RuntimeError(f'f{step:03d}: implausible wind, max {np.nanmax(speed):.0f} kn')
-    calm = speed < 6  # light enough not to matter, and only an arrowhead at this size
-    u, v = np.where(calm, np.nan, u), np.where(calm, np.nan, v)
-    fig, ax = map_figure()
-    fig.patch.set_alpha(0)
-    ax.set_facecolor((0, 0, 0, 0))
-    q = ax.quiver(lons, lats, u, v, transform=ccrs.PlateCarree(), regrid_shape=24, pivot='middle',
-                  scale=75, scale_units='inches', width=0.0026, headwidth=3.6, headlength=4.2, headaxislength=3.8,
-                  color='white', edgecolor='#0F2230', linewidth=0.7, zorder=5)
-    k = ax.quiverkey(q, 0.955, 0.035, 30, '30 kn', labelpos='W', coordinates='axes', color='white',
-                     fontproperties=dict(size=10, weight='bold'), labelcolor='#0F2230')
-    k.text.set_path_effects([pe.withStroke(linewidth=3, foreground='white')])
-    ax.axis('off')
-    save_png(fig, path, transparent=True)
-    return float(np.nanmax(speed))
-
-
 ice_tenths = swell_sources.ice_tenths
 
 
@@ -504,15 +518,13 @@ def check(run, step, p, lons, lats, ours, outdir):
 
 def render_step(args):
     """One frame, start to finish, in a worker process: fetch the run's fields
-    for the hour, draw the pressure chart and wind layer, and the wave layer if
-    NOAA has it. Returns the numbers main() needs, and the fields themselves
+    for the hour, draw the pressure chart, and the wave layer if NOAA has it. Returns the numbers main() needs, and the fields themselves
     every 6 hours (for the data kept, the alerts and our own forecast)."""
     run, step, outdir = args
     f = fetch_fields(run, step)
     p, _, _ = draw(run, step, f, os.path.join(outdir, f'f{step:03d}.png'))
     lo, hi = sanity(step, p)
-    top = draw_wind(step, f, os.path.join(outdir, f'w{step:03d}.png'))
-    out = dict(step=step, lo=lo, hi=hi, top=top, waves=None, wave_error=None, fields=f if step % 6 == 0 else None)
+    out = dict(step=step, lo=lo, hi=hi, waves=None, wave_error=None, fields=f if step % 6 == 0 else None)
     try:  # the wave layer never holds the charts up
         out['waves'] = draw_waves(run, step, fetch_waves(run, step), os.path.join(outdir, f'h{step:03d}.png'), os.path.join(outdir, f't{step:03d}.png'))
     except Exception as e:
@@ -520,31 +532,71 @@ def render_step(args):
     return out
 
 
+def render_all(run, steps, outdir, safe=False):
+    """Every frame drawn on its own core (four on GitHub's runners), in order.
+    The map features and the wave layer's land are made first, so each worker
+    starts with them rather than all fetching them at once. safe: a frame that
+    fails comes back as None rather than stopping the rest."""
+    for feat in (cfeature.COASTLINE, cfeature.BORDERS, cfeature.LAND):
+        list(feat.with_scale('50m').geometries())
+    wave_land()
+    with ProcessPoolExecutor(max_workers=min(4, os.cpu_count() or 1), mp_context=mp.get_context('fork')) as pool:
+        out = list(pool.map(render_safe if safe else render_step, [(run, step, outdir) for step in steps]))
+    return {s: r for s, r in zip(steps, out)}
+
+
+def render_safe(args):
+    try:
+        return render_step(args)
+    except Exception as e:
+        print(f'  f{args[1]:03d}: {e}')
+        return None
+
+
+def rest(outdir):
+    """The second pass: the hours after FIRST, added to the charts the first
+    pass published, up to the first hour that couldn't be drawn (NOAA may not
+    have it yet). The wave layer goes as far as the charts if every hour of it
+    was drawn; otherwise the charts stop where it stops."""
+    with open(os.path.join(outdir, 'manifest.json')) as fh:
+        manifest = json.load(fh)
+    run = dt.datetime.fromtimestamp(manifest['run'] / 1000, dt.timezone.utc).replace(tzinfo=None)
+    steps = [s for s in DRAW_STEPS if s > max(manifest['steps'])]
+    done = render_all(run, steps, outdir, safe=True)
+    added = []
+    for s in steps:
+        r = done[s]
+        if not r or (manifest.get('waves') and not r['waves']):
+            break
+        added.append(s)
+        manifest['pressure']['min'] = min(manifest['pressure']['min'], round(r['lo']))
+        manifest['pressure']['max'] = max(manifest['pressure']['max'], round(r['hi']))
+    manifest['steps'] += added
+    with open(os.path.join(outdir, 'manifest.json'), 'w') as fh:
+        json.dump(manifest, fh)
+    print(f"Added {len(added)} of {len(steps)} later frames, to +{manifest['steps'][-1]} h")
+
+
 def main():
     outdir = sys.argv[1]
     do_check = '--check' in sys.argv
     os.makedirs(outdir, exist_ok=True)
-    steps = [0, 24, 72] if os.environ.get('QUICK') else DRAW_STEPS  # QUICK: a preview of the look
+    if '--rest' in sys.argv:
+        return rest(outdir)
+    steps = [0, 24, 72] if os.environ.get('QUICK') else [s for s in DRAW_STEPS if s <= FIRST]  # QUICK: a preview of the look
     run = latest_run()
     print(f'GFS run {run:%Y-%m-%d %H}z; home view {home_view()}')
     # The workflow passes the run already published; nothing to do if it's this one.
     if os.environ.get('PUBLISHED_RUN') == label(run) and not do_check and not os.environ.get('FORCE'):
         print('Already published; nothing to do.')
         return
-    # Every frame is drawn on its own core (four on GitHub's runners). The
-    # map features and the wave layer's land are made first, so each worker
-    # starts with them rather than all fetching them at once.
-    for feat in (cfeature.COASTLINE, cfeature.BORDERS, cfeature.LAND):
-        list(feat.with_scale('50m').geometries())
-    wave_land()
-    with ProcessPoolExecutor(max_workers=min(4, os.cpu_count() or 1), mp_context=mp.get_context('fork')) as pool:
-        done = {r['step']: r for r in pool.map(render_step, [(run, step, outdir) for step in steps])}
+    done = render_all(run, steps, outdir)
     lows, highs, frames = [], [], []
     waves_ok = all(done[s]['waves'] for s in steps)
     for step in steps:
         r = done[step]
         lows.append(r['lo']); highs.append(r['hi'])
-        print(f"  f{step:03d}: {r['lo']:.0f}-{r['hi']:.0f} hPa; wind to {r['top']:.0f} kn; " +
+        print(f"  f{step:03d}: {r['lo']:.0f}-{r['hi']:.0f} hPa; " +
               (f"waves up to {r['waves'][0]:.1f} m, {r['waves'][1]:.0f} s" if r['waves'] else f"no wave layer ({r['wave_error']})"))
         if r['fields'] is not None:
             frames.append(r['fields'])
@@ -586,7 +638,7 @@ def main():
     except Exception as e:
         print(f'  No swell forecast this run: {e}')
     print(f'  fields.npz: {os.path.getsize(os.path.join(outdir, "fields.npz")) // 1024} KB')
-    manifest = dict(run=int(run.timestamp() * 1000), runLabel=label(run), steps=steps, file='f%03d.png', wind='w%03d.png', data='fields.npz', home=home_view(), grid='grid.json',
+    manifest = dict(run=int(run.timestamp() * 1000), runLabel=label(run), steps=steps, file='f%03d.png', data='fields.npz', home=home_view(), grid='grid.json',
                     window='window.json' if window else None, alerts=alerts, forecast=forecast,
                     waves=dict(height='h%03d.png', period='t%03d.png', source='NOAA GFS-Wave 0.25°') if waves_ok else None,
                     ice=dict(file='ice.png', date=ice_date) if ice_date else None,
@@ -594,7 +646,7 @@ def main():
                     pressure=dict(min=round(min(lows)), max=round(max(highs))))
     with open(os.path.join(outdir, 'manifest.json'), 'w') as fh:
         json.dump(manifest, fh)
-    print(f'Wrote {len(steps)} charts, wind layers and manifest.json')
+    print(f'Wrote {len(steps)} charts, the wave layer and manifest.json')
 
 
 if __name__ == '__main__':
