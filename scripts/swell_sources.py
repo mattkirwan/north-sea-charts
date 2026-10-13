@@ -352,7 +352,7 @@ def storm_alerts(run, steps, frames, window):
 
 
 G = 9.81
-BEACH_FACES = 30            # Saltburn's beach faces NNE
+BEACH_FACES = 25            # Saltburn's beach faces NNE: the pier points 25°
 WIND_MIN = 8.0              # m/s along the path (about 16 kn) to grow swell
 DECAY = 0.7                 # swell height falls as (fetch / (fetch + distance)) ** DECAY
 ICE_TENTHS = 4              # no waves grow over ice this close packed
