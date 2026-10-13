@@ -3,10 +3,9 @@
 # which the app reads. The branch holds a single commit replaced each time, so
 # the repo doesn't grow.
 #
-# Timed to NOAA: a run starts at 00, 06, 12 and 18 UTC and reaches hour 168 on
-# their bucket 4 h 15-35 min later. Every hour the model gives is drawn (hourly
-# to day 5, 3-hourly after): the first week is drawn and published then, and a
-# second pass adds days 8-16 as NOAA publishes them, about an hour later. Started by the loop
+# Timed to NOAA: a run starts at 00, 06, 12 and 18 UTC and reaches hour 120 on
+# their bucket about 4 h later. Every hour of those five days is drawn and
+# published. Started by the loop
 # in tick.yml; these schedules are a backstop. A try that finds nothing new
 # stops before installing.
 name: Draw GFS charts
@@ -74,17 +73,4 @@ jobs:
         env:
           TOKEN: ${{ github.token }}
           BRANCH: ${{ inputs.quick && 'charts-preview' || 'charts' }}
-        run: sh scripts/publish-charts.sh "$RUNNER_TEMP/charts"
-      # Days 8 to 16 come out on NOAA's bucket over the next hour or so; each
-      # frame waits for its hour, and they're added to what's published.
-      - name: Draw the rest of the run
-        id: rest
-        if: steps.pub.outputs.go && !inputs.quick
-        continue-on-error: true
-        run: python scripts/gfs_charts.py "$RUNNER_TEMP/charts" --rest
-      - name: Publish again with the rest
-        if: steps.pub.outputs.go && !inputs.quick && steps.rest.outcome == 'success'
-        env:
-          TOKEN: ${{ github.token }}
-          BRANCH: charts
         run: sh scripts/publish-charts.sh "$RUNNER_TEMP/charts"
