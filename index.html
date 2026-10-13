@@ -482,7 +482,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="ladder" id="repLadder"></div>
     <div id="repSwells"></div>
     <div class="field"><button type="button" class="pill" id="repAdd2">Add a second swell</button></div>
-    <div class="field"><span>Surface</span><div class="seg" id="repSurf"></div></div>
     <div class="field"><span>Notes</span><textarea id="repNotes" rows="3" placeholder="Sets, tide, crowd, anything"></textarea></div>
     <div class="actions"><button type="button" class="pill" id="repCancel">Cancel</button><button type="submit" class="pill primary">Save report</button></div>
   </form>
@@ -2213,15 +2212,15 @@ function renderAlerts() {
    estimates were. Reports are kept on the phone and, with a GitHub token in
    Settings, as one JSON file each on the repo's `reports` branch. */
 const REPO = 'mattkirwan/north-sea-charts', REPORTS_BRANCH = 'reports';
-const BEACH_FACES = 30; // Saltburn's beach faces NNE
+const BEACH_FACES = 25; // Saltburn's beach faces NNE: the pier points 25°
 const SPOTS = ['Saltburn', 'Sandsend', 'Long Sands', 'Scarborough N Bay', 'Cayton Bay', 'Other'];
 // Reports are what's measurable: each swell's face height as a range in feet
 // against a body (1-2 ft is shin to thigh; 6 ft is head high on a 6 ft
-// person), its kind, and if counted or seen, its period and direction; and
-// the surface, for the local wind. (Early reports had a size word instead.)
+// person), its kind, its period (time between crests passing a pier leg) and
+// the range of bearings it comes from (the pier points 25°). Early reports
+// had a size word, a compass point and the surface instead.
 const SIZES = [['flat', 'Flat'], ['ankle', 'Ankle'], ['knee', 'Knee'], ['waist', 'Waist'], ['chest', 'Chest'], ['head', 'Head'], ['overhead', 'Overhead'], ['double', 'Double overhead+']];
 const KINDS = [['local', 'Local'], ['mid', 'Mid-distance'], ['ground', 'Groundswell']];
-const FROM8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const SURFACE = [['glassy', 'Glassy'], ['light', 'Light texture'], ['choppy', 'Choppy'], ['blown', 'Blown out']];
 let reports = store.get('nsv.reports', []) || [];
 let syncBusy = false, syncNote = '';
@@ -2452,7 +2451,7 @@ function renderAcc() {
     const m = mine[k], b = buoy[k];
     return `<tr><td>${k ? k + ' d' : 'Same day'}</td><td>${m ? cell(m.d / m.n, m.a / m.n, m.n, m.n === 1 ? 'report' : 'reports') : '–'}</td><td>${b ? cell(b.biasFt, b.maeFt, b.n, 'h') : '–'}</td></tr>`;
   }).join('') + '</table>' +
-    `<div class="d" style="color:var(--slate);font-size:13px;margin-top:8px">Plus: we said bigger than it was; minus: smaller. Whitby is the buoy's reading turned into size at Saltburn the same way, over the last ${(roll.verify && roll.verify.days) || 30} days.</div>`;
+    `<div class="d" style="color:var(--slate);font-size:13px;margin-top:8px">Plus: we said bigger than it was; minus: smaller. Whitby is the buoy's reading turned into size at Saltburn the same way, over the last ${(roll && roll.verify && roll.verify.days) || 30} days.</div>`;
 }
 
 function renderPredict() {
@@ -2494,8 +2493,9 @@ function renderHistory() {
     const seen = r.swells ? r.swells.map(swellReport).join(' + ') : lab(SIZES, r.size);
     el.innerHTML = `<div class="rh"><b>${escapeHtml(r.spot)} · ${seen}</b><span>${whenUk(r.at)}</span></div>` +
       `<div class="rd">${[r.surface && lab(SURFACE, r.surface)].filter(Boolean).join(' · ')}${r.notes ? (r.surface ? ' · ' : '') + escapeHtml(r.notes) : ''}</div>` +
-      fc + `<div class="rd">We had: ${est}${b ? `; ${escapeHtml(b.name)} ${feet(b.h)} ft${b.p != null ? ` ${Math.round(b.p)} s` : ''}` : ''}. ${r.synced ? 'Saved to GitHub.' : 'On this phone.'} <button class="rx">Delete</button></div>`;
-    el.querySelector('.rx').addEventListener('click', () => deleteReport(r));
+      fc + `<div class="rd">We had: ${est}${b ? `; ${escapeHtml(b.name)} ${feet(b.h)} ft${b.p != null ? ` ${Math.round(b.p)} s` : ''}` : ''}. ${r.synced ? 'Saved to GitHub.' : 'On this phone.'} <button class="rx re">Edit</button> <button class="rx rdel">Delete</button></div>`;
+    el.querySelector('.re').addEventListener('click', () => openReport(r.at, r));
+    el.querySelector('.rdel').addEventListener('click', () => deleteReport(r));
     box.appendChild(el);
   });
 }
@@ -2516,8 +2516,11 @@ function chips(el, items, obj, key) {
 }
 const repSeg = (id, key, items) => chips($(id), items, repSel, key);
 const fmtFt = (v) => String(+v.toFixed(1));
-const swellReport = (w) => `${fmtFt(w.lo)}${w.hi !== w.lo ? '–' + fmtFt(w.hi) : ''} ft` + (w.kind ? ' ' + KINDS.find((k) => k[0] === w.kind)[1].toLowerCase() : '') +
-  (w.period ? ` ${w.period} s` : '') + (w.from ? ` from ${w.from}` : '');
+const range = (lo, hi, f = String) => (hi !== lo ? `${f(lo)}–${f(hi)}` : f(lo));
+const swellReport = (w) => `${range(w.lo, w.hi, fmtFt)} ft` + (w.kind ? ' ' + KINDS.find((k) => k[0] === w.kind)[1].toLowerCase() : '') +
+  (w.period ? ` ${w.period} s` : '') + (w.fromLo != null ? ` from ${range(w.fromLo, w.fromHi)}°` : w.from ? ` from ${w.from}` : '');
+// The middle of a range of bearings (the short way round: 350-10 is 0).
+const midBearing = (a, b) => Math.round((a + (((b - a) % 360 + 360) % 360) / 2) % 360);
 function swellFields(n) {
   const el = document.createElement('div');
   el.className = 'swell';
@@ -2526,11 +2529,12 @@ function swellFields(n) {
     '<input type="number" inputmode="decimal" step="0.5" min="0" max="40" class="lo" placeholder="low" aria-label="Low, feet"><span>to</span>' +
     '<input type="number" inputmode="decimal" step="0.5" min="0" max="40" class="hi" placeholder="high" aria-label="High, feet"></div></div>' +
     '<div class="field"><span>Kind</span><div class="seg kind"></div></div>' +
-    '<div class="field"><span>Period, s <small>if you counted it</small></span><input type="number" inputmode="numeric" step="1" min="2" max="25" class="per" style="max-width:96px"></div>' +
-    '<div class="field"><span>From <small>if you can tell</small></span><div class="seg from"></div></div>';
-  const sel = { kind: null, from: null };
+    '<div class="field"><span>Period, s <small>time between crests passing a pier leg</small></span><input type="number" inputmode="decimal" step="0.1" min="2" max="25" class="per" style="max-width:96px"></div>' +
+    '<div class="field"><span>From, ° <small>the pier points 25°</small></span><div class="range">' +
+    '<input type="number" inputmode="numeric" step="1" min="0" max="359" class="flo" placeholder="from" aria-label="From bearing, degrees"><span>to</span>' +
+    '<input type="number" inputmode="numeric" step="1" min="0" max="359" class="fhi" placeholder="to" aria-label="To bearing, degrees"></div></div>';
+  const sel = { kind: null };
   chips(el.querySelector('.kind'), KINDS, sel, 'kind');
-  chips(el.querySelector('.from'), FROM8.map((x) => [x, x]), sel, 'from');
   el.sel = sel;
   if (n) el.querySelector('.rm').addEventListener('click', () => { el.remove(); $('#repAdd2').parentElement.hidden = false; });
   return el;
@@ -2544,47 +2548,74 @@ function readSwell(el) {
   if (hi == null) hi = lo;
   if (hi < lo) [lo, hi] = [hi, lo];
   const per = num('.per');
-  return { lo, hi, kind: el.sel.kind, period: per ? Math.round(per) : null, from: el.sel.from, fromDeg: el.sel.from ? FROM8.indexOf(el.sel.from) * 45 : null };
+  let flo = num('.flo'), fhi = num('.fhi');
+  if (flo == null) flo = fhi;
+  if (fhi == null) fhi = flo;
+  if (flo != null) { flo = Math.round(flo) % 360; fhi = Math.round(fhi) % 360; }
+  return { lo, hi, kind: el.sel.kind, period: per ? +per.toFixed(1) : null,
+    fromLo: flo, fromHi: fhi, fromDeg: flo != null ? midBearing(flo, fhi) : null };
+}
+// Fill a swell's fields from a saved one (to edit a report).
+function fillSwell(el, w) {
+  const set = (c, v) => { el.querySelector(c).value = v == null ? '' : v; };
+  set('.lo', w.lo); set('.hi', w.hi); set('.per', w.period);
+  const old = w.fromLo == null && w.fromDeg != null; // a compass point, from early reports
+  set('.flo', old ? w.fromDeg : w.fromLo); set('.fhi', old ? w.fromDeg : w.fromHi);
+  el.sel.kind = w.kind || null;
+  chips(el.querySelector('.kind'), KINDS, el.sel, 'kind');
 }
 function localInput(ms) { const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60e3); return d.toISOString().slice(0, 16); }
-function openReport(at) {
-  Object.assign(repSel, { spot: store.get('nsv.lastSpot', 'Saltburn'), surface: null });
+let editing = null; // the report being edited, if any
+function openReport(at, r = null) {
+  editing = r;
+  Object.assign(repSel, { spot: r ? r.spot : store.get('nsv.lastSpot', 'Saltburn') });
   repSeg('#repSpot', 'spot', SPOTS.map((x) => [x, x]));
-  repSeg('#repSurf', 'surface', SURFACE);
   $('#repSwells').innerHTML = '';
+  const sw = (r && r.swells) || [];
   $('#repSwells').appendChild(swellFields(0));
-  $('#repAdd2').parentElement.hidden = false;
-  $('#repWhen').value = localInput(at);
+  if (sw[1]) $('#repSwells').appendChild(swellFields(1));
+  sw.forEach((w, i) => fillSwell($('#repSwells').children[i], w));
+  $('#repAdd2').parentElement.hidden = sw.length > 1;
+  $('#repWhen').value = localInput(r ? r.at : at);
   showLadder();
-  $('#repNotes').value = '';
+  $('#repNotes').value = r ? r.notes || '' : '';
   $('#repForm').hidden = false;
   $('#repForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 $('#repOpen').addEventListener('click', () => openReport(Date.now()));
 $('#repAdd2').addEventListener('click', () => { $('#repSwells').appendChild(swellFields(1)); $('#repAdd2').parentElement.hidden = true; });
-$('#repCancel').addEventListener('click', () => { $('#repForm').hidden = true; });
+$('#repCancel').addEventListener('click', () => { $('#repForm').hidden = true; editing = null; });
 $('#repWhen').addEventListener('change', showLadder);
 $('#repForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const swells = [...$('#repSwells').children].map(readSwell);
   if (!swells[0]) { toast("Give the main swell's height in feet"); return; }
   const at = $('#repWhen').value ? new Date($('#repWhen').value).getTime() : Date.now();
-  const id = new Date(at).toISOString().replace(/[:.]/g, '-').slice(0, 19) + '-' + Math.random().toString(36).slice(2, 6);
-  const main = swells[0];
-  const r = {
-    id, at, reportedAt: Date.now(), spot: repSel.spot || 'Saltburn', swells: swells.filter(Boolean),
-    sizeLo: main.lo, sizeHi: main.hi, sizeFt: (main.lo + main.hi) / 2,
-    surface: repSel.surface, notes: $('#repNotes').value.trim(),
-    state: snapshot(), prediction: estimate(), synced: false
+  const main = swells[0], seen = {
+    spot: repSel.spot || 'Saltburn', swells: swells.filter(Boolean),
+    sizeLo: main.lo, sizeHi: main.hi, sizeFt: (main.lo + main.hi) / 2, notes: $('#repNotes').value.trim()
   };
+  let r;
+  if (editing) {
+    // What was seen changes; what we knew when it was first reported stays.
+    r = editing;
+    const moved = r.at !== at;
+    ['size', 'quality', 'surface', 'lines'].forEach((k) => delete r[k]);
+    Object.assign(r, seen, { at, editedAt: Date.now(), synced: false });
+    if (moved) delete r.ladder;
+  } else {
+    const id = new Date(at).toISOString().replace(/[:.]/g, '-').slice(0, 19) + '-' + Math.random().toString(36).slice(2, 6);
+    r = { id, at, reportedAt: Date.now(), ...seen, state: snapshot(), prediction: estimate(), synced: false };
+    reports.push(r);
+  }
   store.set('nsv.lastSpot', r.spot);
-  reports.push(r);
   saveReports();
   $('#repForm').hidden = true;
-  toast('Report saved');
+  toast(editing ? 'Report updated' : 'Report saved');
+  editing = null;
   renderPredict();
   // Every prediction made for its hour goes with it, before it's sent to GitHub.
-  ladderFor(at).then((l) => { r.ladder = l; }, () => {}).finally(() => { saveReports(); renderPredict(); syncReports(); });
+  (r.ladder ? Promise.resolve() : ladderFor(at).then((l) => { r.ladder = l; }, () => {})).finally(() => { saveReports(); renderPredict(); syncReports(); });
 });
 
 // GitHub: one file per report on the reports branch.
@@ -2602,20 +2633,32 @@ async function syncReports(pull) {
   if (!token || syncBusy) { renderHistory(); return; }
   syncBusy = true; syncNote = ''; renderHistory();
   try {
+    const raw = { headers: { Accept: 'application/vnd.github.raw+json' } };
+    const res = await gh(`contents/reports?ref=${REPORTS_BRANCH}`);
+    const remote = new Map((res.ok ? await res.json() : []).filter((x) => x.name.endsWith('.json')).map((x) => [x.name.slice(0, -5), x.sha]));
     for (const r of reports.filter((x) => !x.synced)) {
+      // Already on GitHub but never synced from here (put there another way):
+      // GitHub's copy wins.
+      if (!r.sha && remote.has(r.id)) {
+        const fr = await gh(`contents/reports/${r.id}.json?ref=${REPORTS_BRANCH}`, raw);
+        if (fr.ok) { const id = r.id, theirs = await fr.json(); Object.keys(r).forEach((k) => delete r[k]); Object.assign(r, theirs, { synced: true, sha: remote.get(id) }); }
+        continue;
+      }
       const { synced, sha, ...body } = r;
-      const res = await gh(`contents/reports/${r.id}.json`, { method: 'PUT', body: JSON.stringify({ message: `Report: ${r.spot}, ${r.size}`, content: b64(JSON.stringify(body, null, 1)), branch: REPORTS_BRANCH }) });
-      const j = await res.json();
+      const put = await gh(`contents/reports/${r.id}.json`, { method: 'PUT', body: JSON.stringify({
+        message: `Report: ${r.spot}, ${r.swells ? swellReport(r.swells[0]) : r.size}${sha ? ' (edited)' : ''}`, content: b64(JSON.stringify(body, null, 1)), branch: REPORTS_BRANCH, ...(sha ? { sha } : {}) }) });
+      const j = await put.json();
       if (j.content) { r.synced = true; r.sha = j.content.sha; }
     }
     if (pull) {
-      // Bring in reports made on another device.
-      const res = await gh(`contents/reports?ref=${REPORTS_BRANCH}`);
-      const list = res.ok ? await res.json() : [];
-      const have = new Set(reports.map((x) => x.id));
-      for (const f of list.filter((x) => x.name.endsWith('.json') && !have.has(x.name.slice(0, -5)))) {
-        const fr = await gh(`contents/reports/${f.name}?ref=${REPORTS_BRANCH}`, { headers: { Accept: 'application/vnd.github.raw+json' } });
-        if (fr.ok) reports.push({ ...(await fr.json()), synced: true, sha: f.sha });
+      // Bring in reports made on another device, and any changed on GitHub.
+      for (const [id, sha] of remote) {
+        const have = reports.find((x) => x.id === id);
+        if (have && (!have.synced || have.sha === sha)) continue;
+        const fr = await gh(`contents/reports/${id}.json?ref=${REPORTS_BRANCH}`, raw);
+        if (!fr.ok) continue;
+        const r = { ...(await fr.json()), synced: true, sha };
+        if (have) reports[reports.indexOf(have)] = r; else reports.push(r);
       }
     }
     saveReports();
