@@ -956,7 +956,8 @@ const hoursLabel = (h) => { const d = Math.floor(h / 24), r = h % 24; return d ?
 // The swell window (window.json, from the chart job): km of open sea along
 // each bearing from just off Saltburn before the first land (small islands
 // like Shetland and Orkney don't count: their shadow fills back in), and the
-// two bends allowed at its edges. Shaded.
+// bends allowed (round the Aberdeenshire corner, along the Yorkshire coast,
+// and through the gap between Orkney and Shetland). Shaded.
 let travelWindow = null;
 function drawTravel() {
   if (!travelOn() || !travelGrid || !natural || !view) { travelSvg.innerHTML = ''; return; }
@@ -970,8 +971,8 @@ function drawTravel() {
     const w = travelWindow, pts = [];
     for (let i = 0; i < w.reach.length; i++) pts.push(pt(scr(...destination(Math.min(w.reach[i], TRAVEL.maxKm), i * w.step))));
     shade = `<path class="win" d="M${pts.join('L')}Z"/>`;
-    // The bends at the window's edges (round the Aberdeenshire corner, and
-    // along the Yorkshire coast): fainter, as less of the swell gets round.
+    // The bends (round the Aberdeenshire corner, along the Yorkshire coast,
+    // through the Orkney-Shetland gap): fainter, as less of the swell gets round.
     (w.bends || []).forEach((g) => {
       const far = [], near = [];
       g.reach.forEach((r, i) => {
