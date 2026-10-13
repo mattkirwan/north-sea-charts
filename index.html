@@ -543,7 +543,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
   </section>
   <section class="sgroup" aria-labelledby="setChartH">
     <h3 id="setChartH">Pressure charts</h3>
-    <div class="field"><span>How far ahead</span><div class="seg" id="segDays"></div></div>
     <div class="field"><span>Chart colours</span><div class="seg" id="segMono"></div></div>
     <div class="field"><span>Swell window &amp; travel times</span><div class="seg" id="segTravel"></div></div>
     <div class="field"><span>Swell period for travel times</span><div class="seg" id="segPeriod"></div></div>
@@ -593,14 +592,13 @@ const runKey = (ms) => { const d = new Date(ms); return `${d.getUTCFullYear()}${
 const SOURCES = {};
 // Our own charts, drawn from NOAA's GFS data after each run by a GitHub Action
 // (scripts/gfs_charts.py) onto the repo's `charts` branch. Only the newest run
-// is kept, out to +384 h: every hour the model gives, hourly to day 5 and
-// every 3 hours after. manifest.json lists the hours, says which run it is
+// is kept: every hour for five days, to +120 h. manifest.json lists the hours, says which run it is
 // and names the map (a portrait map of the North Sea and its swell window).
 SOURCES.ours = {
   name: 'NOAA GFS, drawn by this app',
   model: 'GFS',
   cycleH: 6,
-  maxStep: 384,
+  maxStep: 120,
   only: { runOffset: 0 }, // the newest run only
   steps: null, // the run's hours, from the manifest
   base: 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/charts/',
@@ -628,19 +626,16 @@ SOURCES.ours = {
   }
 };
 
-const DAYS = [[2, '2 days'], [7, '7 days'], [16, '16 days']];
 const SPEEDS = [[700, 'Slow'], [420, 'Normal'], [220, 'Fast']];
 const MONO = [[false, 'Colour'], [true, 'Black & white']];
 const BETA = [[false, 'Off'], [true, 'On']];
 const TRAVEL_LAYER = [[false, 'Off'], [true, 'On']];
 const PERIODS = [[8, '8 s'], [10, '10 s'], [12, '12 s'], [14, '14 s']];
-const DEFAULTS = { beta: false, waveLayer: false, chartMono: false, travelLayer: false, swellPeriod: 10, days: 7, speed: 420, speedUnit: 'mph' };
+const DEFAULTS = { beta: false, waveLayer: false, chartMono: false, travelLayer: false, swellPeriod: 10, speed: 420, speedUnit: 'mph' };
 
 const opts = Object.assign({}, DEFAULTS, store.get('nsv.opts', {}));
 const saveOpts = () => store.set('nsv.opts', opts);
 const SOURCE = SOURCES.ours;
-// Settings saved before Oct 2026 may have Wetterzentrale's choices.
-if (!DAYS.some(([d]) => d === opts.days)) opts.days = 7;
 // An option's value as the current source uses it (ours has fixed steps and one run).
 const opt = (k) => (SOURCE.only && k in SOURCE.only ? SOURCE.only[k] : opts[k]);
 
@@ -716,10 +711,9 @@ async function load({ keepValid = true, latest = null } = {}) {
   runMs = latestMs - opt('runOffset') * SOURCE.cycleH * H;
   lastCheck = Date.now();
 
-  // The run's hours (every frame the chart job drew), as far ahead as set.
-  const maxStep = Math.min(opts.days * 24, SOURCE.maxStep);
-  const hours = SOURCE.steps || Array.from({ length: 29 }, (_, k) => k * 6);
-  frames = hours.filter((h) => h <= maxStep).map((h) => ({ step: h, valid: runMs + h * H, url: SOURCE.url(runMs, h, opts), status: 'pending', img: null }));
+  // The run's hours: every frame the chart job drew.
+  const hours = SOURCE.steps || Array.from({ length: 21 }, (_, k) => k * 6);
+  frames = hours.filter((h) => h <= SOURCE.maxStep).map((h) => ({ step: h, valid: runMs + h * H, url: SOURCE.url(runMs, h, opts), status: 'pending', img: null }));
   idx = nearestIndex(jumpTo || (keepValid && prevValid ? prevValid : Date.now()));
   jumpTo = null;
   front.dataset.url = '';
@@ -1043,9 +1037,9 @@ function updateRunLine() {
 
 /* ---------------- Timeline ---------------- */
 let curBar = null;
-/* Each frame's block is wider the more time it covers (hourly for the first
-   5 days, then 3 hours), but not in proportion, or the hourly frames would be
-   too thin to touch: 1 + 0.55·log2(hours), so 1 and 1.9. edges[i] is where frame i starts along the timeline (0 to 1). */
+/* Each frame's block is wider the more time it covers (all an hour now; runs
+   drawn before Oct 2026 had longer steps), but not in proportion, or the
+   hourly frames would be too thin to touch: 1 + 0.55·log2(hours). edges[i] is where frame i starts along the timeline (0 to 1). */
 let edges = [0, 1];
 const frameHours = (i) => (frames[i + 1] ? frames[i + 1].step - frames[i].step : i ? frames[i].step - frames[i - 1].step : 6);
 function layoutWeights() {
@@ -1355,7 +1349,7 @@ function renderFine() {
   const f = frames[idx];
   const p = $('#fine');
   {
-    p.textContent = 'New charts four times a day, about five hours after each model run (00, 06, 12 and 18 UTC): every hour the model gives, hourly for the first 5 days and then every 3 hours to day 16 (the days after the first week follow about an hour later). ' +
+    p.textContent = 'New charts four times a day, about four and a half hours after each model run (00, 06, 12 and 18 UTC), hourly for five days ahead: swell that reaches us is rarely more than three days off, and the model\'s later days change from run to run. ' +
       'Colour is sea-level pressure: blues and purples for low pressure, oranges and reds for high, with isobars every 4 hPa. ' +
       (SOURCES.ours.ice ? `Sea ice is from the Norwegian Ice Service's chart of ${iceDay(SOURCES.ours.ice.date)}. ` : '') +
       'Before publishing, each run is checked for missing frames and impossible pressures. ';
@@ -1367,7 +1361,6 @@ const standalone = window.navigator.standalone === true || matchMedia('(display-
 function renderSettings() {
   if (!showing('settings')) return;
   seg($('#segUnit'), 'speedUnit', UNITS);
-  seg($('#segDays'), 'days', DAYS);
   seg($('#segSpeed'), 'speed', SPEEDS);
   seg($('#segMono'), 'chartMono', MONO);
   seg($('#segBeta'), 'beta', BETA);

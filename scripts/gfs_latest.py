@@ -7,15 +7,16 @@ Standard library only, so the workflow can ask before installing anything:
                                        # bulletins out, e.g. "2026-10-12-06z"
 
 NOAA starts a GFS run at 00, 06, 12 and 18 UTC. Its files reach the bucket
-about 3 h 35 min later (forecast hour 0) and finish to hour 168, the last we
-draw, about 4 h 15-35 min after the start (measured over Oct 2026). The wave
+about 3 h 35 min later (forecast hour 0) and reach hour 120, the last we
+draw, about half an hour after that (hour 168 came 4 h 15-35 min after the
+start, measured over Oct 2026). The wave
 model's point bulletins (wave_model.py) follow about an hour later.
 """
 import datetime as dt
 import urllib.request
 
 BUCKET = 'https://noaa-gfs-bdp-pds.s3.amazonaws.com'
-STEPS = list(range(0, 169, 6))
+STEPS = list(range(0, 121, 6))
 
 
 def grib_url(run, step):

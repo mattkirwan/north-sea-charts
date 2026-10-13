@@ -1,8 +1,9 @@
 """Draw our own North Sea pressure charts from NOAA's GFS model.
 
 For the newest complete GFS run, downloads sea-level pressure and 500 hPa
-geopotential height for every forecast hour the model gives (hourly to +120 h,
-then every 3 hours to +384 h; see DRAW_STEPS) from NOAA's open
+geopotential height for every hour of the first five days (to +120 h; see
+DRAW_STEPS: swell that reaches us is rarely more than three days off, and
+the model's later days change from run to run) from NOAA's open
 data on AWS, using the .idx files to fetch just those two fields, and draws a
 chart per hour of the North Sea and Saltburn's swell window, portrait, for a
 phone (see PROJ and EXTENT): sea-level pressure as bright colour (blues and purples for
@@ -21,8 +22,7 @@ swell_sources.py) come the swell window (window.json), bomb low alerts (in
 the manifest) and our own swell forecast for Saltburn (forecast.json). Checks
 before publishing: every frame present, pressures within physical limits.
 
-  python scripts/gfs_charts.py OUT_DIR [--check]   # the first week (to FIRST)
-  python scripts/gfs_charts.py OUT_DIR --rest      # then the rest of the run, added
+  python scripts/gfs_charts.py OUT_DIR [--check]
 
 --check also writes check/ images placing our chart beside Wetterzentrale's
 for the same run and hour, and prints our pressure at Saltburn beside
@@ -82,10 +82,8 @@ EXTENT = (_at(-23.98, 64.82)[0] - MARGIN_M, _at(24.9, 77.76)[0] + MARGIN_M,     
 MAP_ASPECT = (EXTENT[1] - EXTENT[0]) / (EXTENT[3] - EXTENT[2])                  # width over height, about 0.55
 FIELDS = {'PRMSL:mean sea level': 'prmsl', 'HGT:500 mb': 'gh', 'UGRD:10 m above ground': 'u10', 'VGRD:10 m above ground': 'v10'}
 KN = 1.943844                                  # knots per m/s
-# Frames drawn: every hour the model gives, hourly to +120 h (day 5) and then
-# every 3 hours to +384 h (day 16, the end of the run). 209 frames.
-DRAW_STEPS = list(range(0, 121)) + list(range(123, 385, 3))
-FIRST = 168                                    # the first pass, published as soon as it's drawn; --rest adds the hours after
+# Frames drawn: every hour for five days, to +120 h. 121 frames.
+DRAW_STEPS = list(range(0, 121))
 WAIT_MIN = 75                                  # how long a frame waits for NOAA to publish its hour
 ANALYSIS_DAYS = 5                              # how far back the swell forecast starts
 PUBLISHED = f"https://raw.githubusercontent.com/{os.environ.get('GITHUB_REPOSITORY', 'mattkirwan/north-sea-charts')}/charts/"
@@ -134,8 +132,8 @@ def get(url, rng=None, timeout=60):
 
 def get_idx(url):
     """A GRIB file's index, waiting up to WAIT_MIN minutes for NOAA to publish
-    it: the chart job starts when the run reaches +168 h, and the later hours
-    follow over the next hour or so."""
+    it: the chart job starts when the run's atmosphere reaches +120 h, and
+    the wave model's files can come a few minutes behind."""
     end = time.time() + WAIT_MIN * 60
     while True:
         try:
@@ -532,58 +530,23 @@ def render_step(args):
     return out
 
 
-def render_all(run, steps, outdir, safe=False):
+def render_all(run, steps, outdir):
     """Every frame drawn on its own core (four on GitHub's runners), in order.
     The map features and the wave layer's land are made first, so each worker
-    starts with them rather than all fetching them at once. safe: a frame that
-    fails comes back as None rather than stopping the rest."""
+    starts with them rather than all fetching them at once."""
     for feat in (cfeature.COASTLINE, cfeature.BORDERS, cfeature.LAND):
         list(feat.with_scale('50m').geometries())
     wave_land()
     with ProcessPoolExecutor(max_workers=min(4, os.cpu_count() or 1), mp_context=mp.get_context('fork')) as pool:
-        out = list(pool.map(render_safe if safe else render_step, [(run, step, outdir) for step in steps]))
+        out = list(pool.map(render_step, [(run, step, outdir) for step in steps]))
     return {s: r for s, r in zip(steps, out)}
-
-
-def render_safe(args):
-    try:
-        return render_step(args)
-    except Exception as e:
-        print(f'  f{args[1]:03d}: {e}')
-        return None
-
-
-def rest(outdir):
-    """The second pass: the hours after FIRST, added to the charts the first
-    pass published, up to the first hour that couldn't be drawn (NOAA may not
-    have it yet). The wave layer goes as far as the charts if every hour of it
-    was drawn; otherwise the charts stop where it stops."""
-    with open(os.path.join(outdir, 'manifest.json')) as fh:
-        manifest = json.load(fh)
-    run = dt.datetime.fromtimestamp(manifest['run'] / 1000, dt.timezone.utc).replace(tzinfo=None)
-    steps = [s for s in DRAW_STEPS if s > max(manifest['steps'])]
-    done = render_all(run, steps, outdir, safe=True)
-    added = []
-    for s in steps:
-        r = done[s]
-        if not r or (manifest.get('waves') and not r['waves']):
-            break
-        added.append(s)
-        manifest['pressure']['min'] = min(manifest['pressure']['min'], round(r['lo']))
-        manifest['pressure']['max'] = max(manifest['pressure']['max'], round(r['hi']))
-    manifest['steps'] += added
-    with open(os.path.join(outdir, 'manifest.json'), 'w') as fh:
-        json.dump(manifest, fh)
-    print(f"Added {len(added)} of {len(steps)} later frames, to +{manifest['steps'][-1]} h")
 
 
 def main():
     outdir = sys.argv[1]
     do_check = '--check' in sys.argv
     os.makedirs(outdir, exist_ok=True)
-    if '--rest' in sys.argv:
-        return rest(outdir)
-    steps = [0, 24, 72] if os.environ.get('QUICK') else [s for s in DRAW_STEPS if s <= FIRST]  # QUICK: a preview of the look
+    steps = [0, 24, 72] if os.environ.get('QUICK') else DRAW_STEPS  # QUICK: a preview of the look
     run = latest_run()
     print(f'GFS run {run:%Y-%m-%d %H}z')
     # The workflow passes the run already published; nothing to do if it's this one.
