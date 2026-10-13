@@ -480,8 +480,11 @@ def draw_ice(outdir):
 
 
 def sanity(step, p):
+    # Catches broken data (wrong units, missing values), not weather: sea-level
+    # pressure over Greenland's ice and Siberia's winter highs passes 1080 hPa
+    # (the record is 1084, in Mongolia), and the map takes both in.
     lo, hi = float(np.nanmin(p)), float(np.nanmax(p))
-    if np.isnan(p).any() or lo < 900 or hi > 1070:
+    if np.isnan(p).any() or lo < 870 or hi > 1095:
         raise RuntimeError(f'f{step:03d}: implausible pressures {lo:.0f}-{hi:.0f} hPa')
     return lo, hi
 
