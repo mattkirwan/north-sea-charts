@@ -1,0 +1,86 @@
+{
+ "id": "2026-03-16T17-54-00-rich",
+ "at": 1773683640000,
+ "reportedAt": 1791890631369,
+ "spot": "Sandsend",
+ "swells": [
+  {
+   "lo": 4,
+   "hi": 6,
+   "kind": "ground",
+   "period": null,
+   "fromDeg": null,
+   "fromLo": null,
+   "fromHi": null
+  }
+ ],
+ "sizeLo": 4,
+ "sizeHi": 6,
+ "sizeFt": 5,
+ "notes": "From a photo at 17:54: Richie (6'1\") crouched under the lip. Sandsend usually runs a little bigger than Saltburn. Added afterwards: period and direction not measured.",
+ "state": {
+  "at": 1773683640000,
+  "backfilled": true,
+  "buoys": [
+   {
+    "name": "Whitby",
+    "km": 25,
+    "h": 0.69,
+    "p": 20,
+    "d": 24,
+    "hmax": 1.06,
+    "ms": 1773682200000
+   },
+   {
+    "name": "Scarborough",
+    "km": 52,
+    "h": 0.62,
+    "p": 20,
+    "d": 10,
+    "hmax": 0.79,
+    "ms": 1773682200000
+   },
+   {
+    "name": "Newbiggin",
+    "km": 74,
+    "h": 0.67,
+    "p": 20,
+    "d": 63,
+    "hmax": 1.07,
+    "ms": 1773682200000
+   }
+  ],
+  "offshore": {
+   "source": "NOAA GFS-Wave 2026-03-16 18z, point 62026 (150 km NE of Saltburn)",
+   "swells": [
+    [
+     0.45,
+     18.4,
+     348
+    ],
+    [
+     0.29,
+     11.4,
+     7
+    ],
+    [
+     0.18,
+     13.9,
+     8
+    ],
+    [
+     0.96,
+     5.7,
+     288
+    ],
+    [
+     0.93,
+     4.6,
+     214
+    ]
+   ]
+  }
+ },
+ "prediction": null,
+ "ladder": []
+}
