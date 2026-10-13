@@ -278,6 +278,13 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 .ladder ul{list-style:none;margin:4px 0 0;padding:0}
 .ladder li{font-size:13px;line-height:1.4;padding:3px 0;color:var(--slate);font-variant-numeric:tabular-nums}
 .ladder li b{color:var(--paper);font-weight:600}
+.lpw{list-style:none;margin:8px 0 0;padding:0}
+.lpw>li{padding:8px 0;border-top:1px solid var(--hair);font-size:14px;line-height:1.4}
+.lpw>li:first-child{border-top:0}
+.lpw b{color:var(--paper);font-weight:600}
+.lpw .rare{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:9px;background:var(--amber);color:#10232d;font-size:12px;font-weight:600}
+.lpw ol{list-style:none;margin:6px 0 0;padding:0 0 0 10px;border-left:2px solid var(--hair);font-size:13px;color:var(--slate)}
+.lpw ol b{font-weight:500}
 .acc{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
 .acc th{font-weight:500;color:var(--slate);text-align:left;padding:0 0 6px}
 .acc td{padding:5px 0;border-top:1px solid var(--hair)}
@@ -497,6 +504,10 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <h3 id="predRollH">Next 7 days <small id="predRollNote"></small></h3>
     <div id="predRoll"></div>
   </section>
+  <section class="wday" aria-labelledby="predLongH">
+    <h3 id="predLongH">Long-period watch <small id="predLongNote"></small></h3>
+    <div class="tile" id="predLong"></div>
+  </section>
   <section class="wday" aria-labelledby="predNowH">
     <h3 id="predNowH">Now <small>what we know, and our estimate</small></h3>
     <div class="tile" id="predNow"></div>
@@ -528,6 +539,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="tile" id="predAcc"></div>
   </section>
   <p class="fine">The forecast is our own, from each model run's winds: swell grown wherever the wind blows down our window towards Saltburn, sent on at the speed for its period and smaller with distance, as breaking size at Saltburn. Every run forecasts every hour of the next 8 days, and every prediction is kept, so each hour ends up with around 30, made from a week ahead down to the day itself. A report saves all of them for its time, and "How far out" compares them with what you saw and with the Whitby buoy, by how far ahead they were made.</p>
+  <p class="fine">The long-period watch is NOAA's own wave model (GFS-Wave, WAVEWATCH III) at points on the way in, from Jan Mayen and west of the Hebrides down to 150 km off Saltburn: every swell it sees there, hour by hour, collected every half hour.</p>
   <p class="fine">The estimate now is breaking height from the nearest buoy's height and period (Komar and Gaughan), less for swell arriving at an angle to Saltburn's beach. Each report also keeps the readings and this estimate from the moment it was made.</p>
 </main>
 
@@ -2608,11 +2620,79 @@ function renderAcc() {
     `<div class="d" style="color:var(--slate);font-size:13px;margin-top:8px">Plus: we said bigger than it was; minus: smaller. Whitby is the buoy's reading turned into size at Saltburn the same way, over the last ${(roll && roll.verify && roll.verify.days) || 30} days.</div>`;
 }
 
+/* ---------------- Long-period watch ----------------
+   Swell of LONG_S seconds or more on its way to Saltburn, from NOAA's wave
+   model (scripts/fetch-model.mjs, model.json on the data branch): when it
+   reaches the model's point 150 km off Saltburn, and when its leading edge
+   passed the points on its way in, so it can be followed down the North Sea.
+   Of RARE_S seconds or more, NOAA's model has had about 45 off our coast
+   since March 2021, nearly all December to March, from 345-350°. How big
+   they break here is what reports of them will teach us, so this gives the
+   swell offshore, not a size. */
+const MODEL_URL = `https://raw.githubusercontent.com/${REPO}/data/model.json`;
+const LONG_S = 15, RARE_S = 18, NEAR = '62026';
+// Swell can only come down the North Sea to us from the north: coming from
+// 300-45° (the model has it from 320-350° by the time it's past Shetland).
+const intoNorthSea = (from) => from >= 300 || from <= 45;
+let model = store.get('nsv.model', null), modelBusy = false;
+async function refreshModel(force) {
+  if (modelBusy || (!force && model && Date.now() - model.at < 30 * 60e3)) return;
+  modelBusy = true;
+  try {
+    const r = await fetchT(`${MODEL_URL}?t=${Math.floor(Date.now() / 300e3)}`, { cache: 'no-store' }, 15e3);
+    if (r.ok) {
+      const m = await r.json();
+      // Only long-period swells that could be on their way to us: [time, [[m, s, from], ...]].
+      const points = m.points.map((p) => ({ id: p.id, name: p.name, rows: p.rows.map(([t, , sw]) => [t, sw.filter((x) => x[1] >= LONG_S && intoNorthSea(x[2])).map((x) => x.slice(0, 3))]).filter((r) => r[1].length) }));
+      model = { at: Date.now(), cycle: m.cycle, points };
+      store.set('nsv.model', model);
+    }
+  } catch {}
+  modelBusy = false;
+  renderPredict();
+}
+const longest = (sw) => sw.reduce((a, b) => (b[1] > a[1] ? b : a));
+const swellM = (x) => `${Math.round(x[1])} s · ${x[0].toFixed(1)} m (${(x[0] * FT).toFixed(1)} ft) from ${compass(x[2])} ${Math.round(x[2])}°`;
+// Runs of hours with long-period swell off Saltburn, each with its longest
+// hour, and where its leading edge was seen first at each point on the way.
+function longEvents() {
+  const near = model.points.find((p) => p.id === NEAR);
+  if (!near) return [];
+  const evs = [];
+  near.rows.filter((r) => r[0] >= Date.now() - 3 * H).forEach(([t, sw]) => {
+    const e = evs.at(-1), x = longest(sw);
+    if (e && t - e.end <= 3 * H) { e.end = t; if (x[1] > e.peak[1]) { e.peak = x; e.at = t; } if (x[0] > e.big[0]) e.big = x; }
+    else evs.push({ start: t, end: t, at: t, peak: x, big: x });
+  });
+  return evs.map((e, i) => {
+    const edge = Math.max(LONG_S, Math.floor(e.peak[1]) - 2), from = Math.max(e.start - 36 * H, i ? evs[i - 1].end : 0);
+    const path = model.points.map((p) => {
+      const r = p.rows.find(([t, sw]) => t > from && t <= e.at && longest(sw)[1] >= edge);
+      return r && { name: p.name, t: r[0], x: longest(r[1]) };
+    }).filter(Boolean).sort((a, b) => a.t - b.t);
+    return { ...e, edge, path };
+  });
+}
+function renderLong() {
+  const box = $('#predLong');
+  $('#predLongNote').textContent = modelBusy ? 'updating…' : model ? `NOAA wave model, ${runName(model.cycle)} run` : '';
+  if (!model) { box.innerHTML = `<div class="d">${modelBusy ? "Loading NOAA's wave model" : "NOAA's wave model isn't in yet: it's collected every half hour."}</div>`; return; }
+  const evs = longEvents();
+  box.innerHTML = `<div class="k">Swell of ${LONG_S} s or more 150 km off Saltburn, in the next week</div>` + (evs.length
+    ? '<ul class="lpw">' + evs.map((e) => `<li><b>${whenUk(e.start)}${e.end > e.start ? ` to ${whenUk(e.end)}` : ''}</b>${e.peak[1] >= RARE_S ? '<span class="rare">rare</span>' : ''}` +
+      `<br>Longest ${swellM(e.peak)}, ${whenUk(e.at)}${e.big[0] > e.peak[0] + 0.05 ? `; biggest ${e.big[0].toFixed(1)} m at ${Math.round(e.big[1])} s` : ''}` +
+      (e.path.length > 1 ? `<ol>${e.path.map((q) => `<li><b>${escapeHtml(q.name)}</b> ${whenUk(q.t)} · ${swellM(q.x)}</li>`).join('')}</ol>` +
+        `<div class="d" style="font-size:13px">Its leading edge (${e.edge} s or more), point by point on the way in.</div>` : '') + '</li>').join('') + '</ul>' +
+      '<div class="d">How big these break here is what your reports will teach us: report one even if it\'s small, with a period timed off a pier leg.</div>'
+    : '<div class="d">Nothing on the way in.</div>');
+}
+
 function renderPredict() {
   if (!showing('predict')) return;
   renderAlerts();
   render8();
   renderRoll();
+  renderLong();
   renderAcc();
   const box = $('#predNow'), snap = snapshot(), est = estimate();
   const b = snap.buoys && snap.buoys[0], w = snap.wind, t = snap.tide;
@@ -3016,7 +3096,7 @@ function renderLocal() {
 function refreshLocal(force) {
   const now = route === 'today' || route === 'predict';
   if (route === 'buoys' || now) refreshSwell(force);
-  if (route === 'predict') { refreshAlerts(force).then(() => refreshRoll(force)); syncReports(); }
+  if (route === 'predict') { refreshAlerts(force).then(() => refreshRoll(force)); refreshModel(force); syncReports(); }
   if (now || route === 'wind') refreshWind(force);
   if (now || route === 'tides') refreshTides(force);
 }
