@@ -1,5 +1,7 @@
 # Every half hour, collect the latest measured waves (scripts/fetch-waves.mjs)
-# and publish them as waves.json on the `data` branch, which the app reads.
+# and NOAA's wave model forecast along the swell's way in
+# (scripts/fetch-model.mjs), and publish them as waves.json and model.json on
+# the `data` branch, which the app reads.
 # The branch holds a single commit that is replaced each time, so the repo
 # doesn't grow and main's history stays clean.
 name: Collect latest waves
@@ -29,15 +31,18 @@ jobs:
         env:
           CCO_API_KEY: ${{ secrets.CCO_API_KEY }}
         run: node scripts/fetch-waves.mjs "$RUNNER_TEMP/waves.json"
+      - name: Fetch NOAA's wave model at points on the way to Saltburn
+        continue-on-error: true
+        run: node scripts/fetch-model.mjs "$RUNNER_TEMP/model.json"
       - name: Publish to the data branch
         env:
           TOKEN: ${{ github.token }}
         run: |
           cd "$RUNNER_TEMP"
-          mkdir out && mv waves.json out/ && cd out
+          mkdir out && mv waves.json out/ && { [ ! -f model.json ] || mv model.json out/; } && cd out
           git init -q -b data
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add waves.json
+          git add -A
           git commit -q -m "Latest waves $(date -u +%Y-%m-%dT%H:%MZ)"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data
