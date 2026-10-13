@@ -9,13 +9,19 @@
 //   from the CCO_API_KEY repository secret.
 // - NOAA's National Data Buoy Center, which relays the newest report from
 //   buoys and platforms worldwide, including North Sea oil and gas platforms
-//   (height only) on the WMO network, in one text file (latest_obs.txt).
+//   (height only) on the WMO network, in one text file (latest_obs.txt), and
+//   keeps each station's last 45 days (realtime2/<id>.txt).
+// Every station gets its last 48 hours (hist): from the source where it has
+// one, and from what we published last time, plus this reading. So the app
+// can follow a swell down the North Sea, platform by platform.
 // EMODnet Physics was tried first, but its ERDDAP servers hold no
 // near-real-time wave collections.
 import { writeFileSync } from 'node:fs';
 
 const BOX = { s: 53.5, n: 75, w: -12, e: 32 };
 const HOURS = 6; // older readings than this aren't "latest"
+const KEEP = 48 * 3600e3; // how far back each station's history goes
+const REPO = process.env.GITHUB_REPOSITORY || 'mattkirwan/north-sea-charts';
 const CCO_KEY = process.env.CCO_API_KEY || '';
 if (!CCO_KEY) console.log('No CCO_API_KEY secret: skipping the Coastal Monitoring buoys');
 
@@ -100,4 +106,36 @@ for (const line of lines.slice(2)) {
   stations.push({ name: name.replace(/\s+AWS$/, ''), code: id, kind: 'platform', lat, lon, ms, h, p, d, ws, wd });
 }
 console.log(`${stations.length} stations in all with a wave height in the last ${HOURS} h`);
+
+// Each platform's last 48 hours from NDBC (newest first; same columns as
+// latest_obs.txt, with the year as YY).
+await Promise.all(stations.filter((s) => s.kind === 'platform').map(async (s) => {
+  try {
+    const t = (await get(`https://www.ndbc.noaa.gov/data/realtime2/${s.code}.txt`)).split('\n');
+    const hd = t[0].replace(/^#/, '').trim().split(/\s+/), c = (n) => hd.indexOf(n), rows = [];
+    for (const line of t.slice(2)) {
+      const f = line.trim().split(/\s+/);
+      if (f.length < hd.length) continue;
+      const v = (n) => (c(n) < 0 || f[c(n)] === 'MM' ? null : +f[c(n)]);
+      const ms = Date.UTC(+f[c('YY')], +f[c('MM')] - 1, +f[c('DD')], +f[c('hh')], +f[c('mm')]);
+      if (Date.now() - ms > KEEP) break;
+      if (v('WVHT') != null) rows.push([ms, v('WVHT'), v('DPD') ?? v('APD'), v('MWD')]);
+    }
+    if (rows.length) s.hist = rows.reverse();
+    console.log(`  ${s.code} ${s.name}: ${rows.length} readings in the last 48 h`);
+  } catch (e) { console.log(`  ${s.code} ${s.name}: no history (${e.message})`); }
+}));
+
+// Extend every station's history with what we published last time (the
+// sources' own history wins where both have a reading), and this reading.
+try {
+  const prev = JSON.parse(await get(`https://raw.githubusercontent.com/${REPO}/data/waves.json?t=${Date.now()}`));
+  const old = Object.fromEntries((prev.stations || []).map((s) => [s.code, s.hist || []]));
+  for (const s of stations) {
+    const all = new Map();
+    for (const r of [...(old[s.code] || []), ...(s.hist || []), [s.ms, s.h, s.p ?? null, s.d ?? null]]) all.set(r[0], r);
+    s.hist = [...all.values()].filter((r) => Date.now() - r[0] <= KEEP).sort((a, b) => a[0] - b[0]);
+  }
+  console.log(`History: ${stations.map((s) => `${s.name} ${s.hist.length}`).join(', ')}`);
+} catch (e) { console.log('No earlier waves.json to extend:', e.message); }
 writeFileSync(process.argv[2] || 'waves.json', JSON.stringify({ at: Date.now(), source: 'Coastal Monitoring network and NOAA NDBC', hours: HOURS, stations }));
