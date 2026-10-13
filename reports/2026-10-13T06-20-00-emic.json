@@ -1,0 +1,136 @@
+{
+ "id": "2026-10-13T06-20-00-emic",
+ "at": 1791872400000,
+ "reportedAt": 1791872477778,
+ "spot": "Saltburn",
+ "swells": [
+  {
+   "lo": 0,
+   "hi": 0.5,
+   "kind": "local",
+   "period": null,
+   "fromDeg": 34,
+   "fromLo": 32,
+   "fromHi": 35
+  }
+ ],
+ "sizeLo": 0,
+ "sizeHi": 0.5,
+ "sizeFt": 0.25,
+ "surface": "light",
+ "notes": "",
+ "state": {
+  "at": 1791872477778,
+  "buoys": [
+   {
+    "name": "Whitby",
+    "km": 25,
+    "h": 0.87,
+    "p": 7.69,
+    "d": 101.3,
+    "hmax": 1.25,
+    "ms": 1791865800000
+   },
+   {
+    "name": "Scarborough",
+    "km": 52,
+    "h": 1.13,
+    "p": 7.14,
+    "d": 112.5,
+    "hmax": 1.6,
+    "ms": 1791865800000
+   },
+   {
+    "name": "Newbiggin",
+    "km": 74,
+    "h": 1.32,
+    "p": 7.14,
+    "d": 119.5,
+    "hmax": 2.18,
+    "ms": 1791865800000
+   },
+   {
+    "name": "Hornsea",
+    "km": 100,
+    "h": 0.81,
+    "p": 4.76,
+    "d": 118.1,
+    "hmax": 1.23,
+    "ms": 1791867600000
+   }
+  ],
+  "buoysCollected": 1791871027622,
+  "wind": {
+   "kn": 18.1,
+   "from": 196,
+   "gust": 31.1
+  },
+  "tide": {
+   "m": 3.73,
+   "rising": false,
+   "next": {
+    "hi": false,
+    "ms": 1791887400000,
+    "m": 0.73
+   }
+  },
+  "alerts": [
+   {
+    "hPa": 933,
+    "where": "south of Iceland",
+    "at": 1791979200000,
+    "pulses": [
+     {
+      "genAt": 1792065600000,
+      "where": "near Jan Mayen",
+      "kn": 47,
+      "arriveFrom": 1792191180097,
+      "arriveTo": 1792276912073,
+      "path": "bend"
+     }
+    ]
+   }
+  ],
+  "run": "2026-10-13 00z",
+  "forecast": {
+   "run": 1791849600000,
+   "ft": 1.3,
+   "h": 0.51,
+   "p": 6.8,
+   "d": 105
+  }
+ },
+ "prediction": {
+  "model": "v0",
+  "from": "Whitby",
+  "ft": 2.3,
+  "lo": 1.7,
+  "hi": 3,
+  "angle": 71
+ },
+ "ladder": [
+  [
+   1791806400000,
+   1.27,
+   0.5,
+   6.8,
+   105
+  ],
+  [
+   1791828000000,
+   1.3,
+   0.51,
+   6.8,
+   105
+  ],
+  [
+   1791849600000,
+   1.3,
+   0.51,
+   6.8,
+   105
+  ]
+ ],
+ "editedAt": 1791900000000,
+ "editNote": "Direction corrected from SE to 32-35 degrees (measured against the pier, which points 25 degrees)."
+}

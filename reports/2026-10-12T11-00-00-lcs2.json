@@ -1,0 +1,94 @@
+{
+ "id": "2026-10-12T11-00-00-lcs2",
+ "at": 1791802800000,
+ "reportedAt": 1791833805337,
+ "spot": "Saltburn",
+ "size": "knee",
+ "sizeFt": 1.5,
+ "quality": "fair",
+ "surface": "glassy",
+ "lines": "clean",
+ "notes": "Setty.",
+ "state": {
+  "at": 1791833805337,
+  "buoys": [
+   {
+    "name": "Whitby",
+    "km": 25,
+    "h": 0.68,
+    "p": 5.56,
+    "d": 104.1,
+    "hmax": 1.02,
+    "ms": 1791828000000
+   },
+   {
+    "name": "Scarborough",
+    "km": 52,
+    "h": 1.05,
+    "p": 5.56,
+    "d": 128,
+    "hmax": 1.66,
+    "ms": 1791828000000
+   },
+   {
+    "name": "Newbiggin",
+    "km": 74,
+    "h": 1.16,
+    "p": 5.56,
+    "d": 128,
+    "hmax": 2.11,
+    "ms": 1791828000000
+   },
+   {
+    "name": "Hornsea",
+    "km": 100,
+    "h": 0.92,
+    "p": 4.76,
+    "d": 130.8,
+    "hmax": 1.83,
+    "ms": 1791829800000
+   }
+  ],
+  "buoysCollected": 1791833153695,
+  "wind": {
+   "kn": 12.1,
+   "from": 182,
+   "gust": 20.6
+  },
+  "tide": {
+   "m": 2.4,
+   "rising": false,
+   "next": {
+    "hi": false,
+    "ms": 1791843517241.3794,
+    "m": 0.7
+   }
+  },
+  "alerts": [
+   {
+    "hPa": 932,
+    "where": "south of Iceland",
+    "at": 1791979200000,
+    "pulses": [
+     {
+      "genAt": 1792044000000,
+      "where": "north of Iceland",
+      "kn": 54,
+      "arriveFrom": 1792169686282,
+      "arriveTo": 1792225778521,
+      "path": "bend"
+     }
+    ]
+   }
+  ],
+  "run": "2026-10-12 06z"
+ },
+ "prediction": {
+  "model": "v0",
+  "from": "Whitby",
+  "ft": 1.5,
+  "lo": 1.2,
+  "hi": 2,
+  "angle": 74
+ }
+}
