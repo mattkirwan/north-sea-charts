@@ -3,10 +3,12 @@
 # which the app reads. The branch holds a single commit replaced each time, so
 # the repo doesn't grow.
 #
-# Timed to NOAA: a run starts at 00, 06, 12 and 18 UTC and its last frame we
-# draw (hour 168) reaches their bucket 4 h 15-35 min later. So we look at
-# 4 h 40 after each start, with two later tries in case NOAA or GitHub's
-# scheduler runs late. A try that finds nothing new stops before installing.
+# Timed to NOAA: a run starts at 00, 06, 12 and 18 UTC and reaches hour 168 on
+# their bucket 4 h 15-35 min later. The first week is drawn and published then
+# (hourly for 2 days, 3-hourly after); a second pass adds days 8-16 (6- then
+# 12-hourly) as NOAA publishes them, about an hour later. Started by the loop
+# in tick.yml; these schedules are a backstop. A try that finds nothing new
+# stops before installing.
 name: Draw GFS charts
 
 on:
@@ -35,7 +37,7 @@ concurrency:
 jobs:
   draw:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Is there a new run
@@ -71,12 +73,18 @@ jobs:
         if: steps.pub.outputs.go
         env:
           TOKEN: ${{ github.token }}
-        run: |
-          cd "$RUNNER_TEMP/charts" 2>/dev/null && [ -f manifest.json ] || { echo 'Nothing new to publish'; exit 0; }
-          branch=${{ inputs.quick && 'charts-preview' || 'charts' }}
-          git init -q -b "$branch"
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -q -m "GFS charts $(python3 -c 'import json; print(json.load(open("manifest.json"))["runLabel"])')"
-          git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch"
+          BRANCH: ${{ inputs.quick && 'charts-preview' || 'charts' }}
+        run: sh scripts/publish-charts.sh "$RUNNER_TEMP/charts"
+      # Days 8 to 16 come out on NOAA's bucket over the next hour or so; each
+      # frame waits for its hour, and they're added to what's published.
+      - name: Draw the rest of the run
+        id: rest
+        if: steps.pub.outputs.go && !inputs.quick
+        continue-on-error: true
+        run: python scripts/gfs_charts.py "$RUNNER_TEMP/charts" --rest
+      - name: Publish again with the rest
+        if: steps.pub.outputs.go && !inputs.quick && steps.rest.outcome == 'success'
+        env:
+          TOKEN: ${{ github.token }}
+          BRANCH: charts
+        run: sh scripts/publish-charts.sh "$RUNNER_TEMP/charts"
