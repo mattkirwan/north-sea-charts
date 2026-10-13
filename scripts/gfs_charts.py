@@ -1,7 +1,7 @@
 """Draw our own North Sea pressure charts from NOAA's GFS model.
 
 For the newest complete GFS run, downloads sea-level pressure and 500 hPa
-geopotential height for each forecast hour (0-168, every 6 h) from NOAA's open
+geopotential height for each forecast hour (0-168, every 3 h) from NOAA's open
 data on AWS, using the .idx files to fetch just those two fields, and draws a
 chart per hour: sea-level pressure as bright colour (blues and purples for
 lows, oranges and reds for highs) with isobars every 4 hPa, H/L centres and
@@ -30,11 +30,13 @@ Open-Meteo's GFS value, so the drawing can be verified.
 import datetime as dt
 import io
 import json
+import multiprocessing as mp
 import os
 import sys
 import tempfile
 import urllib.request
 import zipfile
+from concurrent.futures import ProcessPoolExecutor
 
 import matplotlib
 matplotlib.use('Agg')
@@ -64,6 +66,7 @@ SALTBURN = (54.583, -0.973)
 PROJ = ccrs.LambertConformal(central_longitude=5, central_latitude=62, standard_parallels=(55, 70))
 FIELDS = {'PRMSL:mean sea level': 'prmsl', 'HGT:500 mb': 'gh', 'UGRD:10 m above ground': 'u10', 'VGRD:10 m above ground': 'v10'}
 KN = 1.943844                                  # knots per m/s
+DRAW_STEPS = list(range(0, 169, 3))           # frames drawn: every 3 hours to a week (the app can show every other)
 ANALYSIS_DAYS = 5                              # how far back the swell forecast starts
 PUBLISHED = f"https://raw.githubusercontent.com/{os.environ.get('GITHUB_REPOSITORY', 'mattkirwan/north-sea-charts')}/charts/"
 # The Norwegian Ice Service's latest chart of the European Arctic: drawn by
@@ -499,39 +502,59 @@ def check(run, step, p, lons, lats, ours, outdir):
         print(f'  no Wetterzentrale image for comparison: {e}')
 
 
+def render_step(args):
+    """One frame, start to finish, in a worker process: fetch the run's fields
+    for the hour, draw the pressure chart and wind layer, and the wave layer if
+    NOAA has it. Returns the numbers main() needs, and the fields themselves
+    every 6 hours (for the data kept, the alerts and our own forecast)."""
+    run, step, outdir = args
+    f = fetch_fields(run, step)
+    p, _, _ = draw(run, step, f, os.path.join(outdir, f'f{step:03d}.png'))
+    lo, hi = sanity(step, p)
+    top = draw_wind(step, f, os.path.join(outdir, f'w{step:03d}.png'))
+    out = dict(step=step, lo=lo, hi=hi, top=top, waves=None, wave_error=None, fields=f if step % 6 == 0 else None)
+    try:  # the wave layer never holds the charts up
+        out['waves'] = draw_waves(run, step, fetch_waves(run, step), os.path.join(outdir, f'h{step:03d}.png'), os.path.join(outdir, f't{step:03d}.png'))
+    except Exception as e:
+        out['wave_error'] = str(e)
+    return out
+
+
 def main():
     outdir = sys.argv[1]
     do_check = '--check' in sys.argv
     os.makedirs(outdir, exist_ok=True)
-    steps = [0, 24, 72] if os.environ.get('QUICK') else STEPS  # QUICK: a preview of the look
+    steps = [0, 24, 72] if os.environ.get('QUICK') else DRAW_STEPS  # QUICK: a preview of the look
     run = latest_run()
     print(f'GFS run {run:%Y-%m-%d %H}z; home view {home_view()}')
     # The workflow passes the run already published; nothing to do if it's this one.
     if os.environ.get('PUBLISHED_RUN') == label(run) and not do_check and not os.environ.get('FORCE'):
         print('Already published; nothing to do.')
         return
+    # Every frame is drawn on its own core (four on GitHub's runners). The
+    # map features and the wave layer's land are made first, so each worker
+    # starts with them rather than all fetching them at once.
+    for feat in (cfeature.COASTLINE, cfeature.BORDERS, cfeature.LAND):
+        list(feat.with_scale('50m').geometries())
+    wave_land()
+    with ProcessPoolExecutor(max_workers=min(4, os.cpu_count() or 1), mp_context=mp.get_context('fork')) as pool:
+        done = {r['step']: r for r in pool.map(render_step, [(run, step, outdir) for step in steps])}
     lows, highs, frames = [], [], []
-    waves_ok = True
+    waves_ok = all(done[s]['waves'] for s in steps)
     for step in steps:
-        f = fetch_fields(run, step)
-        frames.append(f)
-        path = os.path.join(outdir, f'f{step:03d}.png')
-        p, lons, lats = draw(run, step, f, path)
-        lo, hi = sanity(step, p)
-        lows.append(lo); highs.append(hi)
-        wpath = os.path.join(outdir, f'w{step:03d}.png')
-        top = draw_wind(step, f, wpath)
-        print(f'  f{step:03d}: {lo:.0f}-{hi:.0f} hPa, {os.path.getsize(path) // 1024} KB; wind to {top:.0f} kn, {os.path.getsize(wpath) // 1024} KB')
-        if do_check and step in (0, 24, 72, 120):
-            check(run, step, p, lons, lats, path, outdir)
-        if waves_ok:  # the wave layer never holds the charts up: one failure and the run goes without
-            try:
-                hmax, tmax = draw_waves(run, step, fetch_waves(run, step), os.path.join(outdir, f'h{step:03d}.png'), os.path.join(outdir, f't{step:03d}.png'))
-                print(f'  waves f{step:03d}: up to {hmax:.1f} m, {tmax:.0f} s')
-            except Exception as e:
-                print(f'  No wave layer this run: {e}')
-                waves_ok = False
-    save_fields(run, steps, frames, os.path.join(outdir, 'fields.npz'))
+        r = done[step]
+        lows.append(r['lo']); highs.append(r['hi'])
+        print(f"  f{step:03d}: {r['lo']:.0f}-{r['hi']:.0f} hPa; wind to {r['top']:.0f} kn; " +
+              (f"waves up to {r['waves'][0]:.1f} m, {r['waves'][1]:.0f} s" if r['waves'] else f"no wave layer ({r['wave_error']})"))
+        if r['fields'] is not None:
+            frames.append(r['fields'])
+            if do_check and step in (0, 24, 72, 120):
+                f = r['fields']
+                check(run, step, f['prmsl'].values / 100.0, f['prmsl'].longitude.values, f['prmsl'].latitude.values,
+                      os.path.join(outdir, f'f{step:03d}.png'), outdir)
+    # The data kept, the alerts and our own forecast go every 6 hours, as before.
+    steps6 = [s for s in steps if s % 6 == 0]
+    save_fields(run, steps6, frames, os.path.join(outdir, 'fields.npz'))
     winds = None
     try:
         winds = keep_analyses(run, os.path.join(outdir, 'fields.npz'), os.path.join(outdir, 'analyses.npz'))
@@ -547,13 +570,13 @@ def main():
         with open(os.path.join(outdir, 'window.json'), 'w') as fh:
             json.dump(window, fh)
         print(f'  window.json: open past 1000 km on {swell_sources.open_sectors(window, 1000)}')
-        alerts = swell_sources.storm_alerts(run, steps, frames, window) if len(steps) > 4 else []
+        alerts = swell_sources.storm_alerts(run, steps6, frames, window) if len(steps6) > 4 else []
         for a in alerts:
             print(f"  alert: {a['hPa']} hPa {a['where']}, {a['drop24']} hPa in 24 h; pulses {[(p['where'], p['kn']) for p in a['pulses']]}")
     except Exception as e:
         print(f'  No swell window or alerts this run: {e}')
     try:
-        if window and winds and len(steps) > 4:
+        if window and winds and len(steps6) > 4:
             series, events = swell_sources.swell_forecast(run, winds, window, dense_ice)
             with open(os.path.join(outdir, 'forecast.json'), 'w') as fh:
                 json.dump(swell_sources.forecast_json(run, series, events), fh)
