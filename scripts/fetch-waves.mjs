@@ -61,14 +61,15 @@ if (CCO_KEY) try {
 } catch (e) { console.log('CCO failed:', e.message); }
 
 // The last 24 hours from the same buoys, for a trend line: every reading
-// (usually half-hourly) as [time, height, period, direction].
+// (usually half-hourly) as [time, height, period, direction, mean period].
+// The mean period says how much of the height is swell (the app's swellShare).
 if (CCO_KEY && stations.length) try {
   const geo = JSON.parse(await get(`https://coastalmonitoring.org/observations/waves/latest?key=${CCO_KEY}&format=json&duration=24`));
   const n = (v) => (v == null || v === '' ? null : +v), byId = {};
   for (const f of geo.features || []) {
     const p = f.properties || {}, m = /^(\d{4})(\d\d)(\d\d)#(\d\d)(\d\d)/.exec(p.date || '');
     if (!m || n(p.hs) == null) continue;
-    (byId[`cco-${p.id}`] ||= []).push([Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]), n(p.hs), n(p.tp), n(p.pdir)]);
+    (byId[`cco-${p.id}`] ||= []).push([Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]), n(p.hs), n(p.tp), n(p.pdir), n(p.tz)]);
   }
   for (const s of stations) {
     const h = byId[s.code];
@@ -103,7 +104,7 @@ for (const line of lines.slice(2)) {
   const p = num('DPD') ?? num('APD'), d = num('MWD'), ws = num('WSPD'), wd = num('WDIR');
   console.log(`  ${id} ${name} ${lat},${lon} waves=${h ?? '-'} m period=${p ?? '-'} s dir=${d ?? '-'} ${new Date(ms).toISOString()}`);
   if (h == null || !fresh(ms)) continue;
-  stations.push({ name: name.replace(/\s+AWS$/, ''), code: id, kind: 'platform', lat, lon, ms, h, p, d, ws, wd });
+  stations.push({ name: name.replace(/\s+AWS$/, ''), code: id, kind: 'platform', lat, lon, ms, h, p, d, ws, wd, tz: num('APD') });
 }
 console.log(`${stations.length} stations in all with a wave height in the last ${HOURS} h`);
 
@@ -119,7 +120,7 @@ await Promise.all(stations.filter((s) => s.kind === 'platform').map(async (s) =>
       const v = (n) => (c(n) < 0 || f[c(n)] === 'MM' ? null : +f[c(n)]);
       const ms = Date.UTC(+f[c('YY')], +f[c('MM')] - 1, +f[c('DD')], +f[c('hh')], +f[c('mm')]);
       if (Date.now() - ms > KEEP) break;
-      if (v('WVHT') != null) rows.push([ms, v('WVHT'), v('DPD') ?? v('APD'), v('MWD')]);
+      if (v('WVHT') != null) rows.push([ms, v('WVHT'), v('DPD') ?? v('APD'), v('MWD'), v('APD')]);
     }
     if (rows.length) s.hist = rows.reverse();
     console.log(`  ${s.code} ${s.name}: ${rows.length} readings in the last 48 h`);
@@ -133,7 +134,7 @@ try {
   const old = Object.fromEntries((prev.stations || []).map((s) => [s.code, s.hist || []]));
   for (const s of stations) {
     const all = new Map();
-    for (const r of [...(old[s.code] || []), ...(s.hist || []), [s.ms, s.h, s.p ?? null, s.d ?? null]]) all.set(r[0], r);
+    for (const r of [...(old[s.code] || []), ...(s.hist || []), [s.ms, s.h, s.p ?? null, s.d ?? null, s.tz ?? null]]) all.set(r[0], r);
     s.hist = [...all.values()].filter((r) => Date.now() - r[0] <= KEEP).sort((a, b) => a[0] - b[0]);
   }
   console.log(`History: ${stations.map((s) => `${s.name} ${s.hist.length}`).join(', ')}`);

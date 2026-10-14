@@ -524,7 +524,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
   </section>
   <p class="fine">The forecast starts from NOAA's wave model (GFS-Wave, WAVEWATCH III): every swell it has 150 km north-east of Saltburn, hour by hour. Each that can reach the beach is turned into breaking size here by our own rule: the buoy rule below, scaled down for short-period swell and up for long-period swell, which bends in and steepens. That scaling is provisional, from the first reports, and it's what reports will tune. Every run forecasts every hour of the next 8 days, and every prediction is kept, so each hour ends up with around 30, made from a week ahead down to the day itself. A report saves all of them for its time, and "How far out" compares them with what you saw and with the Whitby buoy, by how far ahead they were made.</p>
   <p class="fine">The long-period watch is NOAA's own wave model (GFS-Wave, WAVEWATCH III) at points on the way in, from Jan Mayen and west of the Hebrides down to 150 km off Saltburn: every swell it sees there, hour by hour, collected every half hour.</p>
-  <p class="fine">The estimate now is breaking height from the nearest buoy's height and period (Komar and Gaughan), less for swell arriving at an angle to Saltburn's beach. Each report also keeps the readings and this estimate from the moment it was made.</p>
+  <p class="fine">The estimate now is breaking height from the nearest buoy's height and period (Komar and Gaughan), less for swell arriving at an angle to Saltburn's beach. The buoy measures everything at once, so only the swell's share of its height counts, worked out from its mean period (the middle of its last three readings): a clean swell's mean period is about three quarters of its peak period, and local chop pulls it down towards 4 s. Each report also keeps the readings and this estimate from the moment it was made.</p>
 </main>
 
 <!-- Settings: wind units and the pressure charts' options -->
@@ -2197,19 +2197,45 @@ function showBeta() {
   if (!opts.beta && route === 'predict') go('today');
 }
 
+// How much of a buoy's height is the swell at its peak period. A buoy gives
+// one height for everything at once, and when a small swell sits under a
+// local chop the peak period is the swell's but most of the height is the
+// chop's (Whitby, 14 Oct: 0.37 m at 10 s, reported 0-1 ft). The mean period
+// tells them apart: a clean swell's is about 3/4 of its peak period, the
+// local chop's about 4 s (Whitby with only a north-westerly chop, 14 Oct
+// 05:00z: peak 4 s, mean 3.96 s), and a mix's falls between, weighted by how
+// much energy each has. As two parts, 1/Tz² = s/Ts² + (1 - s)/Tc² with
+// Ts = 0.75·Tp and Tc = 4 s, so the swell's share of the energy is
+// s = (1/Tz² - 1/Tc²) / (1/Ts² - 1/Tc²). Height goes with the square root of
+// energy. With no mean period, or a peak that is itself a chop, it's all of
+// it (the rule as it was). Checked against the reports so far (Oct 2026):
+// Saltburn 12 Oct knee, was 3.7 ft, now 2.0; 13 Oct 0-0.5 ft, was 1.3, now
+// 0.9; 14 Oct 0-1 ft, was 1.9, now 0; Sandsend 16 Mar 4-6 ft, 4.5 and 4.2.
+const CHOP_TZ = 4;
+function swellShare(tp, tz) {
+  const ts = 0.75 * tp;
+  if (!(tz > 0) || !(tp > 0) || ts <= CHOP_TZ + 0.5) return 1;
+  return Math.min(1, Math.max(0, (1 / tz ** 2 - 1 / CHOP_TZ ** 2) / (1 / ts ** 2 - 1 / CHOP_TZ ** 2)));
+}
 // Breaking height from deep-water height and period (Komar and Gaughan, 1972),
-// less for swell coming in at an angle to the beach.
+// of the swell's share of the buoy's height, less for swell coming in at an
+// angle to the beach.
 const offBeach = (d) => Math.abs(((d - BEACH_FACES) % 360 + 540) % 360 - 180);
-function breakFt(H0, T, d) {
-  const off = offBeach(d);
-  if (off >= 90 || !(H0 > 0) || !(T > 0)) return 0;
-  return 0.39 * Math.pow(9.81, 0.2) * Math.pow(T * H0 * H0, 0.4) * Math.sqrt(Math.cos(off * Math.PI / 180)) * FT;
+function breakFt(H0, T, d, tz) {
+  const off = offBeach(d), H = H0 * Math.sqrt(swellShare(T, tz));
+  if (off >= 90 || !(H > 0) || !(T > 0)) return 0;
+  return 0.39 * Math.pow(9.81, 0.2) * Math.pow(T * H * H, 0.4) * Math.sqrt(Math.cos(off * Math.PI / 180)) * FT;
 }
 function estimate() {
   const st = obs && obs.stations, b = st && st.find((s) => s.p != null && s.d != null);
   if (!b) return null;
-  const ft = breakFt(b.h, b.p, b.d);
-  return { model: 'v0', from: b.name, ft: +ft.toFixed(1), lo: +(ft * 0.75).toFixed(1), hi: +(ft * 1.3).toFixed(1), angle: Math.round(offBeach(b.d)) };
+  // The median of its last three readings (an hour and a half): one
+  // reading's mean period can jump a second or more either way.
+  const recent = (b.hist || []).filter((r) => r[2] != null && r[3] != null && b.ms - r[0] <= 90 * 60e3).slice(-3);
+  const rows = recent.length ? recent : [[b.ms, b.h, b.p, b.d, b.tz]];
+  const mid = (xs) => xs.slice().sort((x, y) => x - y)[xs.length >> 1];
+  const ft = mid(rows.map((r) => breakFt(r[1], r[2], r[3], r[4]))), share = mid(rows.map((r) => swellShare(r[2], r[4])));
+  return { model: 'v1', from: b.name, ft: +ft.toFixed(1), lo: +(ft * 0.75).toFixed(1), hi: +(ft * 1.3).toFixed(1), angle: Math.round(offBeach(b.d)), share: +share.toFixed(2) };
 }
 const sizeWord = (ft) => ft < 0.7 ? 'flat to ankle' : ft < 1.3 ? 'ankle to knee' : ft < 2 ? 'knee' : ft < 3 ? 'waist' : ft < 4 ? 'chest' : ft < 6 ? 'head high' : ft < 8.5 ? 'overhead' : 'double overhead+';
 
@@ -2220,7 +2246,7 @@ function snapshot() {
   const turns = tides ? tideTurns(tides.time, tides.level) : [], next = turns.find((e) => e.ms > now), level = tides ? levelAt(now) : null;
   return {
     at: now,
-    buoys: obs ? obs.stations.slice(0, 4).map((s) => ({ name: s.name, km: Math.round(s.km), h: s.h, p: s.p, d: s.d, hmax: s.hmax ?? null, ms: s.ms })) : null,
+    buoys: obs ? obs.stations.slice(0, 4).map((s) => ({ name: s.name, km: Math.round(s.km), h: s.h, p: s.p, d: s.d, hmax: s.hmax ?? null, tz: s.tz ?? null, ms: s.ms })) : null,
     buoysCollected: obs ? obs.collected : null,
     wind: wh && wh.kn != null ? { kn: +wh.kn.toFixed(1), from: wh.from, gust: wh.gust ?? null } : null,
     tide: level != null ? { m: +level.toFixed(2), rising: next ? next.hi : null, next: next ? { hi: next.hi, ms: next.ms, m: +next.m.toFixed(2) } : null } : null,
@@ -2281,7 +2307,7 @@ function rollChart(ks, o) {
   const now = Date.now(), { t0, t1, W, Hh, fine } = o;
   const lines = ks.map((k) => roll.runs[k].filter((r) => r[0] >= t0 && r[0] <= t1)).filter((l) => l.length > 1);
   const whitby = obs && obs.stations.find((s) => s.name === 'Whitby');
-  const rows = ((whitby && whitby.hist) || []).filter((r) => r[0] >= t0 && r[1] != null && r[2] != null && r[3] != null).map((r) => [r[0], breakFt(r[1], r[2], r[3])]);
+  const rows = ((whitby && whitby.hist) || []).filter((r) => r[0] >= t0 && r[1] != null && r[2] != null && r[3] != null).map((r) => [r[0], breakFt(r[1], r[2], r[3], r[4])]);
   const rp = reports.filter((r) => r.at >= t0 && r.at <= t1);
   // The size scale fits what's in view (o.fit: [from, to]), or the whole chart.
   const [fa, fb] = o.fit || [t0, t1], inFit = (t) => t >= fa && t <= fb;
@@ -2373,7 +2399,7 @@ function readZoom(ks, c) {
   box.innerHTML = `<b>${fUkDay.format(rollAt)} ${whenUk(rollAt).split(' ')[1]}</b>` +
     (latest ? `<div class="big">${latest[1][1].toFixed(1)} ft</div>${latest[1][3] == null ? '' : `${latest[1][2]} m at ${latest[1][3]} s from ${compass(latest[1][4])} (${latest[1][4]}°) · `}latest run, ${runName(latest[0])}`
       : '<div>No run covers this hour.</div>') +
-    (w ? `<div>Whitby: ${w[1]} m${w[2] ? ` at ${Math.round(w[2])} s` : ''}${w[3] != null ? ` from ${compass(w[3])}` : ''}${w[2] && w[3] != null ? `, about ${breakFt(w[1], w[2], w[3]).toFixed(1)} ft by our sums` : ''}</div>` : '') +
+    (w ? `<div>Whitby: ${w[1]} m${w[2] ? ` at ${Math.round(w[2])} s` : ''}${w[3] != null ? ` from ${compass(w[3])}` : ''}${w[2] && w[3] != null ? `, about ${breakFt(w[1], w[2], w[3], w[4]).toFixed(1)} ft by our sums${swellShare(w[2], w[4]) < 0.6 ? ' (mostly chop)' : ''}` : ''}</div>` : '') +
     (rep ? `<div>Your report: ${rep.swells ? rep.swells.map(swellReport).join(' + ') : (SIZES.find((x) => x[0] === rep.size) || [, rep.size])[1]}</div>` : '') +
     (runs.length > 1 ? `<ul>${runs.map(([k, r]) => `<li>${runName(k)}: <b>${r[1].toFixed(1)}</b> ft</li>`).join('')}</ul>` : '');
 }
@@ -2584,7 +2610,8 @@ function renderPredict() {
   const b = snap.buoys && snap.buoys[0], w = snap.wind, t = snap.tide;
   box.innerHTML = (est
     ? `<div class="k">Estimated breaking size at Saltburn</div><div class="est">${est.lo}–${est.hi}<small> ft · ${sizeWord(est.ft)}</small></div>` +
-      `<div class="d">From the ${escapeHtml(est.from)} buoy, arriving ${est.angle}° off the beach's line.</div>`
+      `<div class="d">From the ${escapeHtml(est.from)} buoy, arriving ${est.angle}° off the beach's line` +
+      (est.share < 0.95 ? `; its swell is about ${Math.round(Math.sqrt(est.share) * 100)}% of its height, the rest local chop (from its mean period).` : '.') + '</div>'
     : `<div class="d">${obsBusy ? 'Loading the buoy readings' : 'No buoy reading with a period yet.'}</div>`) +
     '<dl class="bfacts">' +
     (b ? `<div><dt>${escapeHtml(b.name)}</dt><dd>${feet(b.h)} ft${b.p != null ? ` · ${Math.round(b.p)} s` : ''}${b.d != null ? ` · ${compass(b.d)}` : ''}</dd></div>` : '') +
