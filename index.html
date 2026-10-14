@@ -2611,7 +2611,8 @@ function renderPredict() {
   box.innerHTML = (est
     ? `<div class="k">Estimated breaking size at Saltburn</div><div class="est">${est.hi < 0.5 ? 'Flat' : `${est.lo}–${est.hi}<small> ft · ${sizeWord(est.ft)}</small>`}</div>` +
       `<div class="d">From the ${escapeHtml(est.from)} buoy, arriving ${est.angle}° off the beach's line` +
-      (est.share < 0.95 ? `; its swell is about ${Math.round(Math.sqrt(est.share) * 100)}% of its height, the rest local chop (from its mean period).` : '.') + '</div>'
+      (est.share < 0.05 ? '; going by its mean period, its height is all local chop.'
+        : est.share < 0.95 ? `; going by its mean period, its swell is about ${Math.round(Math.sqrt(est.share) * 100)}% of its height, the rest local chop.` : '.') + '</div>'
     : `<div class="d">${obsBusy ? 'Loading the buoy readings' : 'No buoy reading with a period yet.'}</div>`) +
     '<dl class="bfacts">' +
     (b ? `<div><dt>${escapeHtml(b.name)}</dt><dd>${feet(b.h)} ft${b.p != null ? ` · ${Math.round(b.p)} s` : ''}${b.d != null ? ` · ${compass(b.d)}` : ''}</dd></div>` : '') +
