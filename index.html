@@ -2609,7 +2609,7 @@ function renderPredict() {
   const box = $('#predNow'), snap = snapshot(), est = estimate();
   const b = snap.buoys && snap.buoys[0], w = snap.wind, t = snap.tide;
   box.innerHTML = (est
-    ? `<div class="k">Estimated breaking size at Saltburn</div><div class="est">${est.lo}–${est.hi}<small> ft · ${sizeWord(est.ft)}</small></div>` +
+    ? `<div class="k">Estimated breaking size at Saltburn</div><div class="est">${est.hi < 0.5 ? 'Flat' : `${est.lo}–${est.hi}<small> ft · ${sizeWord(est.ft)}</small>`}</div>` +
       `<div class="d">From the ${escapeHtml(est.from)} buoy, arriving ${est.angle}° off the beach's line` +
       (est.share < 0.95 ? `; its swell is about ${Math.round(Math.sqrt(est.share) * 100)}% of its height, the rest local chop (from its mean period).` : '.') + '</div>'
     : `<div class="d">${obsBusy ? 'Loading the buoy readings' : 'No buoy reading with a period yet.'}</div>`) +
