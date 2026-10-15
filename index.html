@@ -2269,7 +2269,9 @@ const DAY = 24 * H, ROLL_RUNS = 8;
 const runFile = (ms) => new Date(ms).toISOString().slice(0, 13).replace('T', '-') + 'z';
 const runName = (ms) => `${fUkDay.format(ms)} ${String(new Date(ms).getUTCHours()).padStart(2, '0')}z`;
 const fUkDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' });
-let roll = store.get('nsv.roll', null), rollBusy = false;
+// Stored under roll2 since the 15 Oct 06z run was re-made with the long-period
+// cap: phones holding the old copy load it again.
+let roll = store.get('nsv.roll2', null), rollBusy = false;
 async function refreshRoll(force) {
   const run = stormAlerts && stormAlerts.run;
   if (rollBusy || !run || (!force && roll && roll.run === run && Date.now() - roll.at < 20 * 60e3)) return;
@@ -2278,7 +2280,8 @@ async function refreshRoll(force) {
   const keep = Date.now() - 2 * DAY, runs = {};
   await Promise.all(Array.from({ length: ROLL_RUNS }, (_, k) => run - k * 6 * H).map(async (ms) => {
     const had = roll && roll.runs && roll.runs[ms];
-    if (had) { runs[ms] = had.filter((r) => r[0] >= keep); return; } // a run's forecast never changes
+    // A run's forecast doesn't change, except when the newest is re-made after a fix.
+    if (had && ms !== run) { runs[ms] = had.filter((r) => r[0] >= keep); return; }
     try {
       const r = await fetchT(`${HIST}forecasts/${runFile(ms)}.json`, {}, 15e3);
       if (r.ok) runs[ms] = (await r.json()).hourly.filter((x) => x[0] >= keep);
@@ -2290,7 +2293,7 @@ async function refreshRoll(force) {
     if (r.ok) verify = await r.json();
   } catch {}
   roll = { at: Date.now(), run, runs, verify };
-  store.set('nsv.roll', roll);
+  store.set('nsv.roll2', roll);
   rollBusy = false;
   renderPredict();
 }
