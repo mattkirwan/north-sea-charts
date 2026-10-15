@@ -6,7 +6,8 @@
 # job's forecast.json) is filed beside it when it's from the same run.
 #
 # Started by the loop in tick.yml once the run's bulletins are out on NOAA's
-# bucket, about 5½ hours after the run (an hour after the GFS charts).
+# bucket, about 5½ hours after the run (an hour after the GFS charts, whose
+# job saves the swells off Saltburn that the forecast starts from).
 name: Swell forecast
 
 on:
@@ -27,7 +28,7 @@ concurrency:
 jobs:
   forecast:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
