@@ -107,7 +107,13 @@ P_LEVELS = np.arange(940, 1053, 4)
 # Peak period alone would hide a small long-period swell under the local wind
 # waves, which is exactly the swell we're looking for.
 WAVE_FIELDS = {'HTSGW:surface': 'hs', 'PERPW:surface': 'tp', **{f'SWELL:{k} in sequence': f'sh{k}' for k in (1, 2, 3)},
-               **{f'SWPER:{k} in sequence': f'sp{k}' for k in (1, 2, 3)}}
+               **{f'SWPER:{k} in sequence': f'sp{k}' for k in (1, 2, 3)}, **{f'SWDIR:{k} in sequence': f'sd{k}' for k in (1, 2, 3)}}
+# The wave model's sea cell nearest Saltburn, 20 km NNE in Tees Bay (its grid
+# is 0.25°; Saltburn's own cell is land). Its swells, hour by hour, are what
+# our Saltburn forecast starts from (saltburn-cell.json, wave_model.py): a
+# swell 150 km out can be three times the size it is here, as the coast and
+# Aberdeenshire shelter Tees Bay from swell running down from the north.
+SALTBURN_CELL = (54.75, -1.0)
 LONG_MIN_M = 0.1                               # a swell smaller than this doesn't count as present
 LAND = '#46525a'
 # Wave height (m): calm deep blue, through teal and green to yellow, orange,
@@ -522,12 +528,23 @@ def render_step(args):
     f = fetch_fields(run, step)
     p, _, _ = draw(run, step, f, os.path.join(outdir, f'f{step:03d}.png'))
     lo, hi = sanity(step, p)
-    out = dict(step=step, lo=lo, hi=hi, waves=None, wave_error=None, fields=f if step % 6 == 0 else None)
+    out = dict(step=step, lo=lo, hi=hi, waves=None, wave_error=None, cell=None, fields=f if step % 6 == 0 else None)
     try:  # the wave layer never holds the charts up
-        out['waves'] = draw_waves(run, step, fetch_waves(run, step), os.path.join(outdir, f'h{step:03d}.png'), os.path.join(outdir, f't{step:03d}.png'))
+        w = fetch_waves(run, step)
+        out['cell'] = cell_swells(w)
+        out['waves'] = draw_waves(run, step, w, os.path.join(outdir, f'h{step:03d}.png'), os.path.join(outdir, f't{step:03d}.png'))
     except Exception as e:
         out['wave_error'] = str(e)
     return out
+
+
+def cell_swells(w):
+    """The separate swells in the sea cell off Saltburn: [[m, s, from deg], ...],
+    biggest first, any of 0.05 m or more."""
+    at = lambda k: float(w[k].sel(latitude=SALTBURN_CELL[0], longitude=SALTBURN_CELL[1], method='nearest'))
+    sw = [[round(at(f'sh{k}'), 2), round(at(f'sp{k}'), 1), round(at(f'sd{k}'))] for k in (1, 2, 3)
+          if np.isfinite(at(f'sh{k}')) and at(f'sh{k}') >= 0.05 and np.isfinite(at(f'sp{k}')) and np.isfinite(at(f'sd{k}'))]
+    return sorted(sw, key=lambda s: -s[0])
 
 
 def render_all(run, steps, outdir):
@@ -575,6 +592,12 @@ def main():
         winds = keep_analyses(run, os.path.join(outdir, 'fields.npz'), os.path.join(outdir, 'analyses.npz'))
     except Exception as e:
         print(f'  No analyses kept this run: {e}')
+    # The swells off Saltburn, hour by hour, for our forecast (wave_model.py).
+    cell = [[int((run + dt.timedelta(hours=s)).timestamp() * 1000), done[s]['cell']] for s in steps if done[s]['cell'] is not None]
+    if len(cell) == len(steps):
+        with open(os.path.join(outdir, 'saltburn-cell.json'), 'w') as fh:
+            json.dump(dict(run=int(run.timestamp() * 1000), runLabel=label(run), cell=list(SALTBURN_CELL), rows=cell), fh, separators=(',', ':'))
+        print(f'  saltburn-cell.json: {len(cell)} hours')
     ice_date, dense_ice = draw_ice(outdir)
     write_grid(os.path.join(outdir, 'grid.json'))
     # Saltburn's swell window, bomb lows sending swell our way, and our swell

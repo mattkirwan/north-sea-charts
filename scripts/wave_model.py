@@ -1,18 +1,25 @@
 """Our swell forecast for Saltburn from NOAA's wave model.
 
-NOAA's GFS-Wave (WAVEWATCH III) runs with each GFS run and publishes, for a
-few hundred buoys and platforms, every separate swell it sees there, hour by
-hour: height, peak period and direction. The nearest to Saltburn on the swell's
-way in is WMO 62026, 150 km north-east (55.3N 1.1E). We take each of its swells
-that can reach Saltburn's beach and turn it into breaking size there
-(to_saltburn: the buoy rule, swell_sources.break_ft, scaled by period); swells
-running together add as energy. So the offshore part is NOAA's and the last 150 km is ours: the
-part your reports will tune, by period and direction.
+NOAA's GFS-Wave (WAVEWATCH III) runs with each GFS run. On its 0.25° grid,
+the sea cell nearest Saltburn is 20 km NNE in Tees Bay (54.75N 1.0W); the
+chart job saves every separate swell it has there, hour by hour for five
+days (saltburn-cell.json on the charts branch: height, peak period and
+direction). We take each that can reach Saltburn's beach and turn it into
+breaking size there (to_saltburn: the buoy rule, swell_sources.break_ft,
+scaled by period); swells running together add as energy. So the sea is
+NOAA's and the last 20 km is ours: the part your reports will tune, by period
+and direction.
 
-The bulletins (gfswave.<id>.bull on NOAA's open data bucket) are kept for every
-run since March 2021, so any past forecast can be made again.
+Until Oct 2026 the forecast started from NOAA's point bulletin for WMO 62026,
+150 km north-east (55.3N 1.1E). Swell running down from the north can be
+three times smaller in Tees Bay than out there (15 Oct: 0.5 m at 20 s at
+62026, 0.19 m in the cell), so the cell is used, and the bulletin only when
+the cell isn't out for the run. The bulletins (gfswave.<id>.bull on NOAA's
+open data bucket) are kept for every run since March 2021.
 """
 import datetime as dt
+import json
+import os
 import sys
 import time
 import urllib.request
@@ -23,13 +30,16 @@ import swell_sources
 from gfs_latest import bulletin_url
 from swell_sources import break_ft
 
-POINT = '62026'      # 150 km NE of Saltburn
+POINT = '62026'      # 150 km NE of Saltburn: the fallback
+CELL_URL = f"https://raw.githubusercontent.com/{os.environ.get('GITHUB_REPOSITORY', 'mattkirwan/north-sea-charts')}/charts/saltburn-cell.json"
 MIN_HS = 0.05        # smaller swells (m) aren't counted
-# The last 150 km: breaking size by the buoy rule, times GAIN * (period / 10 s)
-# ** PERIOD_POW, at most MAX_GAIN. Provisional, from the first two reports (12
-# and 13 Oct, 8-9 s swell breaking at a third of the rule) and long experience
-# that a small 20 s swell breaks at 4-6 ft: short-period swell loses height on
-# the way in, long-period swell bends in and steepens. Reports refit these.
+# The last stretch: breaking size by the buoy rule, times GAIN * (period /
+# 10 s) ** PERIOD_POW, at most MAX_GAIN. Provisional, from the first reports
+# and long experience that a small 20 s swell breaks at 4-6 ft: short-period
+# swell loses height on the way in, long-period swell bends in and steepens.
+# Fitted first on 62026; on the cell it gives Saltburn 12 Oct 0.9 ft (reported
+# knee), 13 Oct 0.5 (0-0.5 ft), 14 Oct 0.2 (0-1 ft), and off Whitby on 16 Mar
+# 4.1 ft (Sandsend 4-6 ft). Reports refit these.
 GAIN = 0.43
 PERIOD_POW = 2.2
 MAX_GAIN = 3.0
@@ -86,6 +96,25 @@ def parse_bulletin(text, run, days=8):
     return rows
 
 
+def fetch_cell(run, wait_min=0):
+    """The run's swells in the sea cell off Saltburn, from the chart job, as
+    bulletin rows [(time, [(m, s, from, False), ...]), ...]; None if the
+    charts published are of another run."""
+    end = time.time() + wait_min * 60
+    while True:
+        try:
+            with urllib.request.urlopen(f'{CELL_URL}?t={int(time.time())}', timeout=60) as r:
+                c = json.load(r)
+            if c['run'] == int(run.replace(tzinfo=dt.timezone.utc).timestamp() * 1000):
+                return [(dt.datetime.fromtimestamp(t / 1000, dt.timezone.utc).replace(tzinfo=None), [(h, p, d, False) for h, p, d in sw])
+                        for t, sw in c['rows']]
+        except Exception as e:
+            print(f'No cell yet: {e}')
+        if time.time() >= end:
+            return None
+        time.sleep(60)
+
+
 def ww3_forecast(run, rows):
     """Hourly forecast and swell events for Saltburn from the bulletin rows."""
     series = []
@@ -111,7 +140,9 @@ if __name__ == '__main__':
     # show RUN: print it.
     cmd = sys.argv[1]
     run = dt.datetime.strptime(sys.argv[2], '%Y-%m-%d-%Hz')
-    series, events = ww3_forecast(run, parse_bulletin(fetch_bulletin(run), run))
+    rows = fetch_cell(run, wait_min=10)
+    print(f"From {'the cell off Saltburn' if rows else 'the bulletin for ' + POINT + ', 150 km out'}")
+    series, events = ww3_forecast(run, rows or parse_bulletin(fetch_bulletin(run), run))
     if cmd == 'forecast':
         import json
         with open(sys.argv[3], 'w') as fh:
