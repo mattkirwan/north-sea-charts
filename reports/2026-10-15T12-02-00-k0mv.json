@@ -7,7 +7,7 @@
  "swells": [
   {
    "lo": 0.5,
-   "hi": 1,
+   "hi": 1.5,
    "kind": "ground",
    "period": 21,
    "fromLo": 23,
@@ -16,8 +16,8 @@
   }
  ],
  "sizeLo": 0.5,
- "sizeHi": 1,
- "sizeFt": 0.75,
+ "sizeHi": 1.5,
+ "sizeFt": 1,
  "notes": "",
  "state": {
   "at": 1792065865465,
@@ -182,5 +182,6 @@
    18.7,
    20
   ]
- ]
+ ],
+ "editedAt": 1792066474355
 }
