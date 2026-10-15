@@ -34,15 +34,17 @@ POINT = '62026'      # 150 km NE of Saltburn: the fallback
 CELL_URL = f"https://raw.githubusercontent.com/{os.environ.get('GITHUB_REPOSITORY', 'mattkirwan/north-sea-charts')}/charts/saltburn-cell.json"
 MIN_HS = 0.05        # smaller swells (m) aren't counted
 # The last stretch: breaking size by the buoy rule, times GAIN * (period /
-# 10 s) ** PERIOD_POW, at most MAX_GAIN. Provisional, from the first reports
-# and long experience that a small 20 s swell breaks at 4-6 ft: short-period
-# swell loses height on the way in, long-period swell bends in and steepens.
-# Fitted first on 62026; on the cell it gives Saltburn 12 Oct 0.9 ft (reported
-# knee), 13 Oct 0.5 (0-0.5 ft), 14 Oct 0.2 (0-1 ft), and off Whitby on 16 Mar
-# 4.1 ft (Sandsend 4-6 ft). Reports refit these.
+# 10 s) ** PERIOD_POW, at most MAX_GAIN: short-period swell loses height on
+# the way in. Fitted first on 62026; on the cell it gives Saltburn 12 Oct
+# 0.9 ft (reported knee), 13 Oct 0.5 (0-0.5 ft), 14 Oct 0.2 (0-1 ft). The
+# cap was 3, from long experience that a small 20 s swell breaks at 4-6 ft
+# (Sandsend 16 Mar, 4-6 ft); on 15 Oct the cell had 0.19 m at 18.7 s, Whitby
+# agreed, and Saltburn was knee high (1.7 ft by the buoy rule), so the cap is
+# now 0.7 and swells over 12.5 s get no more than that. March may be Sandsend
+# taking more than Saltburn, or a cleaner sea; reports refit these.
 GAIN = 0.43
 PERIOD_POW = 2.2
-MAX_GAIN = 3.0
+MAX_GAIN = 0.7
 
 
 def to_saltburn(hs, tp, from_deg):
