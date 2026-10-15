@@ -3,17 +3,7 @@
  "at": 1792044060000,
  "reportedAt": 1792044112460,
  "spot": "Saltburn",
- "swells": [
-  {
-   "lo": 0,
-   "hi": 0,
-   "kind": "local",
-   "period": 2,
-   "fromLo": 0,
-   "fromHi": 0,
-   "fromDeg": 0
-  }
- ],
+ "swells": [],
  "sizeLo": 0,
  "sizeHi": 0,
  "sizeFt": 0,
@@ -174,5 +164,7 @@
    7.1,
    76
   ]
- ]
+ ],
+ "flat": true,
+ "editedAt": 1792045815654
 }
