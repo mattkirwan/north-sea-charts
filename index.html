@@ -2806,7 +2806,7 @@ async function syncReports(pull) {
       }
       const { synced, sha, ...body } = r;
       const put = await gh(`contents/reports/${r.id}.json`, { method: 'PUT', body: JSON.stringify({
-        message: `Report: ${r.spot}, ${r.swells ? swellReport(r.swells[0]) : r.size}${sha ? ' (edited)' : ''}`, content: b64(JSON.stringify(body, null, 1)), branch: REPORTS_BRANCH, ...(sha ? { sha } : {}) }) });
+        message: `Report: ${r.spot}, ${seenText(r)}${sha ? ' (edited)' : ''}`, content: b64(JSON.stringify(body, null, 1)), branch: REPORTS_BRANCH, ...(sha ? { sha } : {}) }) });
       const j = await put.json();
       if (j.content) { r.synced = true; r.sha = j.content.sha; }
     }
