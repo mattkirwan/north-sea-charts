@@ -229,36 +229,54 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 .alert li{font-size:14px;line-height:1.4;padding:6px 0;border-top:1px solid var(--hair)}
 .alert li b{color:var(--paper);font-weight:600}
 .alert .go{font-size:13px;color:var(--amber);margin-top:8px}
-.swc{margin-top:12px;border-radius:14px;padding:12px 14px 13px;background:rgba(126,214,195,.08);box-shadow:inset 3px 0 0 var(--glass)}
-.swc .k{font-size:13px;color:var(--glass);font-weight:600}
-.swc .ah{font-family:var(--f-cond);font-weight:700;font-size:26px;line-height:1.1;margin-top:4px}
-.swc .ah small{font-size:15px;color:var(--slate);font-weight:600}
-.swc .d{font-size:14px;color:var(--slate);margin-top:6px;line-height:1.4}
-.swc .d b{color:var(--paper);font-weight:600}
-.swc svg{display:block;width:100%;height:auto;margin-top:10px;overflow:visible}
-.swc .sx{font:500 10px var(--f-body);fill:var(--slate)}
-.swc .key{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--slate);margin-top:4px}
-.swc .key i{display:inline-block;width:14px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
-.swc ul{list-style:none;margin:10px 0 0;padding:0}
-.swc li{font-size:13px;line-height:1.4;padding:5px 0;border-top:1px solid var(--hair);color:var(--slate);font-variant-numeric:tabular-nums}
-.swc li b{color:var(--paper);font-weight:600}
-.swc li.day{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
-.swc li.day .r{white-space:nowrap;font-size:12px}
 .ladder{margin:4px 0 12px}
-.swc .zoomable{display:block;width:100%;padding:0;margin:0;background:none;border:0;color:inherit;cursor:zoom-in;text-align:left}
-.zoomsheet{position:fixed;inset:0;z-index:100;background:var(--ink);display:flex;flex-direction:column;gap:10px;
-  padding:calc(var(--st) + 12px) 16px calc(var(--sb) + 16px);overflow-y:auto}
-.zhead{display:flex;justify-content:space-between;align-items:center}
-.zhead h2{font-family:var(--f-cond);font-weight:700;font-size:26px;margin:0}
-.zscroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;border-radius:12px;background:rgba(232,238,241,.04);touch-action:pan-x}
-.zscroll svg{display:block;cursor:crosshair}
-.zoomsheet .sx{font:500 11px var(--f-body);fill:var(--slate)}
-.zoomsheet .key{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--slate)}
-.zoomsheet .key i{display:inline-block;width:14px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
-.zread{font-size:14px;color:var(--slate);line-height:1.45;font-variant-numeric:tabular-nums;min-height:4.4em}
-.zread b{color:var(--paper);font-weight:600}
-.zread .big{font-family:var(--f-cond);font-weight:700;font-size:28px;color:var(--paper);line-height:1.1}
-.zread ul{list-style:none;margin:6px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:2px 12px}
+.strip{display:flex;margin-top:4px}
+.sy{flex:0 0 22px;position:relative;height:164px;font-size:10px;color:var(--slate)}
+.sy span{position:absolute;right:5px;transform:translateY(-50%)}
+.sscroll{flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.sscroll::-webkit-scrollbar{display:none}
+.strack{position:relative;padding-right:14px}
+.sdays{display:flex;height:20px}
+.sdays div{flex:0 0 auto;box-sizing:border-box;border-left:1px solid var(--hair);padding-left:4px;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden}
+.sbars{position:relative;display:flex;align-items:flex-end;height:124px}
+.sbars .gl{position:absolute;left:0;right:0;border-top:1px solid rgba(232,238,241,.08);pointer-events:none}
+.sbars button{position:relative;flex:0 0 9px;width:9px;height:124px;margin:0 2px 0 0;padding:0;border:0;border-radius:3px;background:none;cursor:pointer}
+.sbars button[aria-pressed="true"]{background:rgba(232,238,241,.2)}
+.sbars .b{position:absolute;left:0;bottom:0;width:9px;border-radius:2px 2px 0 0;background:var(--amber)}
+.sbars .b.past{opacity:.45}
+.sbars .sp{position:absolute;left:4px;width:1px;background:rgba(232,238,241,.8)}
+.sbars .rp{position:absolute;left:-1px;width:11px;border-radius:2px;background:var(--glass)}
+.snow{position:absolute;top:-4px;bottom:0;width:0;border-left:1.5px dashed var(--paper);pointer-events:none}
+.snow span{position:absolute;top:-15px;left:-15px;font:700 10px/14px var(--f-body);color:var(--ink);background:var(--paper);border-radius:4px;padding:0 4px}
+.sticks{display:flex;height:16px;padding-top:4px}
+.sticks div{flex:0 0 11px;width:11px;font-size:10px;color:var(--slate);white-space:nowrap}
+.skey{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--slate);margin:6px 0 12px}
+.skey i{display:inline-block;vertical-align:middle;margin-right:6px;border-radius:2px}
+.hsheet .hh{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.hsheet h4{margin:0;font-family:var(--f-cond);font-weight:700;font-size:24px}
+.hsheet .badge{font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.hsheet .badge.past{background:rgba(126,214,195,.18);color:var(--glass)}
+.hsheet .badge.fc{background:rgba(255,194,61,.18);color:var(--amber)}
+.hsheet .badge.now{background:var(--paper);color:var(--ink)}
+.hsheet .big{display:flex;align-items:baseline;gap:10px;margin-top:8px}
+.hsheet .big b{font-family:var(--f-cond);font-weight:700;font-size:44px;line-height:1;color:var(--amber)}
+.hsheet .big span{font-size:16px;font-weight:500}
+.hsheet .rh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:14px;font-size:14px;font-weight:600}
+.hsheet .rh small{font-weight:400;font-size:12px;color:var(--slate);text-align:right}
+.hsheet .runs{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:7px}
+.hsheet .runs li{display:grid;grid-template-columns:78px minmax(0,1fr) 108px;align-items:center;gap:8px;font-size:13px;font-variant-numeric:tabular-nums}
+.hsheet .runs .l{display:flex;flex-direction:column;line-height:1.15}
+.hsheet .runs .l b{font-weight:600}
+.hsheet .runs .l small{color:var(--slate);font-size:11px}
+.hsheet .runs li>span:last-child{text-align:right}
+.hsheet .runs .bar{height:8px;border-radius:4px;background:rgba(232,238,241,.08);overflow:hidden}
+.hsheet .runs .bar i{display:block;height:8px;border-radius:4px;background:rgba(232,238,241,.45)}
+.hsheet .runs li:first-child .bar i{background:var(--amber)}
+.hsheet dl{display:grid;grid-template-columns:108px minmax(0,1fr);gap:8px 10px;margin:14px 0 0;font-size:13px}
+.hsheet dt{color:var(--slate)}
+.hsheet dd{margin:0}
+.hsheet dd.you{color:var(--glass);font-weight:600}
+.hsheet .hgo{display:block;width:100%;margin-top:14px;min-height:48px}
 .swell{border-top:1px solid var(--hair);padding-top:12px}
 .swell>.k{display:flex;justify-content:space-between;font-size:15px;font-weight:600}
 .swell>.k button{font-size:13px;color:var(--slate);background:none;border:0;padding:0;text-decoration:underline;font-weight:400}
@@ -486,7 +504,7 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div class="tile" id="pred8"></div>
   </section>
   <section class="wday" aria-labelledby="predRollH">
-    <h3 id="predRollH">Next 7 days <small id="predRollNote"></small></h3>
+    <h3 id="predRollH">Forecast <small id="predRollNote"></small></h3>
     <div id="predRoll"></div>
   </section>
   <section class="wday" aria-labelledby="predLongH">
@@ -513,13 +531,6 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
     <div id="predHist"></div>
     <div class="links" style="margin-top:12px"><button class="pill" id="repExport">Export all</button><button class="pill" id="repPull">Sync with GitHub</button></div>
   </section>
-  <div class="zoomsheet" id="rollZoom" role="dialog" aria-modal="true" aria-labelledby="zoomTitle" hidden>
-    <div class="zhead"><h2 id="zoomTitle">Forecast</h2><button type="button" class="pill" id="zoomClose">Done</button></div>
-    <div class="seg" id="zoomSpan"></div>
-    <div class="zscroll" id="zoomScroll"></div>
-    <div class="key" id="zoomKey"></div>
-    <div class="zread" id="zoomRead"></div>
-  </div>
   <section class="wday" aria-labelledby="predAccH">
     <h3 id="predAccH">How far out <small>by how far ahead</small></h3>
     <div class="tile" id="predAcc"></div>
@@ -2312,118 +2323,6 @@ function rollNow() {
 }
 const swellText = (ft, p, d) => (ft < 0.5 || p == null ? 'flat' : `${ft.toFixed(1)} ft, ${Math.round(p)} s from ${compass(d)}`);
 
-// The latest run (amber), the runs before it (fading), Whitby (dots), reports
-// (their range). o: {t0, t1, W, Hh, fine}: fine marks every 6 hours and repeats
-// the size scale each day, for the zoomed view.
-function rollChart(ks, o) {
-  const now = Date.now(), { t0, t1, W, Hh, fine } = o;
-  const lines = ks.map((k) => roll.runs[k].filter((r) => r[0] >= t0 && r[0] <= t1)).filter((l) => l.length > 1);
-  const whitby = obs && obs.stations.find((s) => s.name === 'Whitby');
-  const rows = ((whitby && whitby.hist) || []).filter((r) => r[0] >= t0 && r[1] != null && r[2] != null && r[3] != null).map((r) => [r[0], breakFt(r[1], r[2], r[3], r[4])]);
-  const rp = reports.filter((r) => r.at >= t0 && r.at <= t1);
-  // The size scale fits what's in view (o.fit: [from, to]), or the whole chart.
-  const [fa, fb] = o.fit || [t0, t1], inFit = (t) => t >= fa && t <= fb;
-  const top = Math.max(2, ...lines.flat().filter((r) => inFit(r[0])).map((r) => r[1]), ...rows.filter((r) => inFit(r[0])).map((r) => r[1]),
-    ...rp.filter((r) => inFit(r.at)).map((r) => r.sizeHi ?? r.sizeFt ?? 0)) * 1.12;
-  const base = Hh - (fine ? 30 : 16), x = (t) => ((t - t0) / (t1 - t0)) * W, y = (ft) => base - (ft / top) * (base - 8);
-  const path = (l) => l.map((r, i) => `${i ? 'L' : 'M'}${x(r[0]).toFixed(1)},${y(r[1]).toFixed(1)}`).join('');
-  const step = top > 12 ? 4 : top > 6 ? 2 : 1;
-  let g = `<line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="var(--hair)"/>`;
-  for (let f = step; f < top; f += step) g += `<line x1="0" x2="${W}" y1="${y(f)}" y2="${y(f)}" stroke="var(--hair)" stroke-dasharray="2 4"/>` + (fine ? '' : `<text x="0" y="${y(f) - 2}" class="sx">${f} ft</text>`);
-  for (let t = Math.ceil(t0 / H) * H; t <= t1; t += H) {
-    const h = +fUkHour.format(t), tx = x(t).toFixed(1);
-    if (!fine) { if (h === 12) g += `<text x="${tx}" y="${Hh - 3}" class="sx" text-anchor="middle">${fUkDay.format(t)}</text>`; continue; }
-    if (h === 0) {
-      g += `<line x1="${tx}" x2="${tx}" y1="0" y2="${base}" stroke="var(--hair)"/><text x="${+tx + 4}" y="${Hh - 4}" class="sx" style="fill:var(--paper)">${fUkDay.format(t)} ${fUkDate.format(t).slice(8)}</text>`;
-      for (let f = step; f < top; f += step) g += `<text x="${+tx + 3}" y="${y(f) - 3}" class="sx">${f} ft</text>`;
-    }
-    if (h % 6 === 0) g += `<line x1="${tx}" x2="${tx}" y1="${base}" y2="${base + 4}" stroke="var(--slate)"/><text x="${tx}" y="${base + 14}" class="sx" text-anchor="middle">${h === 0 ? '' : h === 12 ? 'noon' : h < 12 ? h + 'am' : h - 12 + 'pm'}</text>`;
-  }
-  if (now > t0 && now < t1) g += `<line x1="${x(now)}" x2="${x(now)}" y1="4" y2="${base}" stroke="var(--paper)" stroke-opacity=".5"/><text x="${x(now) + 3}" y="12" class="sx">now</text>`;
-  for (let i = lines.length - 1; i > 0; i--) g += `<path d="${path(lines[i])}" fill="none" stroke="var(--glass)" stroke-opacity="${(0.15 + 0.45 * (1 - i / lines.length)).toFixed(2)}" stroke-width="${fine ? 1.5 : 1.2}"/>`;
-  if (lines.length) g += `<path d="${path(lines[0])}" fill="none" stroke="var(--amber)" stroke-width="${fine ? 2.5 : 2}"/>`;
-  g += rows.map((r) => `<circle cx="${x(r[0]).toFixed(1)}" cy="${y(r[1]).toFixed(1)}" r="${fine ? 2.5 : 2}" fill="var(--paper)"/>`).join('');
-  g += rp.map((r) => {
-    const cx = x(r.at).toFixed(1);
-    if (r.sizeLo == null) { const cy = y(r.sizeFt || 0); return `<path d="M${cx - 5},${cy + 4}L${+cx + 5},${cy + 4}L${cx},${cy - 5}Z" fill="var(--amber)"/>`; }
-    const a = y(r.sizeHi).toFixed(1), b = y(r.sizeLo).toFixed(1);
-    return `<path d="M${cx},${a}V${b}M${cx - 4},${a}H${+cx + 4}M${cx - 4},${b}H${+cx + 4}" stroke="var(--amber)" stroke-width="2.5" stroke-linecap="round"/>`;
-  }).join('');
-  if (fine) g += `<line id="zcur" x1="-10" x2="-10" y1="0" y2="${base}" stroke="var(--amber)" stroke-width="1.5" stroke-dasharray="3 3"/>`;
-  const key = `<span><i style="border-color:var(--amber)"></i>Latest run</span>${lines.length > 1 ? '<span><i style="border-color:var(--glass)"></i>Earlier runs</span>' : ''}` +
-    `${rows.length ? '<span>● Whitby</span>' : ''}${rp.length ? '<span style="color:var(--amber)">┃ Reports</span>' : ''}`;
-  return { g, key, x, lines, rows, rp, top };
-}
-function rollPlot(ks) {
-  const now = Date.now(), W = 320, Hh = 120, c = rollChart(ks, { t0: now - 36 * H, t1: now + 7 * DAY, W, Hh });
-  return `<button type="button" class="zoomable" id="rollOpen" aria-label="Zoom in to the forecast"><svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Forecast breaking size at Saltburn over the next week, from the latest run and the ones before">${c.g}</svg></button>` +
-    `<div class="key">${c.key}<span>Tap to zoom</span></div>`;
-}
-
-/* The zoomed forecast: the whole stretch the runs cover, wider than the
-   screen and scrolled sideways, with every 6 hours marked. Tap or drag for
-   every run's numbers at that hour. */
-const ZOOM_SPANS = [['1.5', '1½ days'], ['3', '3 days'], ['6', '6 days']];
-let rollSpan = '1.5', rollAt = null, zoomTop = 0, zoomFit = 0;
-function renderZoom(keepScroll) {
-  const ks = rollRuns(), sc = $('#zoomScroll');
-  if (!ks.length) return;
-  const all = ks.flatMap((k) => roll.runs[k]);
-  const t0 = Math.max(Math.min(...all.map((r) => r[0])), Date.now() - 2 * DAY), t1 = Math.max(...all.map((r) => r[0]));
-  const view = sc.clientWidth || 360, W = Math.round(view * (t1 - t0) / (+rollSpan * DAY)), Hh = Math.min(340, Math.max(220, Math.round(innerHeight * 0.42)));
-  const frac = keepScroll && sc.scrollWidth ? (sc.scrollLeft + view / 2) / sc.scrollWidth : null;
-  const left = frac != null ? frac * W - view / 2 : ((Date.now() - t0) / (t1 - t0)) * W - view * 0.25;
-  const tAt = (px) => t0 + (Math.min(Math.max(px, 0), W) / W) * (t1 - t0);
-  const c = rollChart(ks, { t0, t1, W, Hh, fine: true, fit: [tAt(left), tAt(left + view)] });
-  zoomTop = c.top;
-  sc.innerHTML = `<svg width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Forecast breaking size at Saltburn, zoomed">${c.g}</svg>`;
-  $('#zoomKey').innerHTML = c.key;
-  sc.scrollLeft = left;
-  sc.onscroll = () => {
-    // Once scrolling stops, refit the size scale to what's now in view.
-    clearTimeout(zoomFit);
-    zoomFit = setTimeout(() => {
-      const f = rollChart(ks, { t0, t1, W, Hh, fine: true, fit: [tAt(sc.scrollLeft), tAt(sc.scrollLeft + view)] });
-      if (Math.abs(f.top - zoomTop) / zoomTop > 0.15) renderZoom(true);
-    }, 200);
-  };
-  const svg = sc.querySelector('svg');
-  const pick = (e) => {
-    const r = svg.getBoundingClientRect();
-    rollAt = Math.round((t0 + ((e.clientX - r.left) / r.width) * (t1 - t0)) / H) * H;
-    readZoom(ks, c);
-  };
-  svg.addEventListener('pointerdown', pick);
-  svg.addEventListener('pointermove', (e) => { if (e.buttons || e.pointerType === 'mouse') pick(e); });
-  readZoom(ks, c);
-}
-function readZoom(ks, c) {
-  const box = $('#zoomRead'), cur = $('#zcur');
-  if (rollAt == null) { box.innerHTML = 'Tap or drag along the chart for every run\'s numbers at that hour.'; return; }
-  cur.setAttribute('x1', c.x(rollAt)); cur.setAttribute('x2', c.x(rollAt));
-  const at = (k) => roll.runs[k].find((r) => r[0] === rollAt);
-  const latest = ks.map((k) => [k, at(k)]).find(([, r]) => r);
-  const runs = ks.map((k) => [k, at(k)]).filter(([, r]) => r);
-  const near = (list, t, f) => list.filter((v) => Math.abs(f(v) - t) <= 45 * 60e3).sort((a, b) => Math.abs(f(a) - t) - Math.abs(f(b) - t))[0];
-  const whitby = obs && obs.stations.find((s) => s.name === 'Whitby');
-  const w = whitby && near((whitby.hist || []).filter((r) => r[1] != null), rollAt, (r) => r[0]);
-  const rep = near(reports, rollAt, (r) => r.at);
-  box.innerHTML = `<b>${fUkDay.format(rollAt)} ${whenUk(rollAt).split(' ')[1]}</b>` +
-    (latest ? `<div class="big">${latest[1][1].toFixed(1)} ft</div>${latest[1][3] == null ? '' : `${latest[1][2]} m at ${latest[1][3]} s from ${compass(latest[1][4])} (${latest[1][4]}°) · `}latest run, ${runName(latest[0])}`
-      : '<div>No run covers this hour.</div>') +
-    (w ? `<div>Whitby: ${w[1]} m${w[2] ? ` at ${Math.round(w[2])} s` : ''}${w[3] != null ? ` from ${compass(w[3])}` : ''}${w[2] && w[3] != null ? `, about ${breakFt(w[1], w[2], w[3], w[4]).toFixed(1)} ft by our sums${swellShare(w[2], w[4]) < 0.6 ? ' (mostly chop)' : ''}` : ''}</div>` : '') +
-    (rep ? `<div>Your report: ${seenText(rep)}</div>` : '') +
-    (runs.length > 1 ? `<ul>${runs.map(([k, r]) => `<li>${runName(k)}: <b>${r[1].toFixed(1)}</b> ft</li>`).join('')}</ul>` : '');
-}
-function openZoom() {
-  $('#rollZoom').hidden = false;
-  chips($('#zoomSpan'), ZOOM_SPANS, { get v() { return rollSpan; }, set v(x) { rollSpan = x || rollSpan; renderZoom(true); } }, 'v');
-  renderZoom(false);
-  $('#zoomClose').focus();
-}
-function closeZoom() { $('#rollZoom').hidden = true; rollAt = null; }
-$('#zoomClose').addEventListener('click', closeZoom);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#rollZoom').hidden) closeZoom(); });
 
 /* The 8am check: what every run has predicted for 8am, today until noon and
    tomorrow's after, with a report for 8am to set against it. Ad hoc reports
@@ -2460,29 +2359,101 @@ function render8() {
   if (b) b.addEventListener('click', () => openReport(today8));
 }
 
+/* The forecast strip: one column per hour, from a day and a half back to the
+   end of the latest run, with the latest run's size, the spread of the runs
+   before it and your reports. Tap an hour for its sheet: every run's
+   prediction for it, how many days ahead each was made, what Whitby measured
+   and you reported then, the wind and tide, and a report for that hour. */
+const COL = 11, STRIP_BACK = 36 * H, STRIP_PX = 120;
+const fUkDM = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'short' });
+const hourName = (t) => `${fUkDay.format(t)} ${fUkDM.format(t)} · ${pad2(+fUkHour.format(t))}:00`;
+let hourSel = null, stripLeft = null;
+function windAt(t) {
+  if (!wind) return null;
+  const i = wind.time.indexOf(`${fUkDate.format(t)}T${pad2(+fUkHour.format(t))}:00`);
+  return i < 0 || wind.speed[i] == null ? null : { kn: wind.speed[i], from: wind.dir[i], gust: wind.gust[i] };
+}
 function renderRoll() {
-  const box = $('#predRoll'), ks = rollRuns();
-  $('#predRollNote').textContent = rollBusy ? 'updating…' : ks.length ? `latest run ${runName(ks[0])}` : '';
+  const box = $('#predRoll'), ks = rollRuns(), now = Date.now();
+  $('#predRollNote').textContent = rollBusy ? 'updating…' : ks.length ? `latest run ${runName(ks[0])} · tap an hour` : '';
   if (!ks.length) {
     box.innerHTML = `<div class="d" style="color:var(--slate);font-size:14px">${rollBusy || !stormAlerts ? 'Loading the forecast' : 'No forecasts yet: they start with the next model run.'}</div>`;
     return;
   }
-  // Each day: the latest run's biggest hour, and the range of the runs' biggest.
-  const days = [];
-  for (let k = 0; k < 7; k++) {
-    const key = fUkDate.format(Date.now() + k * DAY);
-    if (days.some((d) => d.key === key)) continue;
-    const of = (l) => l.filter((r) => fUkDate.format(r[0]) === key && (k || r[0] >= Date.now() - H));
-    const top = (l) => l.reduce((a, b) => (b[1] > a[1] ? b : a), l[0]);
-    const latest = of(roll.runs[ks[0]]);
-    if (!latest.length) continue;
-    const best = top(latest), others = ks.map((q) => of(roll.runs[q])).filter((l) => l.length >= latest.length * 0.8).map((l) => top(l)[1]);
-    const lo = Math.min(...others), hi = Math.max(...others);
-    days.push({ key, html: `<li class="day"><span><b>${k ? fUkDay.format(best[0]) : 'Today'}</b> · ${best[1] < 0.5 ? 'flat' : `up to ${swellText(best[1], best[3], best[4])}, ${whenUk(best[0]).split(' ')[1]}`}</span>` +
-      (others.length > 1 ? `<span class="r">runs ${lo.toFixed(1)}–${hi.toFixed(1)}</span>` : '') + '</li>' });
+  const idx = ks.map((k) => new Map(roll.runs[k].map((r) => [r[0], r])));
+  const t0 = Math.ceil((now - STRIP_BACK) / H) * H, t1 = Math.max(...roll.runs[ks[0]].map((r) => r[0]));
+  const reps = new Map(reports.filter((r) => r.at >= t0 - H / 2 && r.at <= t1 + H / 2).map((r) => [Math.round(r.at / H) * H, r]));
+  const hours = [];
+  for (let t = t0; t <= t1; t += H) {
+    const rs = idx.map((m) => m.get(t)).filter(Boolean), fts = rs.map((r) => r[1]);
+    hours.push({ t, latest: rs[0], lo: Math.min(...fts), hi: Math.max(...fts), n: rs.length, rep: reps.get(t) });
   }
-  box.innerHTML = `<div class="swc">${rollPlot(ks)}<ul>${days.map((d) => d.html).join('')}</ul></div>`;
-  $('#rollOpen').addEventListener('click', openZoom);
+  if (hourSel == null || hourSel < t0 || hourSel > t1) hourSel = Math.min(t1, Math.max(t0, Math.round(now / H) * H));
+  // The scale fits the latest run and the reports; an earlier run's spread above it is cut at the top.
+  const top = Math.max(4, Math.ceil(Math.max(...hours.map((h) => Math.max(h.latest ? h.latest[1] : 0, h.rep ? h.rep.sizeHi || 0 : 0)))));
+  const y = (ft) => Math.min(STRIP_PX, (ft / top) * STRIP_PX), step = top > 8 ? 2 : 1;
+  let ys = '', gl = '';
+  for (let f = 0; f <= top; f += step) {
+    ys += `<span style="top:${20 + 124 - y(f)}px">${f}</span>`;
+    if (f) gl += `<span class="gl" style="bottom:${y(f)}px"></span>`;
+  }
+  const days = [];
+  hours.forEach((h) => {
+    const k = fUkDate.format(h.t), last = days.at(-1);
+    if (last && last.k === k) last.n++; else days.push({ k, t: h.t, n: 1 });
+  });
+  const cols = hours.map((h) => {
+    const r = h.latest, ft = r ? r[1] : 0, on = h.t === hourSel;
+    return `<button type="button" data-t="${h.t}" aria-pressed="${on}" aria-label="${hourName(h.t)}, ${!r ? 'no forecast' : ft < 0.5 ? 'flat' : fmtFt(ft) + ' ft'}${h.rep ? ', reported ' + seenText(h.rep) : ''}">` +
+      (ft > 0 ? `<span class="b${h.t < now - H / 2 ? ' past' : ''}" style="height:${y(ft).toFixed(1)}px"></span>` : '') +
+      (h.n > 1 && h.hi > 0 ? `<span class="sp" style="bottom:${y(h.lo).toFixed(1)}px;height:${Math.max(1, y(h.hi) - y(h.lo)).toFixed(1)}px"></span>` : '') +
+      (h.rep ? `<span class="rp" style="bottom:${y(h.rep.flat ? 0 : h.rep.sizeLo || 0).toFixed(1)}px;height:${Math.max(4, y(h.rep.flat ? 0 : h.rep.sizeHi || 0) - y(h.rep.flat ? 0 : h.rep.sizeLo || 0)).toFixed(1)}px"></span>` : '') + '</button>';
+  }).join('');
+  const ticks = hours.map((h) => { const hr = +fUkHour.format(h.t); return `<div>${hr === 6 ? '6am' : hr === 12 ? 'noon' : hr === 18 ? '6pm' : ''}</div>`; }).join('');
+  const nowX = ((now - t0) / H) * COL;
+  box.innerHTML = `<div class="tile" style="padding:10px 0 2px"><div class="strip"><div class="sy" aria-hidden="true">${ys}</div>` +
+    `<div class="sscroll" id="sscroll"><div class="strack" style="width:${hours.length * COL}px">` +
+    `<div class="sdays" aria-hidden="true">${days.map((d) => `<div style="width:${d.n * COL}px">${fUkDay.format(d.t)} ${fUkDM.format(d.t).split(' ')[0]}</div>`).join('')}</div>` +
+    `<div class="sbars" role="group" aria-label="Forecast by hour">${gl}${cols}<span class="snow" style="left:${nowX.toFixed(1)}px"><span>NOW</span></span></div>` +
+    `<div class="sticks" aria-hidden="true">${ticks}</div></div></div></div>` +
+    '<div class="skey" style="padding:0 14px"><span><i style="width:9px;height:12px;background:var(--amber)"></i>Latest run</span><span><i style="width:1px;height:12px;background:var(--paper)"></i>Spread of earlier runs</span><span><i style="width:11px;height:8px;background:var(--glass)"></i>Your reports</span></div></div>' +
+    `<div class="tile hsheet" style="margin-top:10px">${hourHtml(hourSel, ks, idx, top)}</div>`;
+  const sc = $('#sscroll');
+  sc.scrollLeft = stripLeft != null ? stripLeft : Math.max(0, ((hourSel - t0) / H) * COL - (sc.clientWidth || 320) * 0.35);
+  sc.onscroll = () => { stripLeft = sc.scrollLeft; };
+  box.onclick = (e) => {
+    const b = e.target.closest('button[data-t]'), go = e.target.closest('#hourReport');
+    if (b) { hourSel = +b.dataset.t; renderRoll(); $(`#predRoll button[data-t="${hourSel}"]`).focus({ preventScroll: true }); }
+    else if (go) openReport(hourSel);
+  };
+}
+function hourHtml(t, ks, idx, top) {
+  const now = Date.now(), hr = Math.round(now / H) * H;
+  const rs = ks.map((k, i) => [k, idx[i].get(t)]).filter(([, r]) => r), latest = rs[0];
+  const fts = rs.map(([, r]) => r[1]), lo = Math.min(...fts), hi = Math.max(...fts);
+  const isNow = t === hr, past = t < hr, gap = Math.abs(t - hr) / H;
+  const when = isNow ? 'This hour' : gap < 48 ? `${past ? '' : 'In '}${gap} hour${gap === 1 ? '' : 's'}${past ? ' ago' : ''}` : `${past ? '' : 'In '}${Math.round(gap / 24)} days${past ? ' ago' : ''}`;
+  const sw = (r) => (r[1] < 0.5 || r[3] == null ? 'flat' : `${fmtFt(r[1])} ft · ${Math.round(r[3])} s ${compass(r[4])}`);
+  let html = `<div class="hh"><h4>${hourName(t)}</h4><span class="badge ${isNow ? 'now' : past ? 'past' : 'fc'}">${isNow ? 'Now' : past ? 'Past' : 'Forecast'}</span></div>` +
+    `<div class="d" style="margin-top:2px">${when}</div>`;
+  html += latest
+    ? `<div class="big"><b>${latest[1][1] < 0.5 ? 'Flat' : fmtFt(latest[1][1]) + ' ft'}</b><span>${latest[1][1] < 0.5 || latest[1][3] == null ? '' : `${Math.round(latest[1][3])} s from ${compass(latest[1][4])}`}</span></div>` +
+      `<div class="d">Latest run for this hour, ${runName(latest[0])}${latest[1][1] < 0.5 ? '' : ` · ${sizeWord(latest[1][1])}`}</div>` +
+      `<div class="rh">Every run for this hour<small>${rs.length > 1 ? `${rs.length} runs · ${fmtFt(lo)}–${fmtFt(hi)} ft · ${hi - lo < 0.5 ? 'settled' : hi - lo < 1 ? 'moving a little' : 'still moving'}` : ''}</small></div>` +
+      '<ol class="runs">' + rs.map(([k, r]) => `<li><span class="l"><b>${runName(k)}</b><small>${aheadName(Math.max(0, Math.floor((t - k) / DAY)))}</small></span>` +
+        `<span class="bar" aria-hidden="true"><i style="width:${Math.min(100, (r[1] / top) * 100).toFixed(0)}%"></i></span><span>${sw(r)}</span></li>`).join('') + '</ol>'
+    : '<div class="d">No run covers this hour.</div>';
+  const near = (list, f) => list.filter((v) => Math.abs(f(v) - t) <= 45 * 60e3).sort((a, b) => Math.abs(f(a) - t) - Math.abs(f(b) - t));
+  const whitby = obs && obs.stations.find((s) => s.name === 'Whitby');
+  const w = past || isNow ? near(((whitby && whitby.hist) || []).filter((r) => r[1] != null), (r) => r[0])[0] : null;
+  const seen = near(reports, (r) => r.at), wd = windAt(t), lv = tides ? levelAt(t) : null, lv2 = tides ? levelAt(t + 20 * 60e3) : null;
+  html += '<dl>' +
+    (past || isNow ? `<dt>Whitby measured</dt><dd>${w ? `${w[1]} m${w[2] ? ` · ${Math.round(w[2])} s` : ''}${w[3] != null ? ` from ${compass(w[3])}` : ''}${w[2] && w[3] != null ? `; about ${(BAY_K * breakFt(w[1], w[2], w[3], w[4])).toFixed(1)} ft by the Whitby rule` : ''}` : 'No reading kept for this hour'}</dd>` +
+      `<dt>You reported</dt><dd class="${seen.length ? 'you' : ''}">${seen.length ? seen.map((r) => `${seenText(r)} at ${new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit' }).format(r.at)}`).join(', ') : 'Nothing yet'}</dd>` : '') +
+    `<dt>Wind</dt><dd>${wd ? `${compass(wd.from)} ${speedIn(wd.kn)} ${UNIT_S()}${wd.gust != null ? `, gusts ${speedIn(wd.gust)}` : ''}` : '–'}</dd>` +
+    `<dt>Tide</dt><dd>${lv != null ? `${metres(lv)}${lv2 != null ? `, ${lv2 > lv ? 'rising' : 'falling'}` : ''}` : '–'}</dd></dl>`;
+  html += t <= hr + H ? '<button type="button" class="pill primary hgo" id="hourReport">Report this hour</button>' : '<div class="d" style="margin-top:12px">Report it when it comes: the predictions above are kept for it.</div>';
+  return html;
 }
 
 // Every prediction made for an hour, from the history branch's file for its day.
