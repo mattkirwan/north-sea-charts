@@ -107,7 +107,8 @@ P_LEVELS = np.arange(940, 1053, 4)
 # Peak period alone would hide a small long-period swell under the local wind
 # waves, which is exactly the swell we're looking for.
 WAVE_FIELDS = {'HTSGW:surface': 'hs', 'PERPW:surface': 'tp', **{f'SWELL:{k} in sequence': f'sh{k}' for k in (1, 2, 3)},
-               **{f'SWPER:{k} in sequence': f'sp{k}' for k in (1, 2, 3)}, **{f'SWDIR:{k} in sequence': f'sd{k}' for k in (1, 2, 3)}}
+               **{f'SWPER:{k} in sequence': f'sp{k}' for k in (1, 2, 3)}, **{f'SWDIR:{k} in sequence': f'sd{k}' for k in (1, 2, 3)},
+               'WVHGT:surface': 'wh', 'WVPER:surface': 'wp', 'WVDIR:surface': 'wd'}
 # The wave model's sea cell nearest Saltburn, 20 km NNE in Tees Bay (its grid
 # is 0.25°; Saltburn's own cell is land). Its swells, hour by hour, are what
 # our Saltburn forecast starts from (saltburn-cell.json, wave_model.py): a
@@ -539,11 +540,15 @@ def render_step(args):
 
 
 def cell_swells(w):
-    """The separate swells in the sea cell off Saltburn: [[m, s, from deg], ...],
-    biggest first, any of 0.05 m or more."""
+    """The separate swells in the sea cell off Saltburn, and the local wind sea:
+    [[m, s, from deg, 1 if wind sea else 0], ...], biggest first, any of 0.05 m
+    or more. The wind sea counts: with the wind blowing the same way as a swell
+    the model files the swell under it (Sat 17 Oct 06z: 1.6 m at 6 s from 11°
+    as wind sea, no swells at all), and on an onshore day it's most of the surf."""
     at = lambda k: float(w[k].sel(latitude=SALTBURN_CELL[0], longitude=SALTBURN_CELL[1], method='nearest'))
-    sw = [[round(at(f'sh{k}'), 2), round(at(f'sp{k}'), 1), round(at(f'sd{k}'))] for k in (1, 2, 3)
-          if np.isfinite(at(f'sh{k}')) and at(f'sh{k}') >= 0.05 and np.isfinite(at(f'sp{k}')) and np.isfinite(at(f'sd{k}'))]
+    parts = [(f'sh{k}', f'sp{k}', f'sd{k}', 0) for k in (1, 2, 3)] + [('wh', 'wp', 'wd', 1)]
+    sw = [[round(at(h), 2), round(at(p), 1), round(at(d)), ws] for h, p, d, ws in parts
+          if np.isfinite(at(h)) and at(h) >= 0.05 and np.isfinite(at(p)) and np.isfinite(at(d))]
     return sorted(sw, key=lambda s: -s[0])
 
 
