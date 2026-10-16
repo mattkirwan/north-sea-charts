@@ -255,12 +255,12 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 .hsheet .hh{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .hsheet h4{margin:0;font-family:var(--f-cond);font-weight:700;font-size:24px}
 .hsheet .badge{font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap}
-.hsheet .badge.past{background:rgba(126,214,195,.18);color:var(--glass)}
-.hsheet .badge.fc{background:rgba(255,194,61,.18);color:var(--amber)}
-.hsheet .badge.now{background:var(--paper);color:var(--ink)}
-.hsheet .big{display:flex;align-items:baseline;gap:10px;margin-top:8px}
-.hsheet .big b{font-family:var(--f-cond);font-weight:700;font-size:44px;line-height:1;color:var(--amber)}
-.hsheet .big span{font-size:16px;font-weight:500}
+.hsheet .badge.hb-past{background:rgba(126,214,195,.18);color:var(--glass)}
+.hsheet .badge.hb-fc{background:rgba(255,194,61,.18);color:var(--amber)}
+.hsheet .badge.hb-now{background:var(--paper);color:var(--ink)}
+.hsheet .hbig{display:flex;align-items:baseline;gap:10px;margin-top:8px}
+.hsheet .hbig b{font-family:var(--f-cond);font-weight:700;font-size:44px;line-height:1;color:var(--amber)}
+.hsheet .hbig span{font-size:16px;font-weight:500}
 .hsheet .rh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:14px;font-size:14px;font-weight:600}
 .hsheet .rh small{font-weight:400;font-size:12px;color:var(--slate);text-align:right}
 .hsheet .runs{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:7px}
@@ -269,9 +269,9 @@ a.pill{display:inline-block;color:inherit;text-decoration:none}
 .hsheet .runs .l b{font-weight:600}
 .hsheet .runs .l small{color:var(--slate);font-size:11px}
 .hsheet .runs li>span:last-child{text-align:right}
-.hsheet .runs .bar{height:8px;border-radius:4px;background:rgba(232,238,241,.08);overflow:hidden}
-.hsheet .runs .bar i{display:block;height:8px;border-radius:4px;background:rgba(232,238,241,.45)}
-.hsheet .runs li:first-child .bar i{background:var(--amber)}
+.hsheet .runs .rbar{height:8px;border-radius:4px;background:rgba(232,238,241,.08);overflow:hidden}
+.hsheet .runs .rbar i{display:block;height:8px;border-radius:4px;background:rgba(232,238,241,.45)}
+.hsheet .runs li:first-child .rbar i{background:var(--amber)}
 .hsheet dl{display:grid;grid-template-columns:108px minmax(0,1fr);gap:8px 10px;margin:14px 0 0;font-size:13px}
 .hsheet dt{color:var(--slate)}
 .hsheet dd{margin:0}
@@ -2434,14 +2434,14 @@ function hourHtml(t, ks, idx, top) {
   const isNow = t === hr, past = t < hr, gap = Math.abs(t - hr) / H;
   const when = isNow ? 'This hour' : gap < 48 ? `${past ? '' : 'In '}${gap} hour${gap === 1 ? '' : 's'}${past ? ' ago' : ''}` : `${past ? '' : 'In '}${Math.round(gap / 24)} days${past ? ' ago' : ''}`;
   const sw = (r) => (r[1] < 0.5 || r[3] == null ? 'flat' : `${fmtFt(r[1])} ft · ${Math.round(r[3])} s ${compass(r[4])}`);
-  let html = `<div class="hh"><h4>${hourName(t)}</h4><span class="badge ${isNow ? 'now' : past ? 'past' : 'fc'}">${isNow ? 'Now' : past ? 'Past' : 'Forecast'}</span></div>` +
+  let html = `<div class="hh"><h4>${hourName(t)}</h4><span class="badge ${isNow ? 'hb-now' : past ? 'hb-past' : 'hb-fc'}">${isNow ? 'Now' : past ? 'Past' : 'Forecast'}</span></div>` +
     `<div class="d" style="margin-top:2px">${when}</div>`;
   html += latest
-    ? `<div class="big"><b>${latest[1][1] < 0.5 ? 'Flat' : fmtFt(latest[1][1]) + ' ft'}</b><span>${latest[1][1] < 0.5 || latest[1][3] == null ? '' : `${Math.round(latest[1][3])} s from ${compass(latest[1][4])}`}</span></div>` +
+    ? `<div class="hbig"><b>${latest[1][1] < 0.5 ? 'Flat' : fmtFt(latest[1][1]) + ' ft'}</b><span>${latest[1][1] < 0.5 || latest[1][3] == null ? '' : `${Math.round(latest[1][3])} s from ${compass(latest[1][4])}`}</span></div>` +
       `<div class="d">Latest run for this hour, ${runName(latest[0])}${latest[1][1] < 0.5 ? '' : ` · ${sizeWord(latest[1][1])}`}</div>` +
       `<div class="rh">Every run for this hour<small>${rs.length > 1 ? `${rs.length} runs · ${fmtFt(lo)}–${fmtFt(hi)} ft · ${hi - lo < 0.5 ? 'settled' : hi - lo < 1 ? 'moving a little' : 'still moving'}` : ''}</small></div>` +
       '<ol class="runs">' + rs.map(([k, r]) => `<li><span class="l"><b>${runName(k)}</b><small>${aheadName(Math.max(0, Math.floor((t - k) / DAY)))}</small></span>` +
-        `<span class="bar" aria-hidden="true"><i style="width:${Math.min(100, (r[1] / top) * 100).toFixed(0)}%"></i></span><span>${sw(r)}</span></li>`).join('') + '</ol>'
+        `<span class="rbar" aria-hidden="true"><i style="width:${Math.min(100, (r[1] / top) * 100).toFixed(0)}%"></i></span><span>${sw(r)}</span></li>`).join('') + '</ol>'
     : '<div class="d">No run covers this hour.</div>';
   const near = (list, f) => list.filter((v) => Math.abs(f(v) - t) <= 45 * 60e3).sort((a, b) => Math.abs(f(a) - t) - Math.abs(f(b) - t));
   const whitby = obs && obs.stations.find((s) => s.name === 'Whitby');
