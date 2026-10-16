@@ -2253,7 +2253,8 @@ function snapshot() {
     tide: level != null ? { m: +level.toFixed(2), rising: next ? next.hi : null, next: next ? { hi: next.hi, ms: next.ms, m: +next.m.toFixed(2) } : null } : null,
     alerts: stormAlerts && stormAlerts.list ? stormAlerts.list.map((a) => ({ hPa: a.hPa, where: a.where, at: a.at, pulses: a.pulses })) : [],
     run: stormAlerts ? stormAlerts.runLabel : null,
-    forecast: rollNow()
+    forecast: rollNow(),
+    missed: missedSwell()
   };
 }
 
@@ -2603,6 +2604,25 @@ function renderLong() {
     : '<div class="d">Nothing on the way in.</div>');
 }
 
+// NOAA's model can lose a swell the buoys still have (16 Oct: 15-18 s from
+// NNE at every buoy all night and 0.5-1.5 ft at Saltburn, while the model's
+// sea off Saltburn had nothing over 6 s). Flagged when a coastal buoy has had
+// swell of MISS_S or more that can reach the beach in two of its last three
+// readings, and the newest run has nothing of MODEL_HAS_S or more this hour.
+const MISS_S = 14, MODEL_HAS_S = 12;
+function missedSwell() {
+  const k = rollRuns()[0], hr = Math.round(Date.now() / H) * H, r = obs && k && roll.runs[k].find((x) => x[0] === hr);
+  if (!r) return null;
+  const parts = r[5] || (r[3] != null ? [[r[2], r[3], r[4]]] : []);
+  if (parts.some((x) => x[1] >= MODEL_HAS_S)) return null;
+  const buoys = obs.stations.filter((s) => s.km <= 110 && Date.now() - s.ms < 3 * H).map((s) => {
+    const long = (s.hist || []).filter((x) => s.ms - x[0] <= 90 * 60e3).slice(-3).filter((x) => x[2] >= MISS_S && x[3] != null && offBeach(x[3]) < 90);
+    const x = long.length >= 2 && long.at(-1);
+    return x && { name: s.name, h: x[1], p: x[2], d: x[3] };
+  }).filter(Boolean);
+  return buoys.length ? { run: k, buoys } : null;
+}
+
 function renderPredict() {
   if (!showing('predict')) return;
   renderAlerts();
@@ -2611,8 +2631,12 @@ function renderPredict() {
   renderLong();
   renderAcc();
   const box = $('#predNow'), snap = snapshot(), est = estimate();
-  const b = snap.buoys && snap.buoys[0], w = snap.wind, t = snap.tide;
-  box.innerHTML = (est
+  const b = snap.buoys && snap.buoys[0], w = snap.wind, t = snap.tide, miss = snap.missed;
+  box.innerHTML = (miss
+    ? `<div class="alert" style="margin:0 0 14px"><div class="k">Swell the model has missed</div><div class="d">Long-period swell is still running at ` +
+      miss.buoys.map((x) => `${escapeHtml(x.name)} (${Math.round(x.p)} s from ${compass(x.d)}, ${x.h.toFixed(1)} m)`).join(', ') +
+      `, but NOAA's ${runName(miss.run)} run has no swell of ${MODEL_HAS_S} s or more off Saltburn this hour, so our forecast reads low until it catches up.</div></div>`
+    : '') + (est
     ? `<div class="k">Estimated breaking size at Saltburn</div><div class="est">${est.hi < 0.5 ? 'Flat' : `${est.lo}–${est.hi}<small> ft · ${sizeWord(est.ft)}</small>`}</div>` +
       `<div class="d">From the ${escapeHtml(est.from)} buoy, arriving ${est.angle}° off the beach's line` +
       (est.share < 0.05 ? '; going by its mean period, its height is all local chop.'
