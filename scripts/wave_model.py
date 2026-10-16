@@ -4,7 +4,8 @@ NOAA's GFS-Wave (WAVEWATCH III) runs with each GFS run. On its 0.25° grid,
 the sea cell nearest Saltburn is 20 km NNE in Tees Bay (54.75N 1.0W); the
 chart job saves every separate swell it has there, hour by hour for five
 days (saltburn-cell.json on the charts branch: height, peak period and
-direction). We take each that can reach Saltburn's beach and turn it into
+direction), and its local wind sea, which on an onshore day is most of the
+surf and can hold a swell running the same way. We take each that can reach Saltburn's beach and turn it into
 breaking size there (to_saltburn: the buoy rule, swell_sources.break_ft,
 scaled by period); swells running together add as energy. So the sea is
 NOAA's and the last 20 km is ours: the part your reports will tune, by period
@@ -100,7 +101,7 @@ def parse_bulletin(text, run, days=8):
 
 def fetch_cell(run, wait_min=0):
     """The run's swells in the sea cell off Saltburn, from the chart job, as
-    bulletin rows [(time, [(m, s, from, False), ...]), ...]; None if the
+    bulletin rows [(time, [(m, s, from, wind sea), ...]), ...]; None if the
     charts published are of another run."""
     end = time.time() + wait_min * 60
     while True:
@@ -108,7 +109,7 @@ def fetch_cell(run, wait_min=0):
             with urllib.request.urlopen(f'{CELL_URL}?t={int(time.time())}', timeout=60) as r:
                 c = json.load(r)
             if c['run'] == int(run.replace(tzinfo=dt.timezone.utc).timestamp() * 1000):
-                return [(dt.datetime.fromtimestamp(t / 1000, dt.timezone.utc).replace(tzinfo=None), [(h, p, d, False) for h, p, d in sw])
+                return [(dt.datetime.fromtimestamp(t / 1000, dt.timezone.utc).replace(tzinfo=None), [(x[0], x[1], x[2], bool(x[3]) if len(x) > 3 else False) for x in sw])
                         for t, sw in c['rows']]
         except Exception as e:
             print(f'No cell yet: {e}')
