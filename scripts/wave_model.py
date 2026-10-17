@@ -35,22 +35,27 @@ POINT = '62026'      # 150 km NE of Saltburn: the fallback
 CELL_URL = f"https://raw.githubusercontent.com/{os.environ.get('GITHUB_REPOSITORY', 'mattkirwan/north-sea-charts')}/charts/saltburn-cell.json"
 MIN_HS = 0.05        # smaller swells (m) aren't counted
 # The last stretch: breaking size by the buoy rule, times GAIN * (period /
-# 10 s) ** PERIOD_POW, at most MAX_GAIN: short-period swell loses height on
-# the way in. Fitted first on 62026; on the cell it gives Saltburn 12 Oct
-# 0.9 ft (reported knee), 13 Oct 0.5 (0-0.5 ft), 14 Oct 0.2 (0-1 ft). The
-# cap was 3, from long experience that a small 20 s swell breaks at 4-6 ft
-# (Sandsend 16 Mar, 4-6 ft); on 15 Oct the cell had 0.19 m at 18.7 s, Whitby
-# agreed, and Saltburn was knee high (1.7 ft by the buoy rule), so the cap is
-# now 0.7 and swells over 12.5 s get no more than that. March may be Sandsend
-# taking more than Saltburn, or a cleaner sea; reports refit these.
+# 10 s) ** PERIOD_POW, kept between MIN_GAIN and MAX_GAIN: short-period swell
+# loses more height on the way in. The cap was 3, from long experience that a
+# small 20 s swell breaks at 4-6 ft (Sandsend 16 Mar, 4-6 ft); on 15 Oct the
+# cell had 0.19 m at 18.7 s, Whitby agreed, and Saltburn was knee high (1.7 ft
+# by the buoy rule), so it's 0.7 from 12.5 s up. The curve below it was fitted
+# on 62026, 150 km out, where the sea is much bigger than in the bay; on the
+# cell it cut short-period sea twice: 17 Oct 06z, 1.72 m at 6.4 s straight
+# onshore (6.5 ft by the rule) came to 1 ft, and Saltburn was 3-4.5 ft. With
+# the floor at 0.5 the cell gives 12 Oct 1.6 ft (reported knee), 13 Oct 0.9
+# (0-0.5 ft), 14 Oct 0.5 (0-1 ft), 15 Oct 1.2 (knee), 17 Oct 3.6 (3-4.5 ft).
+# March may be Sandsend taking more than Saltburn, or a cleaner sea; reports
+# refit these.
 GAIN = 0.43
 PERIOD_POW = 2.2
+MIN_GAIN = 0.5
 MAX_GAIN = 0.7
 
 
 def to_saltburn(hs, tp, from_deg):
-    """Breaking size at Saltburn (ft) of a swell 150 km out."""
-    return float(break_ft(hs, tp, from_deg)) * min(MAX_GAIN, GAIN * (tp / 10) ** PERIOD_POW)
+    """Breaking size at Saltburn (ft) of a swell in the sea off it."""
+    return float(break_ft(hs, tp, from_deg)) * min(MAX_GAIN, max(MIN_GAIN, GAIN * (tp / 10) ** PERIOD_POW))
 
 
 def fetch_bulletin(run, point=POINT, wait_min=0):
