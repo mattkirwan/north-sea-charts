@@ -23,6 +23,16 @@
   })();
 </script>
 <script>
+  // Where the app is running, as data-surface on <html> (for the stats and
+  // for any spacing that differs): standalone (opened from the home screen),
+  // instagram or another app's built-in browser (inapp), or a full browser.
+  (function () {
+    var ua = navigator.userAgent, standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+    document.documentElement.dataset.surface = standalone ? 'standalone' : /Instagram/i.test(ua) ? 'instagram'
+      : /FBAN|FBAV|FB_IAB|TikTok|musical_ly|Snapchat|LinkedInApp|Twitter|Line\/|; wv\)/.test(ua) ? 'inapp' : 'browser';
+  })();
+</script>
+<script>
   // Anonymous usage stats (Umami): page views, where the app is running and
   // a first-interaction event, against a random ID kept on this device so a
   // returning visit counts as the same visitor. Nothing else about the person.
@@ -48,9 +58,7 @@
     if (id) s.dataset.distinctId = id;
     s.onload = function () {
       if (!id || !window.umami) return;
-      var standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-      var surface = standalone ? 'standalone' : /Instagram/i.test(navigator.userAgent) ? 'instagram' : 'browser';
-      umami.identify({ id: id, surface: surface });
+      umami.identify({ id: id, surface: document.documentElement.dataset.surface });
     };
     document.head.appendChild(s);
   })();

@@ -895,6 +895,24 @@ function scanStopped() {
   if (tip2Due && !store.get('nss.tip2', false)) { tip2Due = false; tipShown = 2; tipFading = false; renderTips(); }
 }
 
+// ---- ?debug=1: where the app thinks it is, and the space the phone keeps -----------------
+if (Q.has('debug')) {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;visibility:hidden;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)';
+  const out = document.createElement('pre');
+  out.style.cssText = 'position:fixed;left:8px;top:calc(8px + env(safe-area-inset-top,0px));z-index:9;margin:0;padding:6px 8px;' +
+    'background:var(--ui-display);color:var(--ui-display-ink);font:500 10px/1.4 var(--font-mono);border-radius:var(--radius-card);pointer-events:none';
+  document.body.append(probe, out);
+  const show = () => {
+    const cs = getComputedStyle(probe), vv = window.visualViewport;
+    out.textContent = [`surface ${document.documentElement.dataset.surface}`,
+      `safe top ${cs.paddingTop}, bottom ${cs.paddingBottom}`,
+      `window ${innerWidth}×${innerHeight}`, vv ? `visible ${Math.round(vv.width)}×${Math.round(vv.height)}` : '',
+      `screen ${screen.width}×${screen.height}`].filter(Boolean).join('\n');
+  };
+  show(); addEventListener('resize', show); window.visualViewport && visualViewport.addEventListener('resize', show);
+}
+
 // ---- Start -------------------------------------------------------------------------------
 readTokens();
 renderPanel();
