@@ -5,7 +5,11 @@ needs is the model's fields on a regular grid over the square, frame by frame.
 The square is polar stereographic on the Greenwich meridian, about 4,600 km a
 side, from Cape Farewell and northern Svalbard down to Biscay and across to
 Gdansk and North Cape. Every frame of a run is written: hourly to +120 h, then
-3-hourly to +384 h, 209 in all.
+3-hourly to +384 h, 209 in all, in a folder named for the run
+(2026-10-26-06z/f000.bin.gz; the manifest's dir). A frame's address names its
+run, so the app (and the phone's kept copies) can never take one run's frame
+for another's: once the next run replaces the branch, the old addresses are
+gone rather than quietly serving the new run's frames.
 
 Each frame is one gzipped file in this order:
   pressure   uint16  (hPa - 850) * 20, smoothed        P x P   low bytes, then high bytes
@@ -169,6 +173,8 @@ def frame(run, step):
         raise RuntimeError(f'f{step:03d}: implausible pressure {np.nanmin(p):.0f}-{np.nanmax(p):.0f}')
     u = sample(a['u'][0], a['u'][1], a['u'][2], plon, plat)
     v = sample(a['v'][0], a['v'][1], a['v'][2], plon, plat)
+    if not (np.isfinite(u).all() and np.isfinite(v).all()) or np.hypot(u, v).max() > 90:
+        raise RuntimeError(f'f{step:03d}: implausible wind')
     lam = np.radians(plon)
     ux, uy = u * np.cos(lam) - v * np.sin(lam), u * np.sin(lam) + v * np.cos(lam)
     hs, lat0, lon0 = w['hs']
@@ -177,6 +183,10 @@ def frame(run, step):
     tp = np.where(tp > 0, tp, w['tp'][0])
     h = sample(to_coast(hs), lat0, lon0, slon, slat)
     t = sample(to_coast(tp), lat0, lon0, slon, slat)
+    # About 70% of the square is sea; much less means the wave model's file is
+    # broken (all NaN would pass the checks below unseen), not sea ice.
+    if np.isfinite(h).mean() < 0.4 or np.isfinite(t).mean() < 0.4:
+        raise RuntimeError(f'f{step:03d}: waves over only {np.isfinite(h).mean():.0%} of the square')
     if np.nanmax(h) > 25 or np.nanmax(t) > 35:
         raise RuntimeError(f'f{step:03d}: implausible waves {np.nanmax(h):.1f} m {np.nanmax(t):.0f} s')
     q = lambda x, k: np.where(np.isfinite(x), np.clip(np.round(x * k), 0, 254), 255).astype(np.int64)
@@ -208,12 +218,17 @@ def _one(args):
     return step, None, err
 
 
+def run_dir(run):
+    return f'{run:%Y-%m-%d-%H}z'
+
+
 def run_frames(out, run, steps):
-    os.makedirs(out, exist_ok=True)
+    d = run_dir(run)
+    os.makedirs(os.path.join(out, d), exist_ok=True)
     t0 = time.time()
     done, failed = {}, {}
     with ProcessPoolExecutor(max_workers=int(os.environ.get('WORKERS', '6'))) as pool:
-        for step, stats, err in pool.map(_one, [(run, s, out) for s in steps]):
+        for step, stats, err in pool.map(_one, [(run, s, os.path.join(out, d)) for s in steps]):
             if err:
                 failed[step] = err
                 print(f'  f{step:03d} FAILED {err}', flush=True)
@@ -229,16 +244,16 @@ def run_frames(out, run, steps):
     keep = steps[:upto]
     for s in good:
         if s not in keep:
-            os.unlink(os.path.join(out, f'f{s:03d}.bin.gz'))
+            os.unlink(os.path.join(out, d, f'f{s:03d}.bin.gz'))
     manifest = dict(
         run=int(run.replace(tzinfo=dt.timezone.utc).timestamp() * 1000), runLabel=gfs_latest.label(run),
-        made=int(time.time() * 1000), steps=keep, file='f{step}.bin.gz', pad=3,
+        made=int(time.time() * 1000), steps=keep, dir=d, file='{dir}/f{step}.bin.gz', pad=3,
         square=dict(x0=X0, x1=X1, y0=Y0, y1=Y1, proj=PROJ4),
         grids=dict(p=P_N, s=S_N), scale=dict(p=[20, 850], wind=2, h=10, t=10), encoding='row-delta-v1',
         source='NOAA GFS 0.25° (pressure, 10 m wind) and GFS-Wave 0.25° (height, longest swell period)')
     with open(os.path.join(out, 'manifest.json'), 'w') as f:
         json.dump(manifest, f, separators=(',', ':'))
-    size = sum(os.path.getsize(os.path.join(out, f'f{s:03d}.bin.gz')) for s in keep)
+    size = sum(os.path.getsize(os.path.join(out, d, f'f{s:03d}.bin.gz')) for s in keep)
     print(f'manifest: {len(keep)} frames, {size / 1e6:.1f} MB, {size / len(keep) / 1e3:.0f} kB a frame')
 
 

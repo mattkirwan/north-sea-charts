@@ -97,10 +97,19 @@ function decode(b, P, S) {
   const u = new Int8Array(rows(P).buffer), v = new Int8Array(rows(P).buffer), h = rows(S), t = rows(S);
   return { p, u, v, h, t };
 }
-const frameUrl = (m, i) => `${FR}f${String(m.steps[i]).padStart(m.pad || 3, '0')}.bin.gz?run=${m.run}`;
+// Each run's frames sit in a folder named for it (m.dir), so a frame asked for
+// by an older manifest is missing once the next run is published, never the
+// next run's frame passed off as this one's. (Manifests from before m.dir:
+// the frames at the top of the branch.)
+const frameUrl = (m, i) => `${FR}${m.dir ? m.dir + '/' : ''}f${String(m.steps[i]).padStart(m.pad || 3, '0')}.bin.gz?run=${m.run}`;
+let goneAt = 0;
 async function fetchFrame(m, i) {
   const r = await fetch(frameUrl(m, i), { mode: 'cors', credentials: 'omit' });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  if (!r.ok) {
+    // Gone: a newer run has replaced this one. Look for it now, not in five minutes.
+    if (r.status === 404 && m === man && Date.now() - goneAt > 30e3) { goneAt = Date.now(); refreshManifest(); }
+    throw new Error(`HTTP ${r.status}`);
+  }
   return decode(await gunzip(await r.arrayBuffer()), m.grids.p, m.grids.s);
 }
 function nextToLoad() {
@@ -159,7 +168,7 @@ async function refreshManifest() {
     const t = validAt(man, idx), j = nearestIndex(m, t);
     try {
       const d = await fetchFrame(m, j);
-      man = m; frames = []; frames[j] = d; idx = j; tl.raw = tl.target = j; geomCache.clear();
+      man = m; frames = []; frames[j] = d; failedAt = {}; idx = j; tl.raw = tl.target = j; geomCache.clear();
       buildTicks(); markTick(j); setFrame(j, true);
       updatedNote = true; setTimeout(fadeUpdated, 3000);
       pump();
