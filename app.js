@@ -19,6 +19,16 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
 };
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+// Usage stats (Umami, loaded by index.html): the first thing someone does
+// beyond looking, once a visit: pan, zoom, rail (the timeline) or band.
+let interacted = false;
+try { interacted = !!sessionStorage.getItem('nss_fi'); } catch {}
+function firstInteraction(type) {
+  if (interacted) return;
+  interacted = true;
+  try { sessionStorage.setItem('nss_fi', '1'); } catch {}
+  if (window.umami) umami.track('first_interaction', { type });
+}
 
 // ---- Tokens ---------------------------------------------------------------
 let C = {};
@@ -449,6 +459,7 @@ cv.addEventListener('pointermove', (e) => {
     view.x -= (mx1 - mx0) / view.k; view.y += (my1 - my0) / view.k;
   }
   if (gesture) gesture.moved += Math.abs(e.clientX - p.x) + Math.abs(e.clientY - p.y);
+  if (ptrs.size === 2) firstInteraction('zoom'); else if (gesture && gesture.moved > 10) firstInteraction('pan');
   p.x = e.clientX; p.y = e.clientY;
   clampView(); requestDraw(); saveView();
 });
@@ -457,13 +468,13 @@ const endPtr = (e) => {
   if (ptrs.size || !gesture) return;
   const now = performance.now(), tap = !gesture.multi && gesture.moved < 10 && now - gesture.t < 300;
   if (tap && lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) {
-    animateZoom(e.clientX, e.clientY, 2); lastTap = null;
+    animateZoom(e.clientX, e.clientY, 2); lastTap = null; firstInteraction('zoom');
   } else lastTap = tap ? { t: now, x: e.clientX, y: e.clientY } : null;
   gesture = null;
 };
 cv.addEventListener('pointerup', endPtr);
 cv.addEventListener('pointercancel', endPtr);
-cv.addEventListener('wheel', (e) => { e.preventDefault(); zoomAbout(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.002)); clampView(); requestDraw(); saveView(); }, { passive: false });
+cv.addEventListener('wheel', (e) => { e.preventDefault(); firstInteraction('zoom'); zoomAbout(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.002)); clampView(); requestDraw(); saveView(); }, { passive: false });
 function animateZoom(sx, sy, f) {
   const start = performance.now(), dur = reduced.matches ? 0 : 260;
   let done = 1;
@@ -629,7 +640,7 @@ function renderPanel() {
 }
 document.querySelectorAll('.nss-band').forEach((b) => b.addEventListener('click', () => {
   if (band === b.dataset.band) return;
-  band = b.dataset.band; store.set('nss.band', band); renderPanel(); requestDraw(); warm();
+  band = b.dataset.band; store.set('nss.band', band); firstInteraction('band'); renderPanel(); requestDraw(); warm();
   // The open panel grows or shrinks with the key row: settle the map after.
   if (!docked) setTimeout(easeClamp, reduced.matches ? 0 : 220);
 }));
@@ -809,6 +820,7 @@ for (const T of TL) {
     const dc = along(e) - drag.c;
     drag.c = along(e);
     moveTo(tl.raw - dc / TICK);
+    if (Math.abs(drag.c - drag.c0) > 6) firstInteraction('rail');
     // When the finger moved (the event's own time), not when we got to it.
     const now = e.timeStamp;
     drag.samples.push([now, tl.raw]);
@@ -819,7 +831,7 @@ for (const T of TL) {
     const now = e.timeStamp, d = drag;
     drag = null;
     if (Math.abs(d.c - d.c0) < 6 && now - d.t0 < 300) {
-      if (now - tlTap < 320) { tlTap = 0; animateTo(nearestIndex(man, Date.now()), 360); return; }
+      if (now - tlTap < 320) { tlTap = 0; firstInteraction('rail'); animateTo(nearestIndex(man, Date.now()), 360); return; }
       tlTap = now; settle(); return;
     }
     const v = releaseSpeed(d, now);
@@ -850,7 +862,7 @@ for (const T of TL) {
     else if (e.key === 'Home') to = 0;
     else if (e.key === 'End') to = n;
     if (to == null) return;
-    e.preventDefault();
+    e.preventDefault(); firstInteraction('rail');
     to = Math.max(0, Math.min(n, to));
     tl.raw = to; placeTrack(); setFrame(to);
   });
