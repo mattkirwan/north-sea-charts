@@ -1,0 +1,61 @@
+# The chart app's frames (scripts/chart_frames.py): NOAA's GFS and GFS-Wave
+# on the app's square of sea, every frame of a run out to +384 h (209), as
+# small binary grids the app draws itself. Published on the `frames` branch
+# as a single commit replaced each time, so the repo doesn't grow.
+#
+# A run reaches +384 h on NOAA's bucket, waves included, about 5 h after it
+# starts. Started by the loop in tick.yml as soon as it's there; these
+# schedules are a backstop. A try that finds nothing new stops before
+# installing.
+name: Chart app frames
+
+on:
+  schedule:
+    - cron: '25 5,11,17,23 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: frames
+  cancel-in-progress: false
+
+jobs:
+  frames:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Is there a new run
+        id: pub
+        run: |
+          run=$(curl -fsS "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/frames/manifest.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["runLabel"])' || true)
+          latest=$(python3 scripts/gfs_latest.py full)
+          echo "Published: ${run:-none}. Newest out to +384 h on NOAA: $latest"
+          if [ "$run" = "$latest" ] && [ "$GITHUB_EVENT_NAME" != workflow_dispatch ]; then
+            echo 'Already published; nothing to do.'
+            echo "go=" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=1" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.pub.outputs.go
+        with:
+          python-version: '3.12'
+      - name: Install
+        if: steps.pub.outputs.go
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libeccodes-dev > /dev/null
+          pip install -q cfgrib eccodes xarray scipy
+      - name: Make the frames
+        if: steps.pub.outputs.go
+        env:
+          WORKERS: '8'
+        run: python scripts/chart_frames.py "$RUNNER_TEMP/frames"
+      - name: Publish to the frames branch
+        if: steps.pub.outputs.go
+        env:
+          TOKEN: ${{ github.token }}
+          BRANCH: frames
+        run: sh scripts/publish-charts.sh "$RUNNER_TEMP/frames"

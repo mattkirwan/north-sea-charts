@@ -1,0 +1,51 @@
+/* North Sea Surf panel components. Every value comes from tokens.css. */
+
+/* Panel: the one group of controls, flush to the bottom edge */
+.nss-panel { box-sizing: border-box; display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) var(--space-3) calc(var(--space-2) + env(safe-area-inset-bottom, 0px)); background: var(--ui-surface); border-top: 1px solid var(--ui-line); color: var(--ui-ink); }
+
+/* Band buttons: PRESSURE, WIND, SWELL */
+.nss-bands { display: flex; gap: var(--space-1); }
+.nss-band { flex: 1; min-width: 0; height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 0; border: 1px solid var(--ui-track); border-radius: var(--radius-card); background: var(--ui-raised); color: var(--ui-ink); font-family: var(--font-mono); font-size: 11px; line-height: 1; font-weight: 500; letter-spacing: 0.8px; text-transform: uppercase; cursor: pointer; }
+.nss-band::before { content: ""; width: 6px; height: 6px; border-radius: 1px; background: var(--ui-led-off); }
+.nss-band[aria-pressed="true"] { background: var(--ui-control); border-color: var(--ui-control); color: var(--ui-control-ink); }
+.nss-band[aria-pressed="true"]::before { background: var(--lifeboat); }
+.nss-band:focus-visible, .nss-switch button:focus-visible, .nss-timeline:focus-visible { outline: 2px solid var(--lifeboat-deep); outline-offset: 2px; }
+
+/* Key row: colour steps on the left, the swell switch on the right */
+.nss-keyrow { display: flex; align-items: center; gap: var(--space-2); }
+.nss-key { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.nss-key-unit { font-family: var(--font-mono); font-size: 10px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase; color: var(--ui-ink-muted); }
+.nss-key-steps { display: flex; gap: 1px; }
+.nss-key-step { flex: 1; display: flex; flex-direction: column; gap: 3px; font-family: var(--font-mono); font-size: 10px; line-height: 1; font-weight: 400; color: var(--ui-ink); }
+.nss-key-step i { display: block; height: 6px; border-radius: var(--radius-xs); }
+
+/* Swell switch: HEIGHT / PERIOD */
+.nss-switch { flex: 0 0 auto; display: flex; gap: calc(var(--space-1) / 2); padding: calc(var(--space-1) / 2); border-radius: var(--radius-frame); background: var(--ui-raised); border: 1px solid var(--ui-track); }
+.nss-switch button { width: 68px; height: 44px; border: 0; border-radius: var(--radius-inner); background: transparent; color: var(--ui-ink); font-family: var(--font-mono); font-size: 10px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase; cursor: pointer; }
+.nss-switch button[aria-pressed="true"] { background: var(--ui-control); color: var(--ui-control-ink); }
+
+/* Time readout: day and hour at equal weight, lead time small between them */
+.nss-readout { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-card); background: var(--ui-display); color: var(--ui-display-ink); }
+.nss-readout-day, .nss-readout-time { flex: 1; text-align: center; font-family: var(--font-mono); font-size: 28px; line-height: 1; font-weight: 500; letter-spacing: -0.6px; text-transform: uppercase; font-variant-numeric: tabular-nums; }
+.nss-readout-lead { flex: 0 0 auto; font-family: var(--font-mono); font-size: 10px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; color: var(--ui-display-muted); font-variant-numeric: tabular-nums; }
+.nss-readout-status { flex-basis: 100%; text-align: center; font-family: var(--font-mono); font-size: 9px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase; color: var(--ui-display-muted); }
+.nss-readout-status[data-tone="warn"] { color: var(--lifeboat); }
+
+/* Timeline: fixed needle, sliding scale */
+.nss-timeline { position: relative; padding-top: 5px; }
+.nss-timeline-arrow { position: absolute; left: calc(50% - 7px); top: 0; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 9px solid var(--lifeboat-deep); z-index: 1; }
+.nss-scale { position: relative; height: 56px; border-radius: var(--radius-card); background: var(--ui-raised); border: 1px solid var(--ui-track); overflow: hidden; }
+.nss-scale::after { content: ""; position: absolute; left: 0; right: 0; bottom: 8px; border-top: 1px solid var(--ui-track); }
+.nss-tick { position: absolute; bottom: 8px; width: 1px; height: 6px; margin-left: -0.5px; background: var(--ui-ink); }
+.nss-tick--3h { height: 10px; }
+.nss-tick--day { width: 1.5px; height: 24px; margin-left: -0.75px; }
+.nss-tick--past { opacity: 0.35; }
+.nss-tick--pending { opacity: 0.18; }
+.nss-tick--now { width: 2px; height: 14px; margin-left: -1px; background: var(--lifeboat-deep); opacity: 1; z-index: 1; }
+.nss-day { position: absolute; top: 6px; padding-left: 4px; font-family: var(--font-mono); font-size: 10px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase; color: var(--ui-ink); white-space: nowrap; }
+.nss-day--past { opacity: 0.35; }
+.nss-end { position: absolute; top: 0; bottom: 0; right: 0; background: repeating-linear-gradient(135deg, var(--ui-track) 0 1px, transparent 1px 6px); }
+.nss-needle { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--lifeboat-deep); z-index: 2; }
+.nss-tip { position: absolute; left: calc(50% + 12px); top: 4px; height: 22px; display: flex; align-items: center; gap: 6px; padding: 0 var(--space-2); border-radius: var(--radius-card); background: var(--ui-control); color: var(--ui-control-ink); font-family: var(--font-mono); font-size: 11px; line-height: 1; font-weight: 600; white-space: nowrap; z-index: 3; transition: opacity 0.3s; }
+.nss-tip[data-fading] { opacity: 0.35; }
+@media (prefers-reduced-motion: reduce) { .nss-tip { transition: none; } }

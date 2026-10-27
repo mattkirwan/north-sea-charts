@@ -1,7 +1,8 @@
 # Keeps the data fresh. GitHub's own schedules are unreliable on a quiet
 # repository (they fire hours late or not at all), so this runs as a loop:
 # every half hour it starts the wave collector, as soon as NOAA has a new
-# complete GFS run it starts the chart job, and as soon as NOAA's wave model
+# complete GFS run it starts the chart job (and, once it's out to +384 h, the
+# chart app's frames), and as soon as NOAA's wave model
 # has the run out it starts the swell forecast. After about five and a half hours
 # it starts the next copy of itself (GitHub lets a workflow start another with
 # workflow_dispatch). Its own schedule is only a backstop to restart the loop
@@ -35,6 +36,7 @@ jobs:
           last_waves=0
           last_charts=0
           last_fc=0
+          last_frames=0
           while [ "$(date +%s)" -lt "$end" ]; do
             now=$(date +%s)
             if [ $(( now - last_waves )) -ge 1800 ]; then
@@ -45,6 +47,12 @@ jobs:
             latest=$(python3 scripts/gfs_latest.py 2>/dev/null || true)
             if [ -n "$latest" ] && [ "$published" != "$latest" ] && [ $(( now - last_charts )) -ge 1800 ]; then
               gh workflow run charts.yml --ref main && last_charts=$now && echo "$(date -u +%H:%M) charts started for $latest (published: ${published:-none})"
+            fi
+            frames=$(curl -fsS "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/frames/manifest.json?t=${now}" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["runLabel"])' || true)
+            full=$(python3 scripts/gfs_latest.py full 2>/dev/null || true)
+            if [ -n "$full" ] && [ "$frames" != "$full" ] && [ $(( now - last_frames )) -ge 1800 ]; then
+              gh workflow run frames.yml --ref main && last_frames=$now && echo "$(date -u +%H:%M) frames started for $full (published: ${frames:-none})"
             fi
             wave=$(python3 scripts/gfs_latest.py wave 2>/dev/null || true)
             if [ -n "$wave" ] && [ $(( now - last_fc )) -ge 1800 ] && \
