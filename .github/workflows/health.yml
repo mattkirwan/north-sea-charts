@@ -1,0 +1,47 @@
+# Every hour, checks the chart app's frames are fresh and readable
+# (scripts/check_fresh.py). When they aren't, the run fails and an issue
+# titled "Chart data is stale" is opened (once; GitHub notifies the repo's
+# watchers), and it's closed again when the frames are back. Separate from
+# the loop in tick.yml, so it still speaks up if that loop has stopped.
+name: Check the charts are fresh
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: health
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the frames
+        id: check
+        run: |
+          python3 scripts/check_fresh.py | tee "$RUNNER_TEMP/report.txt"
+          exit "${PIPESTATUS[0]}"
+      - name: Open or close the alert
+        if: always() && (steps.check.outcome == 'success' || steps.check.outcome == 'failure')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ steps.check.outcome }}
+          TITLE: Chart data is stale
+        run: |
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --json number,title \
+            --jq ".[] | select(.title == \"$TITLE\") | .number" | head -1)
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ "$OUTCOME" = failure ] && [ -z "$open" ]; then
+            { cat "$RUNNER_TEMP/report.txt"; echo; echo "Found by $run_url. Closed by itself when the frames are back."; } > "$RUNNER_TEMP/body.md"
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file "$RUNNER_TEMP/body.md"
+          elif [ "$OUTCOME" = success ] && [ -n "$open" ]; then
+            gh issue close "$open" --repo "$GITHUB_REPOSITORY" --comment "Fresh again ($run_url)."
+          fi
