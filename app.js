@@ -10,7 +10,7 @@
 
 const Q = new URLSearchParams(location.search);
 const FR = Q.get('frames') || 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/frames/';
-const H = 3600e3, KN = 1.943844, TICK = 8, MAX_KM_ACROSS = 36;
+const H = 3600e3, MPH = 2.236936, TICK = 8, MAX_KM_ACROSS = 36;
 const $ = (s) => document.querySelector(s);
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -32,7 +32,7 @@ function readTokens() {
 }
 const FONT = '"Geist Mono", ui-monospace, monospace';
 const KEYS = {
-  wind: { unit: 'Wind, kn', steps: ['10', '15', '20', '25', '30', '40+'], tok: 'wind', thr: [0, 15, 20, 25, 30, 40] },
+  wind: { unit: 'Wind, mph', steps: ['10', '20', '25', '30', '40', '50+'], tok: 'wind', thr: [0, 20, 25, 30, 40, 50] },
   height: { unit: 'Swell height, m', steps: ['0.5', '1', '1.5', '2', '3', '4', '6+'], tok: 'height', lev: [0.5, 1, 1.5, 2, 3, 4, 6], fig: (l) => `${l} m` },
   period: { unit: 'Swell period, s', steps: ['8', '10', '12', '14', '16+'], tok: 'period', lev: [8, 10, 12, 14, 16], fig: (l) => `${l} s` }
 };
@@ -476,12 +476,15 @@ function draw() {
   }
   if (fi < 0) return;
   if (band === 'wind') drawWind(fi, sx, sy, screen);
-  const g = pressureGeom(fi);
+  // Isobars, centres and their figures on the Pressure band only.
+  const g = band === 'pressure' ? pressureGeom(fi) : { centres: [], labelled: [] };
+  if (g.lows) {
   world();
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.strokeStyle = C.iso; ctx.setLineDash([]); ctx.lineWidth = 1.3 / k; ctx.stroke(g.lows);
   ctx.globalAlpha = 0.85; ctx.lineWidth = 1.6 / k; ctx.setLineDash([0.1 / k, 3.5 / k]); ctx.stroke(g.highs);
   ctx.globalAlpha = 1; ctx.setLineDash([]);
+  }
   // Figures: centres first, then every third isobar, then swell band edges.
   screen();
   const boxes = [], free = (bx, by, bw, bh) => {
@@ -542,7 +545,7 @@ function drawWind(fi, sx, sy, screen) {
       const gj = (wx - sq.x0) / (sq.x1 - sq.x0) * (P - 1), gi = (sq.y0 - wy) / (sq.y0 - sq.y1) * (P - 1);
       const u = bilinear(d.u, P, gj, gi) / 2, v = bilinear(d.v, P, gj, gi) / 2, sp = Math.hypot(u, v);
       if (sp < 0.3) continue;
-      const kn = sp * KN, c = thr.reduce((m, t, i) => (kn >= t ? i : m), 0);
+      const mph = sp * MPH, c = thr.reduce((m, t, i) => (mph >= t ? i : m), 0);
       const dx = u / sp, dy = -v / sp, hx = px + dx * 7, hy = py + dy * 7, p = paths[c];
       p.moveTo(px - dx * 7, py - dy * 7); p.lineTo(hx, hy);
       const a = Math.PI / 6, l = 4.5;
@@ -693,7 +696,7 @@ timeline.addEventListener('pointerdown', (e) => {
   if (!man) return;
   timeline.setPointerCapture(e.pointerId);
   cancelAnimationFrame(tl.anim);
-  drag = { x: e.clientX, x0: e.clientX, t0: performance.now(), samples: [[performance.now(), tl.raw]] };
+  drag = { x: e.clientX, x0: e.clientX, t0: e.timeStamp, samples: [[e.timeStamp, tl.raw]] };
   tipTouched();
 });
 timeline.addEventListener('pointermove', (e) => {
@@ -701,29 +704,41 @@ timeline.addEventListener('pointermove', (e) => {
   const dx = e.clientX - drag.x;
   drag.x = e.clientX;
   moveTo(tl.raw - dx / TICK);
-  const now = performance.now();
+  // When the finger moved (the event's own time), not when we got to it.
+  const now = e.timeStamp;
   drag.samples.push([now, tl.raw]);
-  while (drag.samples.length > 2 && now - drag.samples[0][0] > 100) drag.samples.shift();
+  while (drag.samples.length > 2 && now - drag.samples[0][0] > 120) drag.samples.shift();
 });
-const tlEnd = () => {
+// How fast the scale was moving as the finger left it, in frames per ms: from
+// the last moments of the drag, and none if the finger stopped before lifting.
+function releaseSpeed(d, now) {
+  const s = d.samples, [t1, r1] = s[s.length - 1], [t0, r0] = s[0];
+  if (now - t1 > 120 || t1 - t0 < 8) return 0;
+  return (r1 - r0) / (t1 - t0);
+}
+const tlEnd = (e) => {
   if (!drag) return;
-  const now = performance.now(), d = drag;
+  const now = e.timeStamp, d = drag;
   drag = null;
   if (Math.abs(d.x - d.x0) < 6 && now - d.t0 < 300) {
     if (now - tlTap < 320) { tlTap = 0; animateTo(nearestIndex(man, Date.now()), 360); return; }
     tlTap = now; settle(); return;
   }
-  const [t0, r0] = d.samples[0], v = now - t0 > 0 ? (tl.raw - r0) / (now - t0) : 0;   // frames per ms
-  if (reduced.matches || Math.abs(v) < 0.01 || tl.raw < 0 || tl.raw > maxPos()) { settle(); return; }
-  // A flick carries on and slows to a stop, passing frames on the way.
-  let vel = v, last = now;
+  const v = releaseSpeed(d, now);
+  if (reduced.matches || Math.abs(v) < 0.015 || tl.raw < 0 || tl.raw > maxPos()) { settle(); return; }
+  // A flick rolls on and slows to a stop, passing frames on the way: a soft
+  // one a few hours, a hard one (faster swipes count for more) the whole run.
+  let vel = v * (1 + 6 * Math.abs(v)), last = now;
   const step = (t) => {
-    const dt = Math.min(40, t - last); last = t;
-    vel *= Math.pow(0.9965, dt);
+    const dt = Math.min(100, t - last); last = t;
+    vel *= Math.pow(0.9975, dt);
     let r = tl.raw + vel * dt;
-    if (r < -1.5 || r > maxPos() + 1.5) { r = Math.max(-1.5, Math.min(maxPos() + 1.5, r)); vel = 0; }
+    if (r < 0 || r > maxPos()) {
+      // Run into an end: a small overshoot, then spring back.
+      r = Math.max(-0.6, Math.min(maxPos() + 0.6, r)); moveTo(r); settle(); return;
+    }
     moveTo(r);
-    if (Math.abs(vel) > 0.004) tl.anim = requestAnimationFrame(step); else settle();
+    if (Math.abs(vel) > 0.003) tl.anim = requestAnimationFrame(step); else settle();
   };
   tl.anim = requestAnimationFrame(step);
 };
