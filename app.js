@@ -97,10 +97,19 @@ function decode(b, P, S) {
   const u = new Int8Array(rows(P).buffer), v = new Int8Array(rows(P).buffer), h = rows(S), t = rows(S);
   return { p, u, v, h, t };
 }
-const frameUrl = (m, i) => `${FR}f${String(m.steps[i]).padStart(m.pad || 3, '0')}.bin.gz?run=${m.run}`;
+// Each run's frames sit in a folder named for it (m.dir), so a frame asked for
+// by an older manifest is missing once the next run is published, never the
+// next run's frame passed off as this one's. (Manifests from before m.dir:
+// the frames at the top of the branch.)
+const frameUrl = (m, i) => `${FR}${m.dir ? m.dir + '/' : ''}f${String(m.steps[i]).padStart(m.pad || 3, '0')}.bin.gz?run=${m.run}`;
+let goneAt = 0;
 async function fetchFrame(m, i) {
   const r = await fetch(frameUrl(m, i), { mode: 'cors', credentials: 'omit' });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  if (!r.ok) {
+    // Gone: a newer run has replaced this one. Look for it now, not in five minutes.
+    if (r.status === 404 && m === man && Date.now() - goneAt > 30e3) { goneAt = Date.now(); refreshManifest(); }
+    throw new Error(`HTTP ${r.status}`);
+  }
   return decode(await gunzip(await r.arrayBuffer()), m.grids.p, m.grids.s);
 }
 function nextToLoad() {
@@ -159,7 +168,7 @@ async function refreshManifest() {
     const t = validAt(man, idx), j = nearestIndex(m, t);
     try {
       const d = await fetchFrame(m, j);
-      man = m; frames = []; frames[j] = d; idx = j; tl.raw = tl.target = j; geomCache.clear();
+      man = m; frames = []; frames[j] = d; failedAt = {}; idx = j; tl.raw = tl.target = j; geomCache.clear();
       buildTicks(); markTick(j); setFrame(j, true);
       updatedNote = true; setTimeout(fadeUpdated, 3000);
       pump();
@@ -592,14 +601,14 @@ function placeAlong(pts, text, first, every, sx, sy, free, paint) {
 function drawWind(fi, sx, sy, screen) {
   const d = frames[fi], P = man.grids.p, sq = man.square, { x, y, k } = view, pb = panelBox();
   const s = 32 / k, x0 = x - W / 2 / k, x1 = x + W / 2 / k, y1 = y + Hs / 2 / k, y0 = y - Hs / 2 / k;
-  const paths = C.wind.map(() => new Path2D()), thr = KEYS.wind.thr;
+  const paths = C.wind.map(() => new Path2D()), thr = KEYS.wind.thr, ws = man.scale.wind || 2;
   for (let wx = Math.ceil(x0 / s) * s; wx <= x1; wx += s) {
     for (let wy = Math.ceil(y0 / s) * s; wy <= y1; wy += s) {
       if (wx < sq.x0 || wx > sq.x1 || wy > sq.y0 || wy < sq.y1) continue;
       const px = sx(wx), py = sy(wy);
       if (px > pb.x + 10 && py > pb.y + 10) continue;
       const gj = (wx - sq.x0) / (sq.x1 - sq.x0) * (P - 1), gi = (sq.y0 - wy) / (sq.y0 - sq.y1) * (P - 1);
-      const u = bilinear(d.u, P, gj, gi) / 2, v = bilinear(d.v, P, gj, gi) / 2, sp = Math.hypot(u, v);
+      const u = bilinear(d.u, P, gj, gi) / ws, v = bilinear(d.v, P, gj, gi) / ws, sp = Math.hypot(u, v);
       if (sp < 0.3) continue;
       const mph = sp * MPH, c = thr.reduce((m, t, i) => (mph >= t ? i : m), 0);
       const dx = u / sp, dy = -v / sp, hx = px + dx * 7, hy = py + dy * 7, p = paths[c];

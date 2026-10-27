@@ -1,0 +1,31 @@
+# The tests in tests/: the chart app's frame format end to end (Python's
+# encoder against app.js's own decoder, under Node), the checks a frame must
+# pass before it's published, and the hourly freshness check. No network.
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        run: pip install -q numpy
+      - name: Syntax of the app's scripts
+        run: node --check app.js && node --check sw.js
+      - name: Run the tests
+        run: python -m unittest discover -s tests -v
