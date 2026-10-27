@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#EEEEEB">
+<meta name="theme-color" content="#DCE0DF">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -30,6 +30,17 @@
     var ua = navigator.userAgent, standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
     document.documentElement.dataset.surface = standalone ? 'standalone' : /Instagram/i.test(ua) ? 'instagram'
       : /FBAN|FBAV|FB_IAB|TikTok|musical_ly|Snapchat|LinkedInApp|Twitter|Line\/|; wv\)/.test(ua) ? 'inapp' : 'browser';
+    // From the home screen, iOS 26 can make the page shorter than the screen
+    // (by about the status bar's height) and fill the gap below it itself,
+    // in the theme colour. The page then already ends above the home bar, so
+    // data-short drops the panel's home-bar space; the theme colour matches
+    // the panel, so the gap reads as more panel.
+    if (!standalone) return;
+    var fit = function () {
+      var full = innerWidth < innerHeight ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+      document.documentElement.toggleAttribute('data-short', full - innerHeight > 20);
+    };
+    fit(); addEventListener('resize', fit);
   })();
 </script>
 <script>
@@ -81,6 +92,7 @@
      and open buttons keep the same spot in both). */
   .nss-panel, .nss-column { z-index: 2; padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px) * 0.35); }
   .nss-panel { position: absolute; left: 0; right: 0; bottom: 0; }
+  [data-short] .nss-panel, [data-short] .nss-column { padding-bottom: var(--space-2); }
   /* The open button in exactly the dock button's spot: 48 × 44, 12 px in. */
   .nss-column { padding-left: calc(var(--space-1) - 1px); }
   .nss-column .nss-dock-btn { flex: 0 0 44px; }
