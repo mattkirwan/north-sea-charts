@@ -618,25 +618,30 @@ function drawWind(fi, sx, sy, screen) {
 const panelEl = $('#panel'), columnEl = $('#column'), flyout = $('#flyout');
 function renderPanel() {
   document.querySelectorAll('.nss-band').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.band === band)));
-  $('#keyslot').toggleAttribute('data-off', band === 'pressure');
   document.querySelectorAll('[data-swell]').forEach((sw) => {
     sw.hidden = band !== 'swell';
     sw.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.var === swellVar)));
   });
-  if (band !== 'pressure') {
+  let unit, html;
+  if (band === 'pressure') {
+    // The two isobar styles, drawn as the chart draws them.
+    const line = (attrs) => `<i class="key-line"><svg aria-hidden="true"><line x1="2" y1="3" x2="92%" y2="3" style="stroke: var(--chart-isobar)" ${attrs}></line></svg></i>`;
+    unit = 'Isobars, every 4 hPa';
+    html = `<span class="nss-key-unit">${unit}</span><div class="nss-key-steps">` +
+      `<span class="nss-key-step">${line('stroke-width="1.3"')}Round lows</span>` +
+      `<span class="nss-key-step">${line('stroke-width="1.6" stroke-linecap="round" stroke-dasharray="0.1 3.5" opacity="0.85"')}Round highs</span></div>`;
+  } else {
     const K = KEYS[band === 'wind' ? 'wind' : swellVar];
-    const html = `<span class="nss-key-unit">${K.unit}</span><div class="nss-key-steps">` +
+    unit = K.unit;
+    html = `<span class="nss-key-unit">${unit}</span><div class="nss-key-steps">` +
       K.steps.map((s, i) => `<span class="nss-key-step"><i style="background: var(--${K.tok}-${i + 1})"></i>${s}</span>`).join('') + '</div>';
-    document.querySelectorAll('[data-key]').forEach((k) => { k.setAttribute('aria-label', `${K.unit} key`); k.innerHTML = html; });
   }
+  document.querySelectorAll('[data-key]').forEach((k) => { k.setAttribute('aria-label', `${unit} key`); k.innerHTML = html; });
   // Docked, the key floats level with the selected band (and comes in from
   // the column each time it moves).
-  if (band === 'pressure') flyout.hidden = true;
-  else {
-    const slot = columnEl.querySelector(`.nss-band[data-band="${band}"]`).parentNode;
-    if (flyout.parentNode !== slot) slot.appendChild(flyout);
-    flyout.hidden = false;
-  }
+  const slot = columnEl.querySelector(`.nss-band[data-band="${band}"]`).parentNode;
+  if (flyout.parentNode !== slot) slot.appendChild(flyout);
+  flyout.hidden = false;
 }
 document.querySelectorAll('.nss-band').forEach((b) => b.addEventListener('click', () => {
   if (band === b.dataset.band) return;
