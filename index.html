@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en-GB" data-theme="light">
+<html lang="en-GB" data-theme="light" class="still">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
@@ -36,43 +36,125 @@
   #chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
   /* Under the panel, match it: any strip the phone keeps below the page reads as panel. */
   html { background: var(--ui-surface); }
-  /* Less space under the timeline than the full home-indicator inset. */
-  .nss-panel { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
-    padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px) * 0.35); }
-  .nss-timeline { touch-action: none; cursor: grab; }
+  /* Less space under the panels than the full home-indicator inset (the dock
+     and open buttons keep the same spot in both). */
+  .nss-panel, .nss-column { z-index: 2; padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px) * 0.35); }
+  .nss-panel { position: absolute; left: 0; right: 0; bottom: 0; }
+  /* The open button in exactly the dock button's spot: 48 × 44, 12 px in. */
+  .nss-column { padding-left: calc(var(--space-1) - 1px); }
+  .nss-column .nss-dock-btn { flex: 0 0 44px; }
+
+  /* Open and docked: one shows at a time. The one leaving slips out a little
+     and fades; the one arriving follows it in. */
+  .nss-panel, .nss-column { transition: transform 220ms cubic-bezier(.2, .8, .2, 1) 70ms, opacity 180ms ease-out 70ms, visibility 0s linear 0s; }
+  .nss-panel[data-away] { transform: translateY(24px); opacity: 0; visibility: hidden; pointer-events: none;
+    transition: transform 160ms ease-in, opacity 140ms ease-in, visibility 0s linear 160ms; }
+  .nss-column[data-away] { transform: translateX(24px); opacity: 0; visibility: hidden; pointer-events: none;
+    transition: transform 160ms ease-in, opacity 140ms ease-in, visibility 0s linear 160ms; }
+
+  /* The key row folds away on Pressure, and the panel with it. */
+  .keyslot { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 200ms ease, margin-bottom 200ms ease, opacity 160ms ease; }
+  .keyslot > div { min-height: 0; overflow: hidden; }
+  .keyslot[data-off] { grid-template-rows: 0fr; margin-bottom: calc(-1 * var(--space-2)); opacity: 0; }
+
+  .nss-band, .nss-switch button, .nss-dock-btn { transition: background-color 120ms, border-color 120ms, color 120ms; }
+  .nss-band:active, .nss-switch button:active, .nss-dock-btn:active { transform: scale(0.97); }
+
+  .nss-timeline, .nss-vtimeline { touch-action: none; cursor: grab; }
   .nss-track { position: absolute; left: 50%; top: 0; bottom: 0; will-change: transform; }
   .nss-end { left: auto; right: auto; width: 2000px; }
+  .nss-vtrack { position: absolute; top: 50%; left: 0; right: 0; height: 0; will-change: transform; }
+  .nss-vtimeline .nss-end { left: 0; right: 0; bottom: auto; width: auto; height: 2000px; }
   .nss-tip { pointer-events: none; }
+  .nss-tip .nss-icon { width: 16px; height: 16px; }
+  .nss-vtimeline .nss-tip { left: auto; right: calc(100% + 14px); top: calc(50% - 11px); }
+
+  .nss-flyout { animation: fly-in 180ms cubic-bezier(.2, .8, .2, 1); }
+  @keyframes fly-in { from { opacity: 0; transform: translateX(10px); } }
+
+  .nss-readout-status { display: flex; align-items: center; justify-content: center; gap: 5px; transition: opacity 400ms; }
+  .nss-readout-status .nss-icon { width: 12px; height: 12px; }
+  .nss-readout-status[data-fading] { opacity: 0; }
+  .col-status { display: flex; justify-content: center; color: var(--ui-display-muted); }
+  .col-status .nss-icon { width: 14px; height: 14px; }
+  .col-status[data-tone="warn"] { color: var(--lifeboat); }
+  .col-status { transition: opacity 400ms; }
+  .col-status[data-fading] { opacity: 0; }
+  .spin .nss-icon, .nss-icon.spin { animation: spin 2.4s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .nss-panel, .nss-column, .nss-panel[data-away], .nss-column[data-away], .keyslot { transition: none; }
+    .nss-flyout, .spin .nss-icon, .nss-icon.spin { animation: none; }
+    .nss-band:active, .nss-switch button:active, .nss-dock-btn:active { transform: none; }
+  }
+  /* Nothing animates into its first place. */
+  .still .nss-panel, .still .nss-column, .still .keyslot { transition: none; }
   .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 </style>
 </head>
 <body>
 <canvas id="chart" aria-label="Weather chart of the North Sea and the seas round it. Drag to move the map, pinch to zoom, double-tap to zoom in." role="img"></canvas>
+
+<!-- Open: full width along the bottom. -->
 <div class="nss-panel" id="panel">
-  <div class="nss-keyrow" id="keyrow" hidden>
-    <div class="nss-key" id="key"></div>
-    <div class="nss-switch" id="swellSwitch" role="group" aria-label="Swell measure" hidden>
-      <button type="button" data-var="height" aria-pressed="true">Height</button>
-      <button type="button" data-var="period" aria-pressed="false">Period</button>
+  <div class="keyslot" id="keyslot"><div>
+    <div class="nss-keyrow">
+      <div class="nss-key" data-key></div>
+      <div class="nss-switch" data-swell role="group" aria-label="Swell measure">
+        <button type="button" data-var="height" aria-pressed="true" aria-label="Height" data-icon="height"></button>
+        <button type="button" data-var="period" aria-pressed="false" aria-label="Period" data-icon="period"></button>
+      </div>
     </div>
-  </div>
+  </div></div>
   <div class="nss-bands" role="group" aria-label="Chart layer">
-    <button type="button" class="nss-band" data-band="pressure" aria-pressed="true">Pressure</button>
-    <button type="button" class="nss-band" data-band="wind" aria-pressed="false">Wind</button>
-    <button type="button" class="nss-band" data-band="swell" aria-pressed="false">Swell</button>
+    <button type="button" class="nss-band" data-band="pressure" aria-pressed="true" aria-label="Pressure" data-icon="pressure"></button>
+    <button type="button" class="nss-band" data-band="wind" aria-pressed="false" aria-label="Wind" data-icon="wind"></button>
+    <button type="button" class="nss-band" data-band="swell" aria-pressed="false" aria-label="Swell" data-icon="swell"></button>
   </div>
   <div class="nss-readout" id="readout" role="group" aria-label="Forecast time">
-    <span class="nss-readout-day" id="rDay">–</span>
-    <span class="nss-readout-lead" id="rLead"></span>
-    <span class="nss-readout-time" id="rTime">–</span>
+    <span class="nss-readout-day" data-day>–</span>
+    <span class="nss-readout-lead" data-lead></span>
+    <span class="nss-readout-time" data-time>–</span>
     <span class="nss-readout-status" id="rStatus" hidden></span>
   </div>
-  <div class="nss-timeline" id="timeline" role="slider" tabindex="0" aria-label="Forecast timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
-    <span class="nss-timeline-arrow"></span>
-    <div class="nss-scale" id="scale">
-      <div class="nss-track" id="track"></div>
+  <div class="nss-panel-timerow">
+    <div class="nss-timeline" data-axis="x" role="slider" tabindex="0" aria-label="Forecast timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+      <span class="nss-timeline-arrow"></span>
+      <div class="nss-scale">
+        <div class="nss-track" data-track></div>
+        <span class="nss-needle"></span>
+        <span class="nss-tip" data-tip hidden></span>
+      </div>
+    </div>
+    <button type="button" class="nss-dock-btn" data-dock="1" aria-label="Dock the panel to the right" data-icon="dock"></button>
+  </div>
+</div>
+
+<!-- Docked: a narrow column on the right. -->
+<div class="nss-column" id="column" data-away>
+  <div class="nss-column-time" id="colTime">
+    <b data-day>–</b><strong data-time>–</strong><small data-lead></small>
+    <span class="col-status" id="colStatus" hidden></span>
+  </div>
+  <div class="nss-vtimeline" data-axis="y" role="slider" tabindex="0" aria-orientation="vertical" aria-label="Forecast timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+    <div class="nss-vtimeline-track">
+      <div class="nss-vtrack" data-track></div>
       <span class="nss-needle"></span>
-      <span class="nss-tip" id="tip" hidden></span>
+    </div>
+    <span class="nss-vtimeline-arrow"></span>
+    <span class="nss-tip" data-tip hidden></span>
+  </div>
+  <div class="nss-bands" role="group" aria-label="Chart layer">
+    <div class="nss-band-slot"><button type="button" class="nss-band" data-band="pressure" aria-pressed="true" aria-label="Pressure" data-icon="pressure"></button></div>
+    <div class="nss-band-slot"><button type="button" class="nss-band" data-band="wind" aria-pressed="false" aria-label="Wind" data-icon="wind"></button></div>
+    <div class="nss-band-slot"><button type="button" class="nss-band" data-band="swell" aria-pressed="false" aria-label="Swell" data-icon="swell"></button></div>
+  </div>
+  <button type="button" class="nss-dock-btn" data-dock="0" aria-label="Open the full panel" data-icon="open"></button>
+  <div class="nss-flyout" id="flyout" hidden>
+    <div class="nss-key" data-key></div>
+    <div class="nss-switch" data-swell role="group" aria-label="Swell measure">
+      <button type="button" data-var="height" aria-pressed="true" aria-label="Height" data-icon="height"></button>
+      <button type="button" data-var="period" aria-pressed="false" aria-label="Period" data-icon="period"></button>
     </div>
   </div>
 </div>
