@@ -3,6 +3,7 @@
 Standard library only, so the workflow can ask before installing anything:
 
   python scripts/gfs_latest.py         # prints e.g. "2026-10-12 06z"
+  python scripts/gfs_latest.py full    # the newest out to +384 h, with waves
   python scripts/gfs_latest.py wave    # the newest with NOAA's wave model
                                        # bulletins out, e.g. "2026-10-12-06z"
 
@@ -31,12 +32,21 @@ def exists(url):
         return False
 
 
-def latest_run():
-    """Newest run whose last frame is on the bucket."""
+def wave_grib_url(run, step):
+    return f'{BUCKET}/gfs.{run:%Y%m%d}/{run:%H}/wave/gridded/gfswave.t{run:%H}z.global.0p25.f{step:03d}.grib2'
+
+
+def latest_run(full=False):
+    """Newest run whose last frame is on the bucket: +120 h for the old charts,
+    or with full, +384 h of both the GFS and its wave model (the chart app's
+    frames, chart_frames.py)."""
     now = dt.datetime.now(dt.timezone.utc).replace(minute=0, second=0, microsecond=0)
     run = now.replace(hour=now.hour // 6 * 6)
     for _ in range(8):
-        if exists(grib_url(run, STEPS[-1]) + '.idx'):
+        if full:
+            if exists(grib_url(run, 384) + '.idx') and exists(wave_grib_url(run, 384) + '.idx'):
+                return run
+        elif exists(grib_url(run, STEPS[-1]) + '.idx'):
             return run
         run -= dt.timedelta(hours=6)
     raise SystemExit('No complete GFS run found in the last two days')
@@ -63,7 +73,9 @@ def latest_wave(back=4):
 
 if __name__ == '__main__':
     import sys
-    if sys.argv[1:] == ['wave']:
+    if sys.argv[1:] == ['full']:
+        print(label(latest_run(full=True)))
+    elif sys.argv[1:] == ['wave']:
         w = latest_wave()
         print(f'{w:%Y-%m-%d-%H}z' if w else '')
     else:
