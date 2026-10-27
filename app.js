@@ -905,7 +905,7 @@ if (Q.has('debug')) {
   document.body.append(probe, out);
   const show = () => {
     const cs = getComputedStyle(probe), vv = window.visualViewport;
-    out.textContent = [`surface ${document.documentElement.dataset.surface}`,
+    out.textContent = [`surface ${document.documentElement.dataset.surface}${document.documentElement.hasAttribute('data-short') ? ', short' : ''}`,
       `safe top ${cs.paddingTop}, bottom ${cs.paddingBottom}`,
       `window ${innerWidth}×${innerHeight}`, vv ? `visible ${Math.round(vv.width)}×${Math.round(vv.height)}` : '',
       `screen ${screen.width}×${screen.height}`].filter(Boolean).join('\n');
