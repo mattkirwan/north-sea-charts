@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en-GB" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EEEEEB">
+<title>Privacy · North Sea Surf</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="ds/tokens.css">
+<style>
+  body { margin: 0; background: var(--chart-sea); color: var(--ui-ink); font: 400 14px/1.55 var(--font-mono); }
+  main { max-width: 34rem; margin: 0 auto; padding: calc(var(--space-6) + env(safe-area-inset-top, 0px)) var(--space-3) calc(var(--space-6) + env(safe-area-inset-bottom, 0px)); }
+  h1 { font: 600 22px/1.2 var(--font-mono); letter-spacing: -0.3px; margin: 0 0 var(--space-3); }
+  p { margin: 0 0 var(--space-3); }
+  .card { margin-top: var(--space-6); padding: var(--space-3); background: var(--ui-surface); border: 1px solid var(--ui-line); border-radius: var(--radius-card); }
+  .state { font-weight: 500; }
+  button { margin-top: var(--space-2); height: 44px; padding: 0 var(--space-3); border: 1px solid var(--ui-control); border-radius: var(--radius-card);
+    background: var(--ui-control); color: var(--ui-control-ink); font: 500 12px/1 var(--font-mono); letter-spacing: 0.6px; text-transform: uppercase; cursor: pointer; }
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--lifeboat-deep); outline-offset: 2px; }
+  a { color: var(--ui-ink); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Privacy</h1>
+  <p>North Sea Surf keeps anonymous usage stats to see how the site is used and make it better.</p>
+  <p>They count page visits, the first thing done on the chart (moving it, zooming, using the timeline or changing layer), whether the site is open in a browser, in Instagram or from the home screen, and the link that brought you here. They come with a random ID made on this device and stored only on it, so a return visit counts as the same visitor. It isn't tied to your name, email or anything else about you.</p>
+  <p>There are no ads and no profiling, and nothing is shared or sold. The stats are kept with <a href="https://umami.is">Umami</a>. Browsers sending Do Not Track are not counted.</p>
+  <div class="card">
+    <p class="state" id="state" aria-live="polite">Checking…</p>
+    <button type="button" id="toggle" hidden></button>
+  </div>
+  <p style="margin-top: var(--space-6)"><a href="./">Back to the chart</a></p>
+</main>
+<script>
+  // Opting out: Umami's own switch (umami.disabled), and the random ID is deleted.
+  var state = document.getElementById('state'), toggle = document.getElementById('toggle');
+  function show() {
+    var off = false;
+    try { off = !!localStorage.getItem('umami.disabled'); } catch (e) { state.textContent = 'This browser blocks site storage, so nothing is counted here.'; return; }
+    state.textContent = off ? 'Stats are off for this browser.' : 'Stats are on for this browser.';
+    toggle.textContent = off ? 'Turn stats back on' : 'Opt out';
+    toggle.hidden = false;
+  }
+  toggle.addEventListener('click', function () {
+    try {
+      if (localStorage.getItem('umami.disabled')) localStorage.removeItem('umami.disabled');
+      else { localStorage.setItem('umami.disabled', '1'); localStorage.removeItem('nss_aid'); }
+    } catch (e) {}
+    show();
+  });
+  show();
+</script>
+</body>
+</html>

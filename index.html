@@ -22,6 +22,39 @@
     } catch (e) {}
   })();
 </script>
+<script>
+  // Anonymous usage stats (Umami): page views, where the app is running and
+  // a first-interaction event, against a random ID kept on this device so a
+  // returning visit counts as the same visitor. Nothing else about the person.
+  // Off on any other host, for Do Not Track, and after opting out (privacy.html).
+  (function () {
+    var id = null;
+    try {
+      if (!localStorage.getItem('umami.disabled')) {
+        id = localStorage.getItem('nss_aid');
+        if (!id) {
+          id = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
+          localStorage.setItem('nss_aid', id);
+        }
+      }
+    } catch (e) {}
+    var s = document.createElement('script');
+    s.defer = true;
+    s.src = 'https://cloud.umami.is/script.js';
+    s.dataset.websiteId = '2a69d927-89b3-40ce-9416-e499851b32a6';
+    s.dataset.domains = 'mattkirwan.github.io,northsea.surf';
+    s.dataset.doNotTrack = 'true';
+    // Given here, the ID is on the first page view too, not just what follows it.
+    if (id) s.dataset.distinctId = id;
+    s.onload = function () {
+      if (!id || !window.umami) return;
+      var standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+      var surface = standalone ? 'standalone' : /Instagram/i.test(navigator.userAgent) ? 'instagram' : 'browser';
+      umami.identify({ id: id, surface: surface });
+    };
+    document.head.appendChild(s);
+  })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
