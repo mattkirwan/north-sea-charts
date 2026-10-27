@@ -1,6 +1,9 @@
 # The tests in tests/: the chart app's frame format end to end (Python's
 # encoder against app.js's own decoder, under Node), the checks a frame must
-# pass before it's published, and the hourly freshness check. No network.
+# pass before it's published, publishing (partial runs, and the copy to R2
+# against a stand-in S3 server, with the runner's own AWS CLI), and the
+# hourly freshness check. No network. Also that every job's pinned
+# requirements still install on the jobs' Python.
 name: Tests
 
 on:
@@ -24,8 +27,14 @@ jobs:
         with:
           node-version: 20
       - name: Install
-        run: pip install -q numpy
+        run: pip install -q -r requirements/tests.txt
+      - name: The jobs' requirements install
+        run: |
+          for f in frames charts forecast; do
+            pip install -q --dry-run --ignore-installed -r requirements/$f.txt > /dev/null
+            echo "$f: ok"
+          done
       - name: Syntax of the app's scripts
         run: node --check app.js && node --check sw.js
       - name: Run the tests
-        run: python -m unittest discover -s tests -v
+        run: aws --version && python -m unittest discover -s tests -v

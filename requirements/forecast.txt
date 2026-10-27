@@ -1,0 +1,11 @@
+numpy==2.5.4
+    # via
+    #   (direct)
+    #   scipy
+    #   shapely
+pyshp==3.1.6
+    # via (direct)
+scipy==1.18.1
+    # via (direct)
+shapely==2.2.0
+    # via (direct)

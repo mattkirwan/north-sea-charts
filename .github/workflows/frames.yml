@@ -1,7 +1,11 @@
 # The chart app's frames (scripts/chart_frames.py): NOAA's GFS and GFS-Wave
 # on the app's square of sea, every frame of a run out to +384 h (209), as
-# small binary grids the app draws itself. Published on the `frames` branch
-# as a single commit replaced each time, so the repo doesn't grow.
+# small binary grids the app draws itself. Copied to Cloudflare R2, which
+# phones download them from (scripts/publish-r2.sh), and published with the
+# manifest on the `frames` branch as a single commit replaced each time, so
+# the repo doesn't grow. The manifest names R2 only once the frames are on
+# it; without R2 (not set up, or failing) phones take them from the branch.
+# A run published short (scripts/published.py says "partial") is tried again.
 #
 # A run reaches +384 h on NOAA's bucket, waves included, about 5 h after it
 # starts. Started by the loop in tick.yml as soon as it's there; these
@@ -30,7 +34,8 @@ jobs:
       - name: Is there a new run
         id: pub
         run: |
-          run=$(curl -fsS "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/frames/manifest.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["runLabel"])' || true)
+          branch="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/frames/"
+          run=$(python3 scripts/published.py "$branch")
           latest=$(python3 scripts/gfs_latest.py full)
           echo "Published: ${run:-none}. Newest out to +384 h on NOAA: $latest"
           if [ "$run" = "$latest" ] && [ "$GITHUB_EVENT_NAME" != workflow_dispatch ]; then
@@ -38,6 +43,10 @@ jobs:
             echo "go=" >> "$GITHUB_OUTPUT"
           else
             echo "go=1" >> "$GITHUB_OUTPUT"
+          fi
+          # Trying a partial run again: publish only if it does better.
+          if [ "$run" = "$latest partial" ]; then
+            echo "had=$(python3 scripts/published.py "$branch" --frames)" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/setup-python@v5
         if: steps.pub.outputs.go
@@ -47,15 +56,34 @@ jobs:
         if: steps.pub.outputs.go
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq libeccodes-dev > /dev/null
-          pip install -q cfgrib eccodes xarray scipy
+          pip install -q -r requirements/frames.txt
       - name: Make the frames
         if: steps.pub.outputs.go
         env:
           WORKERS: '8'
+          PUBLISHED_FRAMES: ${{ steps.pub.outputs.had }}
         run: python scripts/chart_frames.py "$RUNNER_TEMP/frames"
+      - name: Copy to R2
+        id: r2
+        if: steps.pub.outputs.go
+        continue-on-error: true
+        env:
+          R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: sh scripts/publish-r2.sh "$RUNNER_TEMP/frames"
       - name: Publish to the frames branch
         if: steps.pub.outputs.go
         env:
           TOKEN: ${{ github.token }}
           BRANCH: frames
         run: sh scripts/publish-charts.sh "$RUNNER_TEMP/frames"
+      # The branch is out (phones take the frames from it); still show the run
+      # failed, so R2 gets looked at.
+      - name: Fail if R2 failed
+        if: steps.r2.outcome == 'failure'
+        run: |
+          echo '::error::Copying the frames to R2 failed; phones are taking them from the branch'
+          exit 1

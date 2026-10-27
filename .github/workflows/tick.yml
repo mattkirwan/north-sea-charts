@@ -3,7 +3,10 @@
 # every half hour it starts the wave collector, as soon as NOAA has a new
 # complete GFS run it starts the chart job (and, once it's out to +384 h, the
 # chart app's frames), and as soon as NOAA's wave model
-# has the run out it starts the swell forecast. After about five and a half hours
+# has the run out it starts the swell forecast. Every hour it starts the
+# freshness check (health.yml), so that keeps running even if GitHub turns
+# the check's own schedule off (it does, on a repository quiet for 60 days;
+# runs started here don't stop). After about five and a half hours
 # it starts the next copy of itself (GitHub lets a workflow start another with
 # workflow_dispatch). Its own schedule is only a backstop to restart the loop
 # if it ever stops; the concurrency group keeps it to one loop at a time.
@@ -37,6 +40,7 @@ jobs:
           last_charts=0
           last_fc=0
           last_frames=0
+          last_health=0
           while [ "$(date +%s)" -lt "$end" ]; do
             now=$(date +%s)
             if [ $(( now - last_waves )) -ge 1800 ]; then
@@ -48,11 +52,14 @@ jobs:
             if [ -n "$latest" ] && [ "$published" != "$latest" ] && [ $(( now - last_charts )) -ge 1800 ]; then
               gh workflow run charts.yml --ref main && last_charts=$now && echo "$(date -u +%H:%M) charts started for $latest (published: ${published:-none})"
             fi
-            frames=$(curl -fsS "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/frames/manifest.json?t=${now}" \
-              | python3 -c 'import json,sys; print(json.load(sys.stdin)["runLabel"])' || true)
+            # "partial" if the published run stopped short, so it's tried again.
+            frames=$(python3 scripts/published.py "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/frames/" || true)
             full=$(python3 scripts/gfs_latest.py full 2>/dev/null || true)
             if [ -n "$full" ] && [ "$frames" != "$full" ] && [ $(( now - last_frames )) -ge 1800 ]; then
               gh workflow run frames.yml --ref main && last_frames=$now && echo "$(date -u +%H:%M) frames started for $full (published: ${frames:-none})"
+            fi
+            if [ $(( now - last_health )) -ge 3600 ]; then
+              gh workflow run health.yml --ref main && last_health=$now
             fi
             wave=$(python3 scripts/gfs_latest.py wave 2>/dev/null || true)
             if [ -n "$wave" ] && [ $(( now - last_fc )) -ge 1800 ] && \

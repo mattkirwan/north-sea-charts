@@ -60,7 +60,7 @@ jobs:
         if: steps.pub.outputs.go
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq libeccodes-dev > /dev/null
-          pip install -q cfgrib eccodes xarray matplotlib cartopy scipy
+          pip install -q -r requirements/charts.txt
       - name: Draw
         if: steps.pub.outputs.go
         env:

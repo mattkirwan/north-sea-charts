@@ -2,8 +2,8 @@
 which fails (and opens an issue) when it isn't.
 
 Reads the frames branch as a phone would: the manifest, then the first and
-last frames it lists, each of which must unpack to the size the manifest's
-grids give. The frames are published about 5 h after each of NOAA's runs
+last frames it lists (from R2 if the manifest says so), each of which must
+unpack to the size the manifest's grids give. The frames are published about 5 h after each of NOAA's runs
 (00, 06, 12 and 18 UTC), so they're normally up to 6 h old; MAX_AGE_H allows
 one run missed by a little, not two.
 
@@ -28,7 +28,8 @@ def get(url):
 
 
 def frame_url(base, m, step):
-    return f"{base}{m['dir'] + '/' if m.get('dir') else ''}f{step:0{m.get('pad', 3)}d}.bin.gz?run={m['run']}"
+    """Where a phone gets the frame: R2 when the manifest names it (base)."""
+    return f"{m.get('base') or base}{m['dir'] + '/' if m.get('dir') else ''}f{step:0{m.get('pad', 3)}d}.bin.gz?run={m['run']}"
 
 
 def problems(base, now_ms, fetch=get):

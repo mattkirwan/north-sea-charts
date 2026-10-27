@@ -52,7 +52,7 @@ WAVE = {'HTSGW:surface': 'hs', 'PERPW:surface': 'tp', **{f'SWELL:{k} in sequence
 SCALE = dict(p=[20, 850], wind=2, h=10, t=10)     # stored = (value - base) * scale; the manifest's scale
 LONG_MIN_M = 0.1
 R = 6371.229
-WAIT_MIN = 90
+WAIT_MIN = 20                                      # the loop starts us once +384 h is out; well inside the job's hour
 
 
 def _stere():
@@ -236,6 +236,20 @@ def run_dir(run):
     return f'{run:%Y-%m-%d-%H}z'
 
 
+def to_publish(steps, done, had=0):
+    """The frames to publish: the unbroken run of them from the start. Under
+    60% of the run is refused (SystemExit). A run published short is marked
+    incomplete and the loop tries it again; a try that gets no further than
+    the `had` frames already published gives None: publish nothing."""
+    upto = next((i for i, s in enumerate(steps) if s not in done), len(steps))
+    if upto < len(steps) * 0.6:
+        raise SystemExit(f'Only {upto} frames in a row; not publishing')
+    if upto <= had:
+        print(f'{upto} frames in a row, no more than the {had} published; not publishing')
+        return None
+    return steps[:upto]
+
+
 def run_frames(out, run, steps):
     d = run_dir(run)
     os.makedirs(os.path.join(out, d), exist_ok=True)
@@ -251,17 +265,16 @@ def run_frames(out, run, steps):
                 print(f'  f{step:03d} {stats}', flush=True)
     print(f'{len(done)} frames in {time.time() - t0:.0f} s; failed: {sorted(failed)}')
     good = sorted(done)
-    # Publish only an unbroken run of frames from the start.
-    upto = next((i for i, s in enumerate(steps) if s not in done), len(steps))
-    if upto < len(steps) * 0.6:
-        raise SystemExit(f'Only {upto} frames in a row; not publishing')
-    keep = steps[:upto]
+    keep = to_publish(steps, done, int(os.environ.get('PUBLISHED_FRAMES') or 0))
+    if keep is None:
+        return
+    upto = len(keep)
     for s in good:
         if s not in keep:
             os.unlink(os.path.join(out, d, f'f{s:03d}.bin.gz'))
     manifest = dict(
         run=int(run.replace(tzinfo=dt.timezone.utc).timestamp() * 1000), runLabel=gfs_latest.label(run),
-        made=int(time.time() * 1000), steps=keep, dir=d, file='{dir}/f{step}.bin.gz', pad=3,
+        made=int(time.time() * 1000), steps=keep, complete=upto == len(steps), dir=d, file='{dir}/f{step}.bin.gz', pad=3,
         square=dict(x0=X0, x1=X1, y0=Y0, y1=Y1, proj=PROJ4),
         grids=dict(p=P_N, s=S_N), scale=SCALE, encoding='row-delta-v1',
         source='NOAA GFS 0.25° (pressure, 10 m wind) and GFS-Wave 0.25° (height, longest swell period)')

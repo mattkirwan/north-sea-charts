@@ -12,22 +12,30 @@ import check_fresh as cfr  # noqa: E402
 H = 3600e3
 NOW = 1793124000000  # 2026-10-27 18z
 BASE = 'https://example.test/frames/'
+R2 = 'https://r2.example.test/'
 P, S = 4, 5
 FRAME = gzip.compress(bytes(4 * P * P + 2 * S * S))
 
 
-def branch(made_h_ago=3, run_h_ago=8, steps=(0, 1, 384), dir='2026-10-27-10z', frames=None, manifest=True):
+def branch(made_h_ago=3, run_h_ago=8, steps=(0, 1, 384), dir='2026-10-27-10z', frames=None, manifest=True, base=None):
     m = dict(run=NOW - run_h_ago * H, runLabel='2026-10-27 10z', made=NOW - made_h_ago * H, steps=list(steps),
              pad=3, grids=dict(p=P, s=S))
     if dir:
         m['dir'] = dir
+    if base:
+        m['base'] = base
     files = {f"{dir + '/' if dir else ''}f{s:03d}.bin.gz": FRAME for s in steps}
     files.update(frames or {})
 
     def fetch(url):
-        name = url[len(BASE):].split('?')[0]
-        if name == 'manifest.json' and manifest:
-            return json.dumps(m).encode()
+        # The manifest is always on the branch; the frames where base says.
+        if url.startswith(BASE + 'manifest.json'):
+            if manifest:
+                return json.dumps(m).encode()
+            raise OSError('HTTP 404 manifest.json')
+        if not url.startswith(base or BASE):
+            raise OSError(f'HTTP 404 {url}')
+        name = url[len(base or BASE):].split('?')[0]
         if files.get(name) is None:
             raise OSError(f'HTTP 404 {name}')
         return files[name]
@@ -43,6 +51,9 @@ class Fresh(unittest.TestCase):
 
     def test_old_layout_without_a_run_folder(self):
         self.assertEqual(self.found(dir=None), [])
+
+    def test_frames_on_r2(self):
+        self.assertEqual(self.found(base=R2), [])
 
     def test_stale(self):
         [p] = self.found(made_h_ago=cfr.MAX_AGE_H + 1)
