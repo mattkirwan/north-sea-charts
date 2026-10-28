@@ -2,13 +2,20 @@
 # encoder against app.js's own decoder, under Node), the checks a frame must
 # pass before it's published, publishing (partial runs, and the copy to R2
 # against a stand-in S3 server, with the runner's own AWS CLI), and the
-# hourly freshness check. No network. Also that every job's pinned
-# requirements still install on the jobs' Python.
+# hourly freshness check, which run the jobs draw; and the app itself in
+# Chromium, on a made-up run from a local server, offline too. No network
+# beyond installing. Also that every job's pinned requirements still install
+# on the jobs' Python.
+#
+# On every pull request: the check to require before merging to main. A
+# merge to main runs them again before staging gets it (staging.yml).
 name: Tests
 
 on:
   push:
+    branches-ignore: [main]
   pull_request:
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -27,7 +34,7 @@ jobs:
         with:
           node-version: 20
       - name: Install
-        run: pip install -q -r requirements/tests.txt
+        run: pip install -q -r requirements/tests.txt && python -m playwright install --with-deps chromium
       - name: The jobs' requirements install
         run: |
           for f in frames charts forecast; do
