@@ -4,7 +4,9 @@ one (manifest.json and gzipped frames, encoded by its own encode()), from a
 local server. It opens on the frame nearest now and draws it, the timeline
 moves the forecast on, the bands switch and are remembered, the menu opens
 and closes as a sheet (keyboard, scrim, grip) with the panel and hand
-settings in it, and without a manifest it says it's offline. Nothing leaves the machine: requests to any
+settings in it, and without a manifest it says it's offline. On first open it
+asks which language, with the phone's own picked; Settings › Language changes
+it, and it's remembered. Nothing leaves the machine: requests to any
 other host (fonts, the usage stats) are dropped.
 
 Skipped without Playwright (pip install playwright && playwright install
@@ -117,12 +119,15 @@ class App(unittest.TestCase):
         # None of the service worker: these are the page's own tests.
         self.new_page(service_workers='block')
 
-    def new_page(self, **kw):
-        """A phone's browser, with nothing let out beyond the local server."""
+    def new_page(self, first_open=False, **kw):
+        """A phone's browser, with nothing let out beyond the local server: one
+        that has opened the app before and kept English, unless first_open."""
         if getattr(self, 'context', None):
             self.context.close()
         self.context = self.browser.new_context(viewport=dict(width=390, height=844), device_scale_factor=2,
                                                 has_touch=True, **kw)
+        if not first_open:
+            self.context.add_init_script("try { if (localStorage.getItem('nss.lang') == null) localStorage.setItem('nss.lang', '\"en\"'); } catch (e) {}")
         self.context.route('**/*', lambda r: r.continue_() if r.request.url.startswith(self.origin) else r.abort())
         self.page = self.context.new_page()
         self.page.on('pageerror', lambda e: self.errors.append(str(e)))
@@ -418,6 +423,88 @@ class App(unittest.TestCase):
         self.assertEqual(self.page.evaluate("getComputedStyle(document.querySelector('#menu')).transitionDuration"), '0s')
         self.page.keyboard.press('Escape')
         self.closed()
+
+    # ---- Language ----------------------------------------------------------------
+    def kept_lang(self):
+        return self.page.evaluate("localStorage.getItem('nss.lang')")
+
+    def test_first_open_asks_with_the_phone_language_picked(self):
+        self.new_page(service_workers='block', first_open=True, locale='de-DE')
+        self.loaded()
+        self.assertEqual(self.shown(), 'Sprache')
+        self.assertEqual(self.page.locator('html').get_attribute('lang'), 'de-DE')
+        self.assertEqual(self.page.locator('[data-lang="de"]').get_attribute('aria-checked'), 'true')
+        self.assertEqual(self.focused().startswith('Deutsch'), True)
+        self.assertEqual(self.page.locator('#language [data-back]').is_hidden(), True)
+        self.assertEqual(self.page.locator('#language [data-lang-lede]').is_visible(), True)
+        self.assertEqual(self.page.locator('#language [data-lang]').count(), 6)
+        self.assertEqual(self.page.locator('#panel .nss-band[data-band="pressure"]').text_content(), 'Luftdruck')
+        self.assertEqual(self.kept_lang(), None)
+        # Picking another is the answer: in it at once, and kept.
+        self.page.click('[data-lang="nl"]')
+        self.closed()
+        self.assertEqual(self.page.locator('html').get_attribute('lang'), 'nl-NL')
+        self.assertEqual(self.page.locator('#panel .nss-band[data-band="pressure"]').text_content(), 'Luchtdruk')
+        self.assertEqual(self.page.locator('#panel [data-menu]').get_attribute('aria-label'), 'Menu')
+        self.assertEqual(self.kept_lang(), '"nl"')
+        self.page.reload()
+        self.page.wait_for_function("document.querySelector('.nss-timeline').getAttribute('aria-valuemax') !== '0'")
+        self.assertEqual(self.shown(), None)
+        self.assertEqual(self.page.locator('#panel .nss-band[data-band="wind"]').text_content(), 'Wind')
+        self.assertEqual(self.page.locator('#panel .nss-band[data-band="swell"]').text_content(), 'Deining')
+
+    def test_first_open_closed_keeps_the_phone_language(self):
+        self.new_page(service_workers='block', first_open=True, locale='nb-NO')
+        self.loaded()
+        self.assertEqual(self.shown(), 'Språk')
+        self.page.keyboard.press('Escape')
+        self.closed()
+        self.assertEqual(self.kept_lang(), '"nb"')
+        self.page.reload()
+        self.page.wait_for_function("document.querySelector('.nss-timeline').getAttribute('aria-valuemax') !== '0'")
+        self.assertEqual(self.shown(), None)
+        self.assertEqual(self.page.locator('#panel .nss-band[data-band="pressure"]').text_content(), 'Lufttrykk')
+        # From Settings, the same sheet, now with its way back.
+        self.page.click('#panel [data-menu]')
+        self.page.click('[data-go="settings"]')
+        self.page.click('[data-go="language"]')
+        self.assertEqual(self.page.locator('#language [data-back]').is_visible(), True)
+        self.assertEqual(self.page.locator('#language [data-lang-lede]').is_hidden(), True)
+
+    def test_a_phone_in_another_language_gets_english(self):
+        self.new_page(service_workers='block', first_open=True, locale='es-ES')
+        self.loaded()
+        self.assertEqual(self.shown(), 'Language')
+        self.assertEqual(self.page.locator('[data-lang="en"]').get_attribute('aria-checked'), 'true')
+
+    def test_language_setting_applies_at_once_and_is_remembered(self):
+        self.loaded()
+        self.page.click('#panel [data-menu]')
+        self.page.click('[data-go="settings"]')
+        self.assertEqual(self.page.locator('#settings [data-go="language"] [data-lang-name]').text_content(), 'English')
+        self.page.click('[data-go="language"]')
+        self.assertEqual(self.shown(), 'Language')
+        self.assertEqual(self.page.locator('[data-lang="en"]').get_attribute('aria-checked'), 'true')
+        self.page.click('[data-lang="fr"]')
+        # Applied behind the sheet, which stays open, in French now.
+        self.assertEqual(self.shown(), 'Langue')
+        self.assertEqual(self.page.locator('[data-lang="fr"]').get_attribute('aria-checked'), 'true')
+        self.assertEqual(self.page.locator('[data-lang="en"]').get_attribute('aria-checked'), 'false')
+        self.assertEqual(self.page.locator('#panel .nss-band[data-band="swell"]').text_content(), 'Houle')
+        self.page.click('#language [data-back]')
+        self.assertEqual(self.shown(), 'Réglages')
+        self.assertEqual(self.focused().startswith('Langue'), True)
+        self.assertEqual(self.page.locator('#settings [data-go="language"] [data-lang-name]').text_content(), 'Français')
+        self.page.keyboard.press('Escape')
+        self.closed()
+        # The time, in French too.
+        slider = self.page.locator('.nss-timeline')
+        self.assertTrue(slider.get_attribute('aria-valuetext').split(' ')[0] in
+                        ('lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'))
+        self.page.reload()
+        self.page.wait_for_function("document.querySelector('.nss-timeline').getAttribute('aria-valuemax') !== '0'")
+        self.assertEqual(self.page.locator('html').get_attribute('lang'), 'fr-FR')
+        self.assertEqual(self.page.locator('#panel .nss-band[data-band="pressure"]').text_content(), 'Pression')
 
     def test_opens_without_a_signal(self):
         # sw.js keeps the page, the app and the frames seen: with no network

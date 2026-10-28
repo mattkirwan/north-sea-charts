@@ -8,7 +8,8 @@
    right or the left (› Hand); both are in the page, one shown.
    Time moves only on the timeline; the chart pans and zooms like a map. The
    design system's tokens, panel components and icons (ds/) style
-   everything; the canvas reads the same tokens. */
+   everything; the canvas reads the same tokens. The words are in the
+   languages of the North Sea's coasts (i18n.js), one at a time (› Language). */
 'use strict';
 
 const Q = new URLSearchParams(location.search);
@@ -30,6 +31,38 @@ function firstInteraction(type) {
   try { sessionStorage.setItem('nss_fi', '1'); } catch {}
   if (window.umami) umami.track('first_interaction', { type });
 }
+
+// ---- Language -------------------------------------------------------------
+// The phone's own, if it's one of ours (Norwegian under any of its names),
+// else English, until someone picks one (Menu › Settings › Language, or on
+// first open).
+function phoneLang() {
+  for (const l of navigator.languages || [navigator.language]) {
+    const p = String(l || '').toLowerCase().split('-')[0];
+    const c = p === 'no' || p === 'nn' ? 'nb' : p === 'fy' ? 'nl' : p;
+    if (LANGS[c]) return c;
+  }
+  return 'en';
+}
+let lang = store.get('nss.lang', null);
+const langAsked = LANGS[lang] != null;
+if (!langAsked) lang = phoneLang();
+const tr = (k, vars) => {
+  const s = LANGS[lang].t[k] ?? LANGS.en.t[k];
+  return vars ? s.replace(/\{(\w+)\}/g, (m, v) => vars[v]) : s;
+};
+let fWeek, fLong, fHour;
+function applyLang() {
+  const tag = LANGS[lang].tag;
+  document.documentElement.lang = tag;
+  fWeek = new Intl.DateTimeFormat(tag, { weekday: 'short' });
+  fLong = new Intl.DateTimeFormat(tag, { weekday: 'long', day: 'numeric', month: 'long' });
+  fHour = new Intl.DateTimeFormat(tag, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = tr(el.dataset.t); });
+  document.querySelectorAll('[data-t-label]').forEach((el) => el.setAttribute('aria-label', tr(el.dataset.tLabel)));
+  document.querySelectorAll('[data-lang-name]').forEach((el) => { el.textContent = LANGS[lang].name; });
+}
+applyLang();
 
 // ---- Tokens ---------------------------------------------------------------
 let C = {};
@@ -62,14 +95,15 @@ const ICONS = {
   back: '<path d="M14.5 6 L8.5 12 L14.5 18"></path>',
   chevron: '<path d="M9.5 6 L15.5 12 L9.5 18"></path>',
   'panel-bottom': '<rect x="3" y="4.5" width="18" height="15"></rect><path d="M3 14.5 H21"></path>',
-  'panel-side': '<rect x="3" y="4.5" width="18" height="15"></rect><path d="M15.5 4.5 V19.5"></path>'
+  'panel-side': '<rect x="3" y="4.5" width="18" height="15"></rect><path d="M15.5 4.5 V19.5"></path>',
+  check: '<path d="M5 12.5 L10 17.5 L19 7"></path>'
 };
 const icon = (n, cls = '') => `<svg class="nss-icon${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
 document.querySelectorAll('[data-icon]').forEach((el) => { el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon, el.dataset.iconSize ? ` nss-icon--${el.dataset.iconSize}` : '')); });
 const KEYS = {
-  wind: { unit: 'Wind, mph', steps: ['10', '20', '25', '30', '40', '50+'], tok: 'wind', lev: [10, 20, 25, 30, 40, 50] },
-  height: { unit: 'Swell height, m', steps: ['0.5', '1', '1.5', '2', '3', '4', '6+'], tok: 'height', lev: [0.5, 1, 1.5, 2, 3, 4, 6], fig: (l) => `${l} m` },
-  period: { unit: 'Swell period, s', steps: ['8', '10', '12', '14', '16+'], tok: 'period', lev: [8, 10, 12, 14, 16], fig: (l) => `${l} s` }
+  wind: { unit: 'windUnit', steps: ['10', '20', '25', '30', '40', '50+'], tok: 'wind', lev: [10, 20, 25, 30, 40, 50] },
+  height: { unit: 'heightUnit', steps: ['0.5', '1', '1.5', '2', '3', '4', '6+'], tok: 'height', lev: [0.5, 1, 1.5, 2, 3, 4, 6], fig: (l) => `${l} m` },
+  period: { unit: 'periodUnit', steps: ['8', '10', '12', '14', '16+'], tok: 'period', lev: [8, 10, 12, 14, 16], fig: (l) => `${l} s` }
 };
 
 // ---- State ----------------------------------------------------------------
@@ -637,7 +671,7 @@ function draw() {
   for (const c of g.centres) {
     const px = sx(c.x), py = sy(c.y), col = c.low ? C.iso : C.high;
     if (!free(px - 16, py - 14, 32, 38)) continue;
-    ctx.font = `600 22px ${FONT}`; halo(c.low ? 'L' : 'H', px, py - 2, col, C.sea);
+    ctx.font = `600 22px ${FONT}`; halo(tr(c.low ? 'low' : 'high'), px, py - 2, col, C.sea);
     ctx.font = `400 10px ${FONT}`; halo(String(c.val), px, py + 16, col, C.sea);
   }
   ctx.font = `400 10px ${FONT}`;
@@ -710,17 +744,17 @@ function renderPanel() {
   if (band === 'pressure') {
     // The two isobar styles, drawn as the chart draws them.
     const line = (attrs) => `<i class="key-line"><svg aria-hidden="true"><line x1="2" y1="3" x2="92%" y2="3" style="stroke: var(--chart-isobar)" ${attrs}></line></svg></i>`;
-    unit = 'Isobars, every 4 hPa';
+    unit = tr('isobars');
     html = `<span class="nss-key-unit">${unit}</span><div class="nss-key-steps">` +
-      `<span class="nss-key-step">${line('stroke-width="1.3"')}Round lows</span>` +
-      `<span class="nss-key-step">${line('stroke-width="1.6" stroke-linecap="round" stroke-dasharray="0.1 3.5" opacity="0.85"')}Round highs</span></div>`;
+      `<span class="nss-key-step">${line('stroke-width="1.3"')}${tr('roundLows')}</span>` +
+      `<span class="nss-key-step">${line('stroke-width="1.6" stroke-linecap="round" stroke-dasharray="0.1 3.5" opacity="0.85"')}${tr('roundHighs')}</span></div>`;
   } else {
     const K = KEYS[band === 'wind' ? 'wind' : swellVar];
-    unit = K.unit;
+    unit = tr(K.unit);
     html = `<span class="nss-key-unit">${unit}</span><div class="nss-key-steps">` +
       K.steps.map((s, i) => `<span class="nss-key-step"><i style="background: var(--${K.tok}-${i + 1})"></i>${s}</span>`).join('') + '</div>';
   }
-  document.querySelectorAll('[data-key]').forEach((k) => { k.setAttribute('aria-label', `${unit} key`); k.innerHTML = html; });
+  document.querySelectorAll('[data-key]').forEach((k) => { k.setAttribute('aria-label', tr('keyOf', { unit })); k.innerHTML = html; });
   // Docked, the key floats level with the selected band (and comes in from
   // the column each time it moves).
   const slot = columnEl.querySelector(`.nss-band[data-band="${band}"]`).parentNode;
@@ -762,7 +796,7 @@ const scrim = $('#scrim'), sheets = {};
 document.querySelectorAll('[data-sheet]').forEach((s) => { sheets[s.dataset.sheet] = s; });
 let sheetOn = null, sheetT = 0;
 const menuBtn = () => (docked ? columnEl : panelEl).querySelector('[data-menu]');
-const focusables = (s) => [...s.querySelectorAll('button, a[href]')];
+const focusables = (s) => [...s.querySelectorAll('button, a[href]')].filter((b) => !b.closest('[hidden]'));
 // Shown or not, sliding there or (switching sheets, or with Reduce Motion) not.
 function reveal(el, on, slide) {
   if (!slide) el.style.transition = 'none';
@@ -781,6 +815,8 @@ function openSheet(name, focus) {
 }
 function closeSheet() {
   if (!sheetOn) return;
+  // Closed on first open without picking: the language it opened in stands.
+  if (sheetOn === 'language' && langFirst) keepLang();
   const s = sheets[sheetOn], slide = !reduced.matches;
   sheetOn = null; applyInert();
   reveal(s, false, slide); reveal(scrim, false, slide);
@@ -798,7 +834,7 @@ scrim.addEventListener('click', closeSheet);
 document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', closeSheet));
 document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => openSheet(b.dataset.go)));
 document.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', () => {
-  openSheet('menu', `[data-go="${b.closest('[data-sheet]').dataset.sheet}"]`);
+  openSheet(b.dataset.back || 'menu', `[data-go="${b.closest('[data-sheet]').dataset.sheet}"]`);
 }));
 // Chart is where we are: back to it. The views still to come do nothing.
 document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
@@ -810,6 +846,45 @@ document.querySelectorAll('[data-set]').forEach((sw) => sw.addEventListener('cli
   if (sw.dataset.set === 'panel' && docked !== (b.dataset.value === 'side')) setDocked(b.dataset.value === 'side');
   if (sw.dataset.set === 'hand' && hand !== b.dataset.value) setHand(b.dataset.value);
 }));
+// Language: picked at once, everything in the new one. From Settings the
+// sheet stays, to go back from; on first open, picking one is the answer.
+const langList = $('[data-langs]');
+let langFirst = false;
+langList.innerHTML = Object.entries(LANGS).map(([c, L]) => `<li><button type="button" class="nss-menu-item" role="radio" data-lang="${c}" lang="${L.tag}">` +
+  `<span class="nss-menu-text"><span class="nss-menu-name">${L.name}</span><span class="nss-menu-sub">${L.places}</span></span>${icon('check', ' nss-icon--sm')}</button></li>`).join('');
+function renderLangs() {
+  langList.querySelectorAll('[data-lang]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.lang === lang)));
+}
+function keepLang() {
+  store.set('nss.lang', lang);
+  if (langFirst) { langFirst = false; setTimeout(() => langMode(false), 300); }   // once it has gone
+}
+function setLang(c) {
+  lang = c;
+  applyLang(); renderLangs(); renderPanel(); renderTips(); buildTicks();
+  if (man) setFrame(idx, true);
+  statusEls[0].dataset.shown = ''; renderStatus();
+  requestDraw();
+}
+langList.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-lang]');
+  if (!b) return;
+  if (b.dataset.lang !== lang) setLang(b.dataset.lang);
+  const first = langFirst;
+  keepLang();
+  if (first) closeSheet();
+});
+// First open (or nothing kept): the sheet by itself, no way back to Settings
+// but a word on where to find it, and the phone's own language picked.
+function langMode(first) {
+  const s = sheets.language;
+  langFirst = first;
+  s.querySelector('[data-back]').hidden = first;
+  s.querySelector('[data-lang-lede]').hidden = !first;
+  s.querySelector('[data-lang-foot]').hidden = !first;
+}
+function askLang() { langMode(true); openSheet('language', '[aria-checked="true"]'); }
+
 // Focus stays in the sheet; Escape closes it.
 document.addEventListener('keydown', (e) => {
   if (!sheetOn) return;
@@ -844,29 +919,30 @@ document.querySelectorAll('.nss-sheet-grip').forEach((g) => {
 });
 
 // ---- Time readout and status -------------------------------------------------------------
-const fWeek = new Intl.DateTimeFormat('en-GB', { weekday: 'short' });
-const fLong = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-const fHour = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-const dayName = (t) => `${fWeek.format(t)} ${new Date(t).getDate()}`;
+// The formatters are the language's (applyLang). Short weekdays without the
+// full stop some languages give them (man., lun.).
+const weekday = (t) => fWeek.format(t).replace(/\.$/, '');
+const dayName = (t) => `${weekday(t)} ${new Date(t).getDate()}`;
 const setText = (sel, text) => document.querySelectorAll(sel).forEach((el) => { el.textContent = text; });
 function renderReadout() {
   if (!man) return;
-  const t = validAt(man, idx), label = `Forecast time, ${fLong.format(t)} ${fHour.format(t)}`;
-  setText('[data-day]', dayName(t).toUpperCase());
+  const t = validAt(man, idx), label = tr('forecastAt', { when: `${fLong.format(t)} ${fHour.format(t)}` });
+  setText('[data-day]', dayName(t).toLocaleUpperCase(LANGS[lang].tag));
   setText('[data-lead]', `+${man.steps[idx]}H`);
   setText('[data-time]', fHour.format(t));
   $('#readout').setAttribute('aria-label', label);
   $('#colTime').setAttribute('aria-label', label);
 }
-function runName(m) { const t = m.run; return `run ${fWeek.format(t)} ${String(new Date(t).getUTCHours()).padStart(2, '0')}z`; }
+const zHour = (t) => String(new Date(t).getUTCHours()).padStart(2, '0');
+function runName(m) { return tr('run', { day: weekday(m.run), hh: zHour(m.run) }); }
 const statusEls = [$('#rStatus'), $('#colStatus')];
 function renderStatus() {
   let text = '', kind = '';
-  if (!man) [text, kind] = offline ? ['Offline', 'offline'] : ['Loading', 'loading'];
-  else if (!frames[idx] && !offline) [text, kind] = ['Loading', 'loading'];
-  else if (offline) [text, kind] = [`Offline · ${runName(man)}`, 'offline'];
-  else if (Date.now() - man.run > 12 * H) [text, kind] = [`Run ${Math.round((Date.now() - man.run) / H)} h old`, 'old'];
-  else if (updatedNote) [text, kind] = [`Updated to ${String(new Date(man.run).getUTCHours()).padStart(2, '0')}z`, 'updated'];
+  if (!man) [text, kind] = offline ? [tr('offline'), 'offline'] : [tr('loading'), 'loading'];
+  else if (!frames[idx] && !offline) [text, kind] = [tr('loading'), 'loading'];
+  else if (offline) [text, kind] = [tr('offlineRun', { run: runName(man) }), 'offline'];
+  else if (Date.now() - man.run > 12 * H) [text, kind] = [tr('old', { n: Math.round((Date.now() - man.run) / H) }), 'old'];
+  else if (updatedNote) [text, kind] = [tr('updated', { hh: zHour(man.run) }), 'updated'];
   const [open, col] = statusEls, key = `${kind}|${text}`;
   if (open.dataset.shown === key) return;
   open.dataset.shown = key;
@@ -912,7 +988,7 @@ function buildTicks() {
     const first = new Date(validAt(man, 0)); first.setHours(24, 0, 0, 0);
     for (let d = new Date(first); d.getTime() <= validAt(man, n - 1); d.setDate(d.getDate() + 1)) {
       const p = fracIndex(d.getTime()) * TICK, past = d.getTime() < now ? ' nss-day--past' : '';
-      const name = T.axis === 'x' ? dayName(d.getTime()) : fWeek.format(d);
+      const name = T.axis === 'x' ? dayName(d.getTime()) : weekday(d);
       html.push(`<span class="nss-tick nss-tick--day${past ? ' nss-tick--past' : ''}" style="${at}:${p.toFixed(1)}px"></span><span class="nss-day${past}" style="${at}:${(p + label).toFixed(1)}px">${name}</span>`);
     }
     const np = fracIndex(now);
@@ -1073,13 +1149,13 @@ for (const T of TL) {
 }
 
 // ---- First-use tips: beside the needle, in whichever panel is showing -------------------------
-const TIPS = { 1: icon('slide') + 'Slide timeline', 2: icon('reset') + 'Double-tap to reset' };
+const TIPS = { 1: () => icon('slide') + tr('tipSlide'), 2: () => icon('reset') + tr('tipReset') };
 let tipShown = 0, tip2Due = false, tipFading = false;
 function renderTips() {
   TL.forEach((T, i) => {
     const on = tipShown && i === (docked ? 1 : 0);
     T.tip.hidden = !on;
-    if (on) { T.tip.innerHTML = TIPS[tipShown]; T.tip.toggleAttribute('data-fading', tipFading); }
+    if (on) { T.tip.innerHTML = TIPS[tipShown](); T.tip.toggleAttribute('data-fading', tipFading); }
   });
 }
 function showTip() {
@@ -1148,5 +1224,7 @@ requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement
 document.fonts && document.fonts.ready.then(requestDraw);
 document.fonts && document.fonts.load(`400 10px ${FONT}`).then(requestDraw).catch(() => {});
 renderStatus();
+renderLangs();
+if (!langAsked) askLang();
 refreshManifest();
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});

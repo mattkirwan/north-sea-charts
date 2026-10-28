@@ -42,6 +42,6 @@ jobs:
             echo "$f: ok"
           done
       - name: Syntax of the app's scripts
-        run: node --check app.js && node --check sw.js
+        run: node --check i18n.js && node --check app.js && node --check sw.js
       - name: Run the tests
         run: aws --version && python -m unittest discover -s tests -v
