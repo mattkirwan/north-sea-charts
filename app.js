@@ -539,6 +539,23 @@ const halo = (text, x, y, fill, haloCol) => {
   ctx.strokeStyle = haloCol; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeText(text, x, y);
   ctx.fillStyle = fill; ctx.fillText(text, x, y);
 };
+// The geometry each band draws, by frame.
+const geomKey = (i) => (band === 'pressure' ? `p${man.run}:${i}` : band === 'wind' ? `wind${man.run}:${i}` : `${swellVar}${man.run}:${i}`);
+const buildGeom = (i) => (band === 'pressure' ? pressureGeom(i) : band === 'wind' ? windGeom(i) : swellGeom(i, swellVar));
+// While the timeline moves, the frame to draw. Building one takes a phone tens
+// of ms, too long for every frame a drag or flick passes: the needle's own
+// frame is built at most every 150 ms and every few redraws, and in between
+// the chart shows the nearest one already built, and catches up when the
+// timeline stops.
+let lastBuild = 0, sinceBuild = 0;
+function movingFrame(fi) {
+  if (fi < 0 || !tl.moving || geomCache.has(geomKey(fi))) return fi;
+  if (performance.now() - lastBuild > 150 && sinceBuild >= 4) return fi;
+  for (let d = 1; d < man.steps.length; d++) {
+    for (const i of [fi - d, fi + d]) if (frames[i] && geomCache.has(geomKey(i))) { requestDraw(); return i; }
+  }
+  return fi;
+}
 function draw() {
   drawQueued = false;
   if (!W) return;
@@ -548,8 +565,9 @@ function draw() {
   const sx = (wx) => W / 2 + (wx - x) * k, sy = (wy) => Hs / 2 - (wy - y) * k;
   screen();
   ctx.fillStyle = C.sea; ctx.fillRect(0, 0, W, Hs);
-  const fi = frames[idx] ? idx : shown >= 0 && frames[shown] ? shown : -1;
+  const fi = movingFrame(frames[idx] ? idx : shown >= 0 && frames[shown] ? shown : -1);
   if (fi >= 0) shown = fi;
+  if (fi >= 0 && !geomCache.has(geomKey(fi))) { buildGeom(fi); lastBuild = performance.now(); sinceBuild = 0; } else sinceBuild++;
   const swell = band === 'swell' && fi >= 0 ? swellGeom(fi, swellVar) : null;
   if (swell) {
     world();
@@ -765,7 +783,7 @@ function fadeUpdated() {
 }
 
 // ---- Timeline: horizontal in the open panel, vertical in the docked column -------------------
-const tl = { raw: 0, target: 0, anim: 0, v: 0 };
+const tl = { raw: 0, target: 0, anim: 0, v: 0, moving: false };
 const TL = [...document.querySelectorAll('[data-axis]')].map((el) => ({
   el, axis: el.dataset.axis, track: el.querySelector('[data-track]'), tip: el.querySelector('[data-tip]'), ticks: []
 }));
@@ -815,20 +833,19 @@ function placeTrack() {
   const d = (-shownPos() * TICK).toFixed(2);
   for (const T of TL) T.track.style.transform = T.axis === 'x' ? `translateX(${d}px)` : `translateY(${d}px)`;
 }
-// Build the frames either side of the needle while nothing else is happening,
-// so scanning finds them ready.
+// Build the band's frames either side of the needle while nothing else is
+// happening, so scanning finds them ready. Not while the timeline moves: each
+// takes a phone tens of ms, which the scale would stall for.
 let warmT = 0;
 function warm() {
   clearTimeout(warmT);
   warmT = setTimeout(function next() {
-    if (!man) return;
-    for (const d of [1, -1, 2, -2, 3, -3, 4, -4, 6, -6, 8, -8]) {
-      const i = idx + d;
-      if (i < 0 || i >= man.steps.length || !frames[i]) continue;
-      const pk = `p${man.run}:${i}`, sk = `${swellVar}${man.run}:${i}`;
-      if (!geomCache.has(pk)) { pressureGeom(i); warmT = setTimeout(next, 0); return; }
-      if (band === 'swell' && !geomCache.has(sk)) { swellGeom(i, swellVar); warmT = setTimeout(next, 0); return; }
-      if (band === 'wind' && !geomCache.has(`wind${man.run}:${i}`)) { windGeom(i); warmT = setTimeout(next, 0); return; }
+    if (!man || tl.moving) return;
+    for (let d = 1; d <= 16; d++) {
+      for (const i of [idx + d, idx - d]) {
+        if (i < 0 || i >= man.steps.length || !frames[i] || geomCache.has(geomKey(i))) continue;
+        buildGeom(i); warmT = setTimeout(next, 0); return;
+      }
     }
   }, 60);
 }
@@ -850,12 +867,14 @@ function moveTo(raw) {
 }
 function animateTo(target, dur = 220) {
   cancelAnimationFrame(tl.anim);
+  tl.moving = true;
   const from = tl.raw, start = performance.now();
   if (reduced.matches) dur = 0;
   const step = (t) => {
     const q = dur ? Math.min(1, (t - start) / dur) : 1, e = 1 - Math.pow(1 - q, 3);
     moveTo(from + (target - from) * e);
-    if (q < 1) tl.anim = requestAnimationFrame(step); else scanStopped();
+    if (q < 1) { tl.anim = requestAnimationFrame(step); return; }
+    tl.moving = false; requestDraw(); warm(); scanStopped();
   };
   tl.anim = requestAnimationFrame(step);
 }
@@ -866,10 +885,13 @@ let drag = null, tlTap = 0;
 // frames' times can't be taken from.
 const evTime = (e) => (e.timeStamp > 1e11 ? e.timeStamp - performance.timeOrigin : e.timeStamp);
 // How fast the scale was moving as the finger left it, in frames per ms: from
-// the last moments of the drag, and none if the finger stopped before lifting.
+// the last moments of the drag, and none if the finger stopped before lifting:
+// no move for 120 ms, or for twice the gap between the last two moves when a
+// busy page spaced them out further than that.
 function releaseSpeed(d, now) {
   const s = d.samples, [t1, r1] = s[s.length - 1], [t0, r0] = s[0];
-  if (now - t1 > 120 || t1 - t0 < 8) return 0;
+  const gap = s.length > 1 ? t1 - s[s.length - 2][0] : 0;
+  if (now - t1 > Math.max(120, 2 * gap) || t1 - t0 < 8) return 0;
   return (r1 - r0) / (t1 - t0);
 }
 for (const T of TL) {
@@ -878,19 +900,26 @@ for (const T of TL) {
     if (!man) return;
     T.el.setPointerCapture(e.pointerId);
     cancelAnimationFrame(tl.anim);
+    tl.moving = true;
     drag = { c: along(e), c0: along(e), t0: evTime(e), samples: [[evTime(e), tl.raw]] };
     tipTouched();
   });
   T.el.addEventListener('pointermove', (e) => {
     if (!drag) return;
     // The scale follows the finger: dragging left, or up, moves on in time.
-    const dc = along(e) - drag.c;
-    drag.c = along(e);
-    moveTo(tl.raw - dc / TICK);
+    // While the page is busy the browser hands over one move a frame; the
+    // moves it gathered into it, each at its own time, say how fast the finger
+    // really went.
+    const all = e.getCoalescedEvents ? e.getCoalescedEvents() : [], pts = all.length ? all : [e];
+    let raw = tl.raw;
+    for (const p of pts) {
+      raw -= (along(p) - drag.c) / TICK; drag.c = along(p);
+      // When the finger moved (the event's own time), not when we got to it.
+      drag.samples.push([evTime(p), raw]);
+    }
+    moveTo(raw);
     if (Math.abs(drag.c - drag.c0) > 6) firstInteraction('rail');
-    // When the finger moved (the event's own time), not when we got to it.
-    const now = evTime(e);
-    drag.samples.push([now, tl.raw]);
+    const now = drag.samples[drag.samples.length - 1][0];
     while (drag.samples.length > 2 && now - drag.samples[0][0] > 120) drag.samples.shift();
   });
   const end = (e) => {
@@ -907,7 +936,7 @@ for (const T of TL) {
     // one a few hours, a hard one (faster swipes count for more) the whole run.
     let vel = v * (1 + 6 * Math.abs(v)), last = now;
     const step = (t) => {
-      const dt = Math.max(0, Math.min(100, t - last)); last = t;
+      const dt = Math.max(0, Math.min(250, t - last)); last = t;
       vel *= Math.pow(0.9975, dt);
       let r = tl.raw + vel * dt;
       if (r < 0 || r > maxPos()) {
