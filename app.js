@@ -885,10 +885,10 @@ const settle = () => animateTo(Math.round(Math.max(0, Math.min(maxPos(), tl.raw)
 let drag = null, tlTap = 0;
 // ?debug=1: what the last drag of the timeline was like (see the readout).
 const tlDbg = Q.has('debug') ? { last: null, cur: null } : null;
-// An event's own time on the page's clock (performance.now), whichever clock
-// the browser stamps it with: some give time since 1970, which the animation
-// frames' times can't be taken from.
-const evTime = (e) => (e.timeStamp > 1e11 ? e.timeStamp - performance.timeOrigin : e.timeStamp);
+// The drag is timed by when the page gets each move and the lift, on the
+// page's own clock, not by the times the events carry: iOS can stamp the lift
+// on a different footing from the moves, which reads as a finger that stopped
+// before it lifted, and no flick.
 // How fast the scale was moving as the finger left it, in frames per ms: from
 // the last moments of the drag, and none if the finger stopped before lifting:
 // no move for 120 ms, or for twice the gap between the last two moves when a
@@ -906,32 +906,26 @@ for (const T of TL) {
     T.el.setPointerCapture(e.pointerId);
     cancelAnimationFrame(tl.anim);
     tl.moving = true;
-    drag = { c: along(e), c0: along(e), t0: evTime(e), samples: [[evTime(e), tl.raw]] };
+    const now = performance.now();
+    drag = { c: along(e), c0: along(e), t0: now, samples: [[now, tl.raw]], stamp: e.timeStamp };
     if (tlDbg) tlDbg.cur = { moves: 0, merged: 0, touches: 0, end: '', slowest: 0, builds: 0, raw: e.timeStamp };
     tipTouched();
   });
   T.el.addEventListener('pointermove', (e) => {
     if (!drag) return;
     // The scale follows the finger: dragging left, or up, moves on in time.
-    // While the page is busy the browser hands over one move a frame; the
-    // moves it gathered into it, each at its own time, say how fast the finger
-    // really went.
-    const all = e.getCoalescedEvents ? e.getCoalescedEvents() : [], pts = all.length ? all : [e];
-    if (tlDbg && tlDbg.cur) { tlDbg.cur.moves++; tlDbg.cur.merged += pts.length; }
-    let raw = tl.raw;
-    for (const p of pts) {
-      raw -= (along(p) - drag.c) / TICK; drag.c = along(p);
-      // When the finger moved (the event's own time), not when we got to it.
-      drag.samples.push([evTime(p), raw]);
-    }
-    moveTo(raw);
+    const all = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+    if (tlDbg && tlDbg.cur) { tlDbg.cur.moves++; tlDbg.cur.merged += all.length || 1; }
+    const now = performance.now(), dc = along(e) - drag.c;
+    drag.c = along(e); drag.stamp = e.timeStamp;
+    moveTo(tl.raw - dc / TICK);
     if (Math.abs(drag.c - drag.c0) > 6) firstInteraction('rail');
-    const now = drag.samples[drag.samples.length - 1][0];
+    drag.samples.push([now, tl.raw]);
     while (drag.samples.length > 2 && now - drag.samples[0][0] > 120) drag.samples.shift();
   });
   const end = (e) => {
     if (!drag) return;
-    const now = evTime(e), d = drag;
+    const now = performance.now(), d = drag;
     drag = null;
     if (Math.abs(d.c - d.c0) < 6 && now - d.t0 < 300) {
       if (now - tlTap < 320) { tlTap = 0; firstInteraction('rail'); animateTo(nearestIndex(man, Date.now()), 360); return; }
@@ -940,10 +934,12 @@ for (const T of TL) {
     const v = releaseSpeed(d, now);
     if (tlDbg && tlDbg.cur) {
       const c = tlDbg.cur, s = d.samples;
-      Object.assign(c, { end: e.type, gap: now - s[s.length - 1][0], span: s[s.length - 1][0] - s[0][0], v, flick: !(reduced.matches || Math.abs(v) < 0.015 || tl.raw < 0 || tl.raw > maxPos()) });
+      Object.assign(c, { end: e.type, gap: now - s[s.length - 1][0], stampGap: e.timeStamp - d.stamp, span: s[s.length - 1][0] - s[0][0], v, flick: !(Math.abs(v) < 0.015 || tl.raw < 0 || tl.raw > maxPos()) });
       tlDbg.last = c;
     }
-    if (reduced.matches || Math.abs(v) < 0.015 || tl.raw < 0 || tl.raw > maxPos()) { settle(); return; }
+    // With Reduce Motion too: like a list's own scrolling on iOS, the glide is
+    // the finger's doing, not motion put on the page.
+    if (Math.abs(v) < 0.015 || tl.raw < 0 || tl.raw > maxPos()) { settle(); return; }
     // A flick rolls on and slows to a stop, passing frames on the way: a soft
     // one a few hours, a hard one (faster swipes count for more) the whole run.
     let vel = v * (1 + 6 * Math.abs(v)), last = now;
@@ -1037,7 +1033,7 @@ if (Q.has('debug')) {
     const c = tlDbg.last, f = (x, d = 0) => (x == null ? '–' : (+x).toFixed(d));
     return [`frame rate ${fps}/s${reduced.matches ? ', reduce motion ON' : ''}, smooth-move fix ${typeof movingFrame === 'function' ? 'in' : 'missing'}`,
       c ? `last drag: ${c.moves} moves (${c.merged} with merged), ${c.touches} touchmoves${c.touchCancel ? ', TOUCH CANCELLED' : ''}` : 'last drag: –',
-      c ? `  ended ${c.end}, gap ${f(c.gap)} ms, over ${f(c.span)} ms, speed ${f(c.v, 3)}, ${c.flick ? 'flicked' : 'no flick'}` : '',
+      c ? `  ended ${c.end}, gap ${f(c.gap)} ms (stamped ${f(c.stampGap)}), over ${f(c.span)} ms, speed ${f(c.v, 3)}, ${c.flick ? 'flicked' : 'no flick'}` : '',
       c ? `  slowest frame ${f(c.slowest)} ms, built ${c.builds}, stamp ${c.raw > 1e11 ? 'epoch' : 'page'}` : ''];
   }
 }
