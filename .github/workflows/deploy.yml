@@ -64,6 +64,10 @@ jobs:
         run: |
           rsync -a --exclude .git --exclude .github --exclude CNAME ./ "$RUNNER_TEMP/site/"
           [ "$BRANCH" = production ] || printf '/*\n  X-Robots-Tag: noindex\n' > "$RUNNER_TEMP/site/_headers"
+          # The app's scripts and styles by this deploy's commit (index.html's
+          # ?v=dev), so a phone never pairs this page with the last deploy's.
+          sed -i "s/?v=dev\"/?v=$(git rev-parse --short=12 HEAD)\"/g" "$RUNNER_TEMP/site/index.html"
+          grep -q '?v=dev"' "$RUNNER_TEMP/site/index.html" && { echo '::error::index.html still has ?v=dev'; exit 1; } || true
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Make the project the first time
         if: steps.cf.outputs.go
