@@ -58,10 +58,44 @@ def _have_r2_tools():
         return False
 
 
+def public_domain(port, bucket):
+    """R2's public domain, played by a local server: the bucket's objects by
+    their keys, with a CORS header, or 403 for every request while not live."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    import boto3
+    s3 = boto3.client('s3', endpoint_url=f'http://127.0.0.1:{port}', region_name='us-east-1',
+                      aws_access_key_id='test', aws_secret_access_key='test')
+
+    class Domain(BaseHTTPRequestHandler):
+        def do_GET(self):
+            key = self.path.lstrip('/').split('?')[0]
+            try:
+                assert self.server.live
+                body = s3.get_object(Bucket=bucket, Key=key)['Body'].read()
+            except Exception:
+                self.send_response(403)
+                self.end_headers()
+                return
+            self.send_response(200)
+            if self.server.cors and self.headers.get('Origin'):
+                self.send_header('Access-Control-Allow-Origin', self.headers['Origin'])
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+    srv = ThreadingHTTPServer(('127.0.0.1', 0), Domain)
+    srv.live = srv.cors = True
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
 @unittest.skipUnless(_have_r2_tools(), 'needs the AWS CLI and moto[server]')
 class PublishR2(unittest.TestCase):
     BUCKET = 'frames'
-    PUBLIC = 'https://frames.example.test'
+    ORIGIN = 'https://app.example.test'
     RUN = '2026-10-27-12z'
 
     @classmethod
@@ -73,13 +107,18 @@ class PublishR2(unittest.TestCase):
         cls.server = ThreadedMotoServer(ip_address='127.0.0.1', port=cls.port)
         cls.server.start()
 
+        cls.domain = public_domain(cls.port, cls.BUCKET)
+
     @classmethod
     def tearDownClass(cls):
         cls.server.stop()
+        cls.domain.shutdown()
 
     def setUp(self):
         import boto3
         self.endpoint = f'http://127.0.0.1:{self.port}'
+        self.public = f'http://127.0.0.1:{self.domain.server_port}'
+        self.domain.live, self.domain.cors = True, True
         self.s3 = boto3.client('s3', endpoint_url=self.endpoint, region_name='us-east-1',
                                aws_access_key_id='test', aws_secret_access_key='test')
         for o in self.s3.list_objects_v2(Bucket=self.BUCKET).get('Contents', []) if self.bucket_exists() else []:
@@ -104,7 +143,8 @@ class PublishR2(unittest.TestCase):
         return any(b['Name'] == self.BUCKET for b in self.s3.list_buckets()['Buckets'])
 
     def publish(self, **env):
-        e = {**os.environ, 'R2_ENDPOINT': self.endpoint, 'R2_PUBLIC_URL': self.PUBLIC, 'R2_ACCOUNT_ID': 'x',
+        e = {**os.environ, 'R2_ENDPOINT': self.endpoint, 'R2_PUBLIC_URL': self.public, 'R2_ACCOUNT_ID': 'x',
+             'APP_ORIGIN': self.ORIGIN,
              'R2_BUCKET': self.BUCKET, 'R2_ACCESS_KEY_ID': 'test', 'R2_SECRET_ACCESS_KEY': 'test', **env}
         return subprocess.run(['sh', os.path.join(ROOT, 'scripts', 'publish-r2.sh'), self.out], env=e,
                               capture_output=True, text=True)
@@ -126,10 +166,28 @@ class PublishR2(unittest.TestCase):
         self.assertEqual(frame['ContentType'], 'application/octet-stream')
         self.assertIn('immutable', frame['CacheControl'])
         self.assertNotIn('ContentEncoding', frame)
-        self.assertEqual(self.local_manifest()['base'], self.PUBLIC + '/')
+        self.assertEqual(self.local_manifest()['base'], self.public + '/')
         on_r2 = self.s3.get_object(Bucket=self.BUCKET, Key='manifest.json')
-        self.assertEqual(json.load(on_r2['Body'])['base'], self.PUBLIC + '/')
+        self.assertEqual(json.load(on_r2['Body'])['base'], self.public + '/')
         self.assertEqual(on_r2['CacheControl'], 'public, max-age=60')
+
+    def check_left_on_the_branch(self, r, why):
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn(why, r.stdout)
+        self.assertNotIn('base', self.local_manifest())
+        self.assertNotIn('manifest.json', self.keys())
+
+    def test_public_address_not_live(self):
+        # As frames.northsea.surf did on 28 Oct: uploads work, the domain answers 403.
+        self.domain.live = False
+        self.check_left_on_the_branch(self.publish(), 'answers')
+
+    def test_public_address_unreachable(self):
+        self.check_left_on_the_branch(self.publish(R2_PUBLIC_URL='http://127.0.0.1:9'), "can't be reached")
+
+    def test_no_cors_policy(self):
+        self.domain.cors = False
+        self.check_left_on_the_branch(self.publish(), 'no CORS header')
 
     def test_not_set_up(self):
         r = self.publish(R2_PUBLIC_URL='')

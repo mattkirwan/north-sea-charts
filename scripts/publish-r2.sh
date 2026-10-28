@@ -13,8 +13,8 @@
 # Needs R2_PUBLIC_URL (where the bucket is served, e.g.
 # https://frames.northsea.surf/), R2_ACCOUNT_ID, R2_BUCKET,
 # R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY; R2_ENDPOINT overrides the S3
-# address (for testing). The bucket's CORS policy must let the app's pages
-# GET from it:
+# address (for testing), APP_ORIGIN the app's (default https://northsea.surf).
+# The bucket's CORS policy must let the app's pages GET from it:
 #   [{"AllowedOrigins": ["https://northsea.surf"], "AllowedMethods": ["GET"], "MaxAgeSeconds": 86400}]
 set -e
 cd "$1" 2>/dev/null && [ -f manifest.json ] || { echo 'Nothing new to publish'; exit 0; }
@@ -33,6 +33,17 @@ s3() { aws s3 --endpoint-url "${R2_ENDPOINT:-https://$R2_ACCOUNT_ID.r2.cloudflar
 s3 cp --only-show-errors --recursive "$dir" "s3://$R2_BUCKET/$dir" \
   --cache-control 'public, max-age=31536000, immutable' --content-type application/octet-stream
 echo "Frames on R2: $R2_PUBLIC_URL$dir/ ($(ls "$dir" | wc -l) files)"
+
+# Only point phones at R2 once a phone could read a frame there: a 200 from
+# the public address, with the CORS header the app's page needs. (An address
+# not yet live answers 403, and every phone would be left without frames.)
+url="$R2_PUBLIC_URL$dir/$(ls "$dir" | head -1)"
+head=$(curl -sS -o /dev/null -D - --max-time 30 -H "Origin: ${APP_ORIGIN:-https://northsea.surf}" "$url") \
+  || { echo "R2's public address can't be reached; frames from the branch only"; exit 1; }
+status=$(echo "$head" | head -1 | tr -d '\r')
+case "$status" in *" 200"*) ;; *) echo "R2's public address answers \"$status\"; frames from the branch only"; exit 1 ;; esac
+echo "$head" | grep -qi '^access-control-allow-origin:' \
+  || { echo "R2 sends no CORS header to ${APP_ORIGIN:-https://northsea.surf}; set the bucket's CORS policy. Frames from the branch only"; exit 1; }
 
 BASE="$R2_PUBLIC_URL" python3 -c '
 import json, os
