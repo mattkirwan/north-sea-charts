@@ -54,15 +54,15 @@ jobs:
           if [ -n "$TOKEN" ]; then echo "go=1" >> "$GITHUB_OUTPUT"
           elif [ "$BRANCH" = production ]; then echo '::error::No CLOUDFLARE_API_TOKEN; nothing released'; exit 1
           else echo '::notice::Cloudflare not set up (no CLOUDFLARE_API_TOKEN); nothing deployed'; fi
-      # Everything the pages could ask for, as GitHub Pages served it. Staging
-      # isn't for search engines (Cloudflare already keeps them off pages.dev).
+      # Everything the pages could ask for. Staging isn't for search engines
+      # (Cloudflare already keeps them off pages.dev).
       - name: The site
         id: site
         if: steps.cf.outputs.go
         env:
           BRANCH: ${{ inputs.branch }}
         run: |
-          rsync -a --exclude .git --exclude .github --exclude CNAME ./ "$RUNNER_TEMP/site/"
+          rsync -a --exclude .git --exclude .github ./ "$RUNNER_TEMP/site/"
           [ "$BRANCH" = production ] || printf '/*\n  X-Robots-Tag: noindex\n' > "$RUNNER_TEMP/site/_headers"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Make the project the first time
