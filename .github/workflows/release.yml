@@ -1,11 +1,6 @@
-# Releases the app to production, https://northsea.surf: points the
-# `production` branch, which GitHub Pages serves, at main (what staging has,
-# staging.yml), and tags it release-<date>-<time>. Started by hand once it's
-# been tried on staging.
-#
-# To roll back, run it again with an earlier release tag. Releasing changes
-# only the app's pages; the data jobs (tick.yml and those it starts) run from
-# main as soon as it's merged.
+# Releases the app to production, https://northsea.surf (deploy.yml), once
+# it's been tried on staging. Started by hand: main is what staging has. To
+# roll back, run it again with an earlier release-... tag.
 name: Release to production
 
 on:
@@ -19,32 +14,10 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: release
-  cancel-in-progress: false
-
 jobs:
   release:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    environment:
-      name: production
-      url: https://northsea.surf
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref }}
-      - name: Point production at it
-        env:
-          REF: ${{ inputs.ref }}
-        run: |
-          sha=$(git rev-parse HEAD)
-          was=$(git ls-remote origin refs/heads/production | cut -f1)
-          if [ "$sha" = "$was" ]; then
-            echo "Production already has ${sha%"${sha#???????}"}; nothing to do."
-            exit 0
-          fi
-          git push -q -f origin HEAD:refs/heads/production
-          tag="release-$(date -u +%Y-%m-%d-%H%M)"
-          git tag "$tag" && git push -q origin "$tag"
-          echo "Released $(git log -1 --format='%h %s') ($REF) as $tag" | tee -a "$GITHUB_STEP_SUMMARY"
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ref: ${{ inputs.ref }}
+      branch: production
+    secrets: inherit

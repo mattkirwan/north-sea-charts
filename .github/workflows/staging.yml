@@ -1,15 +1,7 @@
-# Every merge to main goes to staging first, https://staging.northsea.surf,
-# a Cloudflare Pages project, to try on a phone before it's released to
-# production (release.yml). Staging is the app only: it reads the same data
-# branches and R2 frames as production, and the data jobs still run from main.
-#
-# Not indexed by search engines (X-Robots-Tag), and not counted in the
-# analytics (index.html only counts northsea.surf).
-#
-# Needs CLOUDFLARE_API_TOKEN (a token with Account > Cloudflare Pages > Edit)
-# and the account ID (R2_ACCOUNT_ID, as frames.yml uses). The Pages project is
-# made on the first deploy; staging.northsea.surf is added to it once, under
-# the project's Custom domains. Without the token it says so and stops.
+# Every merge to main goes to staging first, https://staging.northsea.surf
+# (deploy.yml), to try on a phone before it's released to production
+# (release.yml). Not counted in the analytics: index.html only counts
+# northsea.surf.
 name: Deploy to staging
 
 on:
@@ -18,48 +10,12 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-
-concurrency:
-  group: staging
-  cancel-in-progress: true
-
-env:
-  PROJECT: northsea-staging
+  contents: write
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment:
-      name: staging
-      url: https://staging.northsea.surf
-    steps:
-      - uses: actions/checkout@v4
-      - name: Is staging set up
-        id: cf
-        env:
-          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          if [ -n "$TOKEN" ]; then echo "go=1" >> "$GITHUB_OUTPUT"
-          else echo '::notice::Staging not set up (no CLOUDFLARE_API_TOKEN); nothing deployed'; fi
-      - name: The site
-        if: steps.cf.outputs.go
-        run: |
-          rsync -a --exclude .git --exclude .github --exclude CNAME ./ "$RUNNER_TEMP/site/"
-          printf '/*\n  X-Robots-Tag: noindex\n' > "$RUNNER_TEMP/site/_headers"
-      - name: Make the Pages project the first time
-        if: steps.cf.outputs.go
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ vars.R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
-          command: pages project create ${{ env.PROJECT }} --production-branch main
-        continue-on-error: true
-      - name: Deploy
-        if: steps.cf.outputs.go
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ vars.R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
-          command: pages deploy ${{ runner.temp }}/site --project-name ${{ env.PROJECT }} --branch main --commit-hash ${{ github.sha }} --commit-dirty true
+  staging:
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ref: ${{ github.sha }}
+      branch: main
+    secrets: inherit
