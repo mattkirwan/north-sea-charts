@@ -828,6 +828,7 @@ function warm() {
       const pk = `p${man.run}:${i}`, sk = `${swellVar}${man.run}:${i}`;
       if (!geomCache.has(pk)) { pressureGeom(i); warmT = setTimeout(next, 0); return; }
       if (band === 'swell' && !geomCache.has(sk)) { swellGeom(i, swellVar); warmT = setTimeout(next, 0); return; }
+      if (band === 'wind' && !geomCache.has(`wind${man.run}:${i}`)) { windGeom(i); warmT = setTimeout(next, 0); return; }
     }
   }, 60);
 }
