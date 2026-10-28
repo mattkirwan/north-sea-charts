@@ -33,7 +33,7 @@ self.addEventListener('fetch', (e) => {
   if (url.href.startsWith(CHARTS) && url.searchParams.has('run')) e.respondWith(frame(e, url));
   else if (/\/f\d{3}\.bin\.gz$/.test(url.pathname) && url.searchParams.has('run')) e.respondWith(frame(e, url, NSS_FRAMES));
   else if (req.mode === 'navigate' && url.origin === location.origin) e.respondWith(latest(req, url.origin + url.pathname));
-  else if (url.href.startsWith(CHARTS + 'manifest.json') || url.href.startsWith(DATA) || url.href.startsWith(FRAMES_NEW + 'manifest.json') ||
+  else if (url.href.startsWith(CHARTS + 'manifest.json') || url.href.startsWith(DATA) || url.href.startsWith(FRAMES_NEW + 'manifest.json') || url.href.startsWith(FRAMES_NEW + 'ice.json') ||
            (url.origin === location.origin && url.pathname.endsWith('/manifest.json')))
     e.respondWith(latest(req, url.origin + url.pathname));
   else if (url.origin === location.origin && !url.search) e.respondWith(latest(req, url.href, NSS_STATIC));

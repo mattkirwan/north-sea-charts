@@ -36,7 +36,7 @@ function readTokens() {
   const cs = getComputedStyle(document.documentElement), v = (n) => cs.getPropertyValue(n).trim();
   C = {
     sea: v('--chart-sea'), land: v('--chart-land'), coast: v('--chart-coast'), grid: v('--chart-grid'),
-    iso: v('--chart-isobar'), high: v('--chart-high'),
+    iso: v('--chart-isobar'), high: v('--chart-high'), arrow: v('--chart-arrow'), ice: v('--chart-ice'),
     height: [1, 2, 3, 4, 5, 6, 7].map((i) => v(`--height-${i}`)),
     period: [1, 2, 3, 4, 5].map((i) => v(`--period-${i}`)),
     wind: [1, 2, 3, 4, 5, 6].map((i) => v(`--wind-${i}`))
@@ -62,7 +62,7 @@ const ICONS = {
 const icon = (n, cls = '') => `<svg class="nss-icon${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
 document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
 const KEYS = {
-  wind: { unit: 'Wind, mph', steps: ['10', '20', '25', '30', '40', '50+'], tok: 'wind', thr: [0, 20, 25, 30, 40, 50] },
+  wind: { unit: 'Wind, mph', steps: ['10', '20', '25', '30', '40', '50+'], tok: 'wind', lev: [10, 20, 25, 30, 40, 50] },
   height: { unit: 'Swell height, m', steps: ['0.5', '1', '1.5', '2', '3', '4', '6+'], tok: 'height', lev: [0.5, 1, 1.5, 2, 3, 4, 6], fig: (l) => `${l} m` },
   period: { unit: 'Swell period, s', steps: ['8', '10', '12', '14', '16+'], tok: 'period', lev: [8, 10, 12, 14, 16], fig: (l) => `${l} s` }
 };
@@ -149,6 +149,31 @@ async function getManifest() {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
+// The sea ice: one chart a day, the same on every band (ice.json beside the
+// manifest), as concentration classes of rings in the square's km.
+let ice = null;
+async function loadIce(m) {
+  if (!m.ice) { ice = null; return; }
+  if (ice && ice.date === m.ice.date) return;
+  try {
+    const r = await fetch(`${FR}${m.ice.file}?d=${m.ice.date}`, { mode: 'cors', credentials: 'omit' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    ice = {
+      date: j.date,
+      classes: j.classes.map((c) => {
+        const rings = c.rings.map((a) => {
+          const out = new Float64Array(a.length);
+          let x = 0, y = 0;
+          for (let k = 0; k < a.length; k += 2) { x += a[k]; y += a[k + 1]; out[k] = x * j.unit; out[k + 1] = y * j.unit; }
+          return out;
+        });
+        return { alpha: 0.3 + 0.6 * c.t / 10, path: pathOf(rings, true) };
+      })
+    };
+    requestDraw();
+  } catch {}
+}
 const validAt = (m, i) => m.run + m.steps[i] * H;
 function nearestIndex(m, t) {
   let best = 0;
@@ -160,7 +185,7 @@ async function refreshManifest() {
   // A manifest from the phone's own copy still counts as offline.
   try { m = await getManifest(); offline = navigator.onLine === false; } catch { offline = true; renderStatus(); return; }
   if (!man) {
-    man = m; frames = [];
+    man = m; frames = []; loadIce(m);
     idx = nearestIndex(m, Date.now());
     tl.raw = tl.target = idx;
     buildTicks(); setFrame(idx, true); pump(); showTip();
@@ -169,7 +194,7 @@ async function refreshManifest() {
     const t = validAt(man, idx), j = nearestIndex(m, t);
     try {
       const d = await fetchFrame(m, j);
-      man = m; frames = []; frames[j] = d; failedAt = {}; idx = j; tl.raw = tl.target = j; geomCache.clear();
+      man = m; frames = []; loadIce(m); frames[j] = d; failedAt = {}; idx = j; tl.raw = tl.target = j; geomCache.clear();
       buildTicks(); markTick(j); setFrame(j, true);
       updatedNote = true; setTimeout(fadeUpdated, 3000);
       pump();
@@ -349,6 +374,15 @@ function pressureGeom(i) {
     };
   });
 }
+// Wind speed (mph) as filled bands, like the swell's: a slate field under the arrows.
+function windGeom(i) {
+  return cached(`wind${man.run}:${i}`, () => {
+    const P = man.grids.p, d = frames[i], ws = man.scale.wind || 2, n = P + 2, f = new Float32Array(n * n).fill(-1e9);
+    for (let a = 0; a < P; a++) for (let b = 0; b < P; b++) f[(a + 1) * n + b + 1] = Math.hypot(d.u[a * P + b], d.v[a * P + b]) / ws * MPH;
+    const w = toWorld(man.square, P, 1);
+    return KEYS.wind.lev.map((lev) => pathOf(contour(f, n, lev).map((l) => w(chaikin(l.pts, true, 1))), true));
+  });
+}
 function swellGeom(i, which) {
   return cached(`${which}${man.run}:${i}`, () => {
     const S = man.grids.s, d = frames[i], src = which === 'height' ? d.h : d.t, sc = man.scale[which === 'height' ? 'h' : 't'];
@@ -522,6 +556,20 @@ function draw() {
     const cols = C[KEYS[swellVar].tok];
     swell.bands.forEach((b, i) => { ctx.fillStyle = cols[i]; ctx.fill(b.path, 'evenodd'); });
   }
+  if (band === 'wind' && fi >= 0) {
+    world();
+    windGeom(fi).forEach((p, i) => { ctx.fillStyle = C.wind[i]; ctx.fill(p, 'evenodd'); });
+  }
+  if (ice) {
+    // Sea ice on every band: under the land and the weather, over the sea colours.
+    world();
+    ctx.lineJoin = 'round'; ctx.strokeStyle = C.ice; ctx.fillStyle = C.ice; ctx.lineWidth = 0.8 / k;
+    for (const c of ice.classes) {
+      ctx.globalAlpha = c.alpha; ctx.fill(c.path, 'evenodd');
+      ctx.globalAlpha = 0.9; ctx.stroke(c.path);
+    }
+    ctx.globalAlpha = 1;
+  }
   if (baseMap) {
     // The land, graticule and coast change only when the map moves: kept in
     // their own layer, so moving through time redraws just the weather.
@@ -602,7 +650,7 @@ function placeAlong(pts, text, first, every, sx, sy, free, paint) {
 function drawWind(fi, sx, sy, screen) {
   const d = frames[fi], P = man.grids.p, sq = man.square, { x, y, k } = view, pb = panelBox();
   const s = 32 / k, x0 = x - W / 2 / k, x1 = x + W / 2 / k, y1 = y + Hs / 2 / k, y0 = y - Hs / 2 / k;
-  const paths = C.wind.map(() => new Path2D()), thr = KEYS.wind.thr, ws = man.scale.wind || 2;
+  const path = new Path2D(), ws = man.scale.wind || 2;
   for (let wx = Math.ceil(x0 / s) * s; wx <= x1; wx += s) {
     for (let wy = Math.ceil(y0 / s) * s; wy <= y1; wy += s) {
       if (wx < sq.x0 || wx > sq.x1 || wy > sq.y0 || wy < sq.y1) continue;
@@ -611,8 +659,7 @@ function drawWind(fi, sx, sy, screen) {
       const gj = (wx - sq.x0) / (sq.x1 - sq.x0) * (P - 1), gi = (sq.y0 - wy) / (sq.y0 - sq.y1) * (P - 1);
       const u = bilinear(d.u, P, gj, gi) / ws, v = bilinear(d.v, P, gj, gi) / ws, sp = Math.hypot(u, v);
       if (sp < 0.3) continue;
-      const mph = sp * MPH, c = thr.reduce((m, t, i) => (mph >= t ? i : m), 0);
-      const dx = u / sp, dy = -v / sp, hx = px + dx * 7, hy = py + dy * 7, p = paths[c];
+      const dx = u / sp, dy = -v / sp, hx = px + dx * 7, hy = py + dy * 7, p = path;
       p.moveTo(px - dx * 7, py - dy * 7); p.lineTo(hx, hy);
       const a = Math.PI / 6, l = 4.5;
       p.moveTo(hx - l * (dx * Math.cos(a) - dy * Math.sin(a)), hy - l * (dy * Math.cos(a) + dx * Math.sin(a))); p.lineTo(hx, hy);
@@ -621,7 +668,7 @@ function drawWind(fi, sx, sy, screen) {
   }
   screen();
   ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.setLineDash([]);
-  paths.forEach((p, i) => { ctx.strokeStyle = C.wind[i]; ctx.stroke(p); });
+  ctx.strokeStyle = C.arrow; ctx.stroke(path);
 }
 
 // ---- Panel: bands, key, swell switch, open or docked ---------------------------------------

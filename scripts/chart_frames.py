@@ -24,6 +24,14 @@ much tighter: a frame is about 50 kB. The period is the longest of the
 model's separate swells of 0.1 m or more, or the peak period where there's
 only wind sea: the same as the old charts.
 
+Beside the frames goes ice.json, the sea ice from MET Norway's latest ice
+chart (a daily analysis, so one for the whole run, not one per frame): areas
+grouped by concentration in tenths, as rings in the square's km, quantised to
+0.1 km and delta-encoded like the base map's. The app draws it as a permanent
+layer over every band. The manifest's ice names it and the chart's date. The
+ice is a nice-to-have: if the chart can't be had, the last ice.json published
+stays (its date says how old), and without one the frames still publish.
+
   python scripts/chart_frames.py OUT_DIR [RUN as 2026-10-26-06z] [--steps 0,1,2]
   python scripts/chart_frames.py --base assets/base.json     # the land, once
 """
@@ -52,6 +60,8 @@ WAVE = {'HTSGW:surface': 'hs', 'PERPW:surface': 'tp', **{f'SWELL:{k} in sequence
 SCALE = dict(p=[20, 850], wind=2, h=10, t=10)     # stored = (value - base) * scale; the manifest's scale
 LONG_MIN_M = 0.1
 R = 6371.229
+ICE_URL = 'https://cryo.met.no/sites/cryo/files/latest/NIS_arctic_latest_pl_a.zip'
+ICE_SIMPLIFY_KM = 0.5
 WAIT_MIN = 20                                      # the loop starts us once +384 h is out; well inside the job's hour
 
 
@@ -232,6 +242,68 @@ def _one(args):
     return step, None, err
 
 
+def ice_layer(out, url=ICE_URL):
+    """Write ice.json into out from MET Norway's latest ice chart. Returns the
+    manifest's ice entry ({file, date}), or None without ice."""
+    import zipfile
+    import swell_sources
+    import shapefile
+    import shapely
+    from shapely.geometry import box, shape
+    from shapely.ops import transform, unary_union
+    try:
+        tmp = tempfile.mkdtemp()
+        zpath = os.path.join(tmp, 'ice.zip')
+        with open(zpath, 'wb') as f:
+            f.write(get(url, timeout=120))
+        with zipfile.ZipFile(zpath) as z:
+            z.extractall(tmp)
+        shp = next(os.path.join(tmp, n) for n in os.listdir(tmp) if n.endswith('.shp'))
+        date = next(t for t in os.path.basename(shp).split('_') if t.isdigit() and len(t) == 8)
+        date = f'{date[:4]}-{date[4:6]}-{date[6:]}'
+        m = 0.1 * (X1 - X0)
+        clip = box(X0 - m, Y1 - m, X1 + m, Y0 + m)
+        lonlat_clip = box(-110, 25, 110, 90)
+        proj = lambda x, y, z=None: FWD(np.asarray(x), np.asarray(y))
+        r = shapefile.Reader(shp)
+        names = [f[0] for f in r.fields[1:]]
+        by_tenths = {}
+        for sr in r.iterShapeRecords():
+            t = swell_sources.ice_tenths(dict(zip(names, sr.record)).get('CT'))
+            if t is None or not sr.shape.points:
+                continue
+            g = shape(sr.shape.__geo_interface__).buffer(0).intersection(lonlat_clip)
+            if not g.is_empty:
+                by_tenths.setdefault(t, []).append(g)
+        enc = lambda pts: (lambda q: np.concatenate([q[:1], np.diff(q, axis=0)]).ravel().tolist())(np.round(np.asarray(pts) * 10).astype(int))
+        classes = []
+        for t, gs in sorted(by_tenths.items()):
+            g = transform(proj, shapely.segmentize(unary_union(gs), 0.05)).buffer(0).intersection(clip).simplify(ICE_SIMPLIFY_KM)
+            polys = [g] if g.geom_type == 'Polygon' else [p for p in getattr(g, 'geoms', []) if p.geom_type == 'Polygon']
+            rings = [enc(np.asarray(ring.coords)[:-1]) for p in polys if p.area > 1 for ring in [p.exterior, *p.interiors]]
+            if rings:
+                classes.append(dict(t=t, rings=rings))
+        if not classes:
+            raise RuntimeError('no ice in the chart')
+        with open(os.path.join(out, 'ice.json'), 'w') as f:
+            json.dump(dict(unit=0.1, date=date, classes=classes), f, separators=(',', ':'))
+        print(f'ice.json: chart of {date}, {len(classes)} classes, {os.path.getsize(os.path.join(out, "ice.json")) / 1e3:.0f} kB')
+        return dict(file='ice.json', date=date)
+    except Exception as e:
+        print(f'No new ice this run: {type(e).__name__}: {e}')
+    # Keep the last ice published, if there is one.
+    repo = os.environ.get('GITHUB_REPOSITORY')
+    try:
+        body = get(f'https://raw.githubusercontent.com/{repo}/frames/ice.json', timeout=60)
+        date = json.loads(body)['date']
+        with open(os.path.join(out, 'ice.json'), 'wb') as f:
+            f.write(body)
+        print(f'Kept the published ice of {date}')
+        return dict(file='ice.json', date=date)
+    except Exception:
+        return None
+
+
 def run_dir(run):
     return f'{run:%Y-%m-%d-%H}z'
 
@@ -272,8 +344,9 @@ def run_frames(out, run, steps):
     for s in good:
         if s not in keep:
             os.unlink(os.path.join(out, d, f'f{s:03d}.bin.gz'))
+    ice = ice_layer(out)
     manifest = dict(
-        run=int(run.replace(tzinfo=dt.timezone.utc).timestamp() * 1000), runLabel=gfs_latest.label(run),
+        ice=ice, run=int(run.replace(tzinfo=dt.timezone.utc).timestamp() * 1000), runLabel=gfs_latest.label(run),
         made=int(time.time() * 1000), steps=keep, complete=upto == len(steps), dir=d, file='{dir}/f{step}.bin.gz', pad=3,
         square=dict(x0=X0, x1=X1, y0=Y0, y1=Y1, proj=PROJ4),
         grids=dict(p=P_N, s=S_N), scale=SCALE, encoding='row-delta-v1',
