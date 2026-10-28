@@ -88,26 +88,58 @@
   #chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
   /* Under the panel, match it: any strip the phone keeps below the page reads as panel. */
   html { background: var(--ui-surface); }
-  /* Less space under the panels than the full home-indicator inset (the dock
-     and open buttons keep the same spot in both). */
-  .nss-panel, .nss-column { z-index: 2; padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px) * 0.35); }
+  /* Less space under the panels than the full home-indicator inset (the menu
+     button keeps the same spot in both, and the menu's close button too). */
+  .nss-panel, .nss-column, .nss-sheet { z-index: 2; padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px) * 0.35); }
   /* Fixed to the screen edge, with the page behind in the panel colour: iOS 26
      carries the colour of what is fixed at the bottom edge into any space it
      keeps below the page (a gap on the home screen, behind Safari's bar). */
   .nss-panel { position: fixed; left: 0; right: 0; bottom: 0; }
   .nss-column { position: fixed; }
-  [data-short] .nss-panel, [data-short] .nss-column { padding-bottom: var(--space-2); }
-  /* The open button in exactly the dock button's spot: 48 × 44, 12 px in. */
+  [data-short] .nss-panel, [data-short] .nss-column, [data-short] .nss-sheet { padding-bottom: var(--space-2); }
+  /* The menu button in exactly the open panel's spot: 48 × 44, 12 px in. */
   .nss-column { padding-left: calc(var(--space-1) - 1px); }
-  .nss-column .nss-dock-btn { flex: 0 0 44px; }
+  .nss-column .nss-menu-btn { flex: 0 0 44px; }
+
+  /* Left hand (Menu › Settings › Hand): the column on the left edge, and the
+     menu button (and the menu's close button) bottom left, in both states. */
+  [data-hand="left"] .nss-panel-timerow, [data-hand="left"] .nss-keyrow, [data-hand="left"] .nss-flyout { flex-direction: row-reverse; }
+  [data-hand="left"] .nss-sheet-foot { justify-content: flex-start; }
+  [data-hand="left"] .nss-column { left: 0; right: auto; border-left: 0; border-right: 1px solid var(--ui-line); border-radius: 0 var(--radius-card) 0 0;
+    padding-left: var(--space-3); padding-right: calc(var(--space-1) - 1px); }
+  [data-hand="left"] .nss-vtimeline { margin: 0 calc(-1 * var(--space-1)) 0 calc(-1 * var(--space-3)); }
+  [data-hand="left"] .nss-vtimeline-arrow { left: auto; right: -9px; border-left: 0; border-right: 9px solid var(--lifeboat-deep); }
+  [data-hand="left"] .nss-vtimeline .nss-tick { left: 0; right: auto; }
+  [data-hand="left"] .nss-vtimeline .nss-day { left: auto; right: 6px; }
+  [data-hand="left"] .nss-vtimeline .nss-tip { left: calc(100% + 14px); right: auto; }
+  [data-hand="left"] .nss-flyout { left: calc(100% + var(--space-3)); right: auto; padding: 0 10px 0 var(--space-1); }
 
   /* Open and docked: one shows at a time. The one leaving slips out a little
      and fades; the one arriving follows it in. */
   .nss-panel, .nss-column { transition: transform 220ms cubic-bezier(.2, .8, .2, 1) 70ms, opacity 180ms ease-out 70ms, visibility 0s linear 0s; }
   .nss-panel[data-away] { transform: translateY(24px); opacity: 0; visibility: hidden; pointer-events: none;
     transition: transform 160ms ease-in, opacity 140ms ease-in, visibility 0s linear 160ms; }
-  .nss-column[data-away] { transform: translateX(24px); opacity: 0; visibility: hidden; pointer-events: none;
+  .nss-column[data-away] { transform: translateX(var(--away-x, 24px)); opacity: 0; visibility: hidden; pointer-events: none;
     transition: transform 160ms ease-in, opacity 140ms ease-in, visibility 0s linear 160ms; }
+
+  [data-hand="left"] { --away-x: -24px; --fly-x: -10px; }
+
+  /* The menu: a sheet that rises from the bottom over the scrim. Settings and
+     About take its place, so there is only ever one. */
+  .nss-scrim { z-index: 4; opacity: 0; transition: opacity 200ms ease-out; }
+  .nss-scrim[data-shown] { opacity: 1; }
+  .nss-scrim:not([data-shown]) { pointer-events: none; }
+  .nss-sheet { z-index: 5; transform: translateY(100%); transition: transform 240ms cubic-bezier(.2, .8, .2, 1); }
+  .nss-sheet[data-shown] { transform: none; }
+  /* The grip is small; the swipe down can start anywhere near it. */
+  .nss-sheet-grip { position: relative; flex: 0 0 auto; touch-action: none; cursor: grab; }
+  .nss-sheet-grip::after { content: ""; position: absolute; inset: -14px -60px; }
+  .nss-sheet-head .nss-menu-btn { flex: 0 0 44px; width: 44px; }
+  .nss-setting .nss-switch button { text-transform: uppercase; }
+  .nss-about { margin: 0; display: flex; flex-direction: column; gap: 2px; }
+  .nss-about > div { display: flex; flex-direction: column; gap: 4px; padding: var(--space-2) var(--space-3); }
+  .nss-about dd { margin: 0; }
+  .nss-about-lede { margin: 0; padding: 0 var(--space-3) var(--space-1); font-size: 11px; line-height: 1.5; color: var(--ui-ink-muted); }
 
   /* The key row can fold away (data-off), and the panel with it. */
   .keyslot { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 200ms ease, margin-bottom 200ms ease, opacity 160ms ease; }
@@ -117,13 +149,12 @@
   /* Pressure's key: the two isobar styles as lines, not colour swatches. */
   .nss-key-step i.key-line { height: 6px; background: none; overflow: visible; }
   .key-line svg { display: block; width: 100%; height: 6px; overflow: visible; }
-  /* Open panel: text on the band and swell buttons, with a lifeboat light on the selected band. */
-  .nss-panel .nss-band { flex-direction: column; gap: 6px; font-family: var(--font-mono); font-size: 11px; line-height: 1; font-weight: 500; letter-spacing: 0.8px; text-transform: uppercase; }
-  .nss-panel .nss-band::before { content: ""; width: 6px; height: 6px; border-radius: 1px; background: var(--ui-led-off); }
-  .nss-panel .nss-band[aria-pressed="true"]::before { background: var(--lifeboat); }
+  /* Open panel: text on the band and swell buttons. The band lights are the
+     design system's, in the top-left corner, in both states. */
+  .nss-panel .nss-band { font-family: var(--font-mono); font-size: 11px; line-height: 1; font-weight: 500; letter-spacing: 0.8px; text-transform: uppercase; }
   .nss-panel .nss-switch button { width: 68px; font-family: var(--font-mono); font-size: 10px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase; }
-  .nss-band, .nss-switch button, .nss-dock-btn { transition: background-color 120ms, border-color 120ms, color 120ms; }
-  .nss-band:active, .nss-switch button:active, .nss-dock-btn:active { transform: scale(0.97); }
+  .nss-band, .nss-switch button, .nss-menu-btn { transition: background-color 120ms, border-color 120ms, color 120ms; }
+  .nss-band:active, .nss-switch button:active, .nss-menu-btn:active { transform: scale(0.97); }
 
   .nss-timeline, .nss-vtimeline { touch-action: none; cursor: grab; }
   .nss-track { position: absolute; left: 50%; top: 0; bottom: 0; will-change: transform; }
@@ -135,7 +166,7 @@
   .nss-vtimeline .nss-tip { left: auto; right: calc(100% + 14px); top: calc(50% - 11px); }
 
   .nss-flyout { animation: fly-in 180ms cubic-bezier(.2, .8, .2, 1); }
-  @keyframes fly-in { from { opacity: 0; transform: translateX(10px); } }
+  @keyframes fly-in { from { opacity: 0; transform: translateX(var(--fly-x, 10px)); } }
 
   .nss-readout-status { display: flex; align-items: center; justify-content: center; gap: 5px; transition: opacity 400ms; }
   .nss-readout-status .nss-icon { width: 12px; height: 12px; }
@@ -148,9 +179,9 @@
   .spin .nss-icon, .nss-icon.spin { animation: spin 2.4s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) {
-    .nss-panel, .nss-column, .nss-panel[data-away], .nss-column[data-away], .keyslot { transition: none; }
+    .nss-panel, .nss-column, .nss-panel[data-away], .nss-column[data-away], .keyslot, .nss-scrim, .nss-sheet { transition: none; }
     .nss-flyout, .spin .nss-icon, .nss-icon.spin { animation: none; }
-    .nss-band:active, .nss-switch button:active, .nss-dock-btn:active { transform: none; }
+    .nss-band:active, .nss-switch button:active, .nss-menu-btn:active { transform: none; }
   }
   /* Nothing animates into its first place. */
   .still .nss-panel, .still .nss-column, .still .keyslot { transition: none; }
@@ -191,11 +222,11 @@
         <span class="nss-tip" data-tip hidden></span>
       </div>
     </div>
-    <button type="button" class="nss-dock-btn" data-dock="1" aria-label="Dock the panel to the right" data-icon="dock"></button>
+    <button type="button" class="nss-menu-btn" data-menu aria-label="Menu" aria-haspopup="dialog" data-icon="menu"></button>
   </div>
 </div>
 
-<!-- Docked: a narrow column on the right. -->
+<!-- Docked: a narrow column on the right (or the left, for the left hand). -->
 <div class="nss-column" id="column" data-away>
   <div class="nss-column-time" id="colTime">
     <b data-day>–</b><strong data-time>–</strong><small data-lead></small>
@@ -214,7 +245,7 @@
     <div class="nss-band-slot"><button type="button" class="nss-band" data-band="wind" aria-pressed="false" aria-label="Wind" data-icon="wind"></button></div>
     <div class="nss-band-slot"><button type="button" class="nss-band" data-band="swell" aria-pressed="false" aria-label="Swell" data-icon="swell"></button></div>
   </div>
-  <button type="button" class="nss-dock-btn" data-dock="0" aria-label="Open the full panel" data-icon="open"></button>
+  <button type="button" class="nss-menu-btn" data-menu aria-label="Menu" aria-haspopup="dialog" data-icon="menu"></button>
   <div class="nss-flyout" id="flyout" hidden>
     <div class="nss-key" data-key></div>
     <div class="nss-switch" data-swell role="group" aria-label="Swell measure">
@@ -222,6 +253,57 @@
       <button type="button" data-var="period" aria-pressed="false" aria-label="Period" data-icon="period"></button>
     </div>
   </div>
+</div>
+<!-- The menu, from the menu button: views first, then Settings and About.
+     Each opens as a sheet in the same place, so only one shows at a time. -->
+<div class="nss-scrim" id="scrim" hidden></div>
+<div class="nss-sheet" id="menu" data-sheet="menu" role="dialog" aria-modal="true" aria-label="Menu" hidden>
+  <span class="nss-sheet-grip" aria-hidden="true"></span>
+  <!-- Views not built yet stay listed, dimmed and still focusable. They are
+       the prediction system's, behind its flag (index.html, above); when one
+       is built, drop its aria-disabled and its tag and route to it. -->
+  <nav aria-label="Views"><ul class="nss-menu-list">
+    <li><button type="button" class="nss-menu-item" data-view="chart" aria-current="page"><span class="nss-menu-text"><span class="nss-menu-name">Chart</span><span class="nss-menu-sub">Pressure, wind and swell</span></span></button></li>
+    <li><button type="button" class="nss-menu-item" data-view="spots" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name">Spots</span><span class="nss-menu-sub">Your breaks and their forecasts</span></span><span class="nss-soon">SOON</span></button></li>
+    <li><button type="button" class="nss-menu-item" data-view="buoys" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name">Buoys</span><span class="nss-menu-sub">Waves measured at sea</span></span><span class="nss-soon">SOON</span></button></li>
+    <li><button type="button" class="nss-menu-item" data-view="reports" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name">Reports</span><span class="nss-menu-sub">What surfers saw</span></span><span class="nss-soon">SOON</span></button></li>
+    <li><button type="button" class="nss-menu-item" data-view="skill" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name">How far out</span><span class="nss-menu-sub">How the forecast has done</span></span><span class="nss-soon">SOON</span></button></li>
+  </ul></nav>
+  <hr class="nss-menu-rule">
+  <ul class="nss-menu-list">
+    <li><button type="button" class="nss-menu-item" data-go="settings"><span class="nss-menu-text"><span class="nss-menu-name">Settings</span><span class="nss-menu-sub">Panel, units, theme</span></span><span data-icon="chevron" data-icon-size="sm"></span></button></li>
+    <li><button type="button" class="nss-menu-item" data-go="about"><span class="nss-menu-text"><span class="nss-menu-name">About</span><span class="nss-menu-sub">The app and the data</span></span><span data-icon="chevron" data-icon-size="sm"></span></button></li>
+  </ul>
+  <div class="nss-sheet-foot"><button type="button" class="nss-menu-btn" data-close aria-label="Close menu" data-icon="close"></button></div>
+</div>
+<div class="nss-sheet" id="settings" data-sheet="settings" role="dialog" aria-modal="true" aria-label="Settings" hidden>
+  <span class="nss-sheet-grip" aria-hidden="true"></span>
+  <div class="nss-sheet-head"><button type="button" class="nss-menu-btn" data-back aria-label="Back to menu" data-icon="back"></button><h2 class="nss-sheet-title">Settings</h2></div>
+  <div class="nss-setting">
+    <span class="nss-menu-text"><span class="nss-menu-name" id="setPanel">Panel</span><span class="nss-menu-sub">Along the bottom, or a narrow column</span></span>
+    <div class="nss-switch" data-set="panel" role="group" aria-labelledby="setPanel">
+      <button type="button" data-value="bottom" aria-pressed="true"><span data-icon="panel-bottom" data-icon-size="sm"></span>Bottom</button>
+      <button type="button" data-value="side" aria-pressed="false"><span data-icon="panel-side" data-icon-size="sm"></span>Side</button>
+    </div>
+  </div>
+  <div class="nss-setting">
+    <span class="nss-menu-text"><span class="nss-menu-name" id="setHand">Hand</span><span class="nss-menu-sub">Which side the menu and column sit</span></span>
+    <div class="nss-switch" data-set="hand" role="group" aria-labelledby="setHand">
+      <button type="button" data-value="right" aria-pressed="true">Right</button>
+      <button type="button" data-value="left" aria-pressed="false">Left</button>
+    </div>
+  </div>
+</div>
+<!-- About: placeholder copy, for review. -->
+<div class="nss-sheet" id="about" data-sheet="about" role="dialog" aria-modal="true" aria-label="About" hidden>
+  <span class="nss-sheet-grip" aria-hidden="true"></span>
+  <div class="nss-sheet-head"><button type="button" class="nss-menu-btn" data-back aria-label="Back to menu" data-icon="back"></button><h2 class="nss-sheet-title">About</h2></div>
+  <p class="nss-about-lede">North Sea Surf: a forecast chart for surfers who read pressure charts, from Svalbard to the Dover Strait. It shows what the models say and leaves the reading to you.</p>
+  <dl class="nss-about">
+    <div><dt class="nss-menu-name">GFS</dt><dd class="nss-menu-sub">Pressure and wind, from NOAA's Global Forecast System, four runs a day</dd></div>
+    <div><dt class="nss-menu-name">GFS-Wave</dt><dd class="nss-menu-sub">Swell height and period, from NOAA's wave model, run with GFS</dd></div>
+    <div><dt class="nss-menu-name">Sea ice</dt><dd class="nss-menu-sub">MET Norway's ice chart, once a day</dd></div>
+  </dl>
 </div>
 <script src="app.js"></script>
 </body>

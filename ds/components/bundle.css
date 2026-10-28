@@ -1,6 +1,6 @@
 /* North Sea Surf panel components. Every value comes from tokens.css. */
 
-/* Shared control size: band buttons, the timeline, the dock and open buttons are all 44 px tall */
+/* Shared control size: band buttons, the timeline and the menu button are all 44 px tall */
 .nss-icon { display: block; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: square; stroke-linejoin: miter; }
 .nss-icon--sm { width: 18px; height: 18px; }
 
@@ -13,7 +13,11 @@
 .nss-bands { display: flex; gap: var(--space-1); }
 .nss-band { flex: 1; min-width: 0; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--ui-track); border-radius: var(--radius-card); background: var(--ui-raised); color: var(--ui-ink); cursor: pointer; }
 .nss-band[aria-pressed="true"] { background: var(--ui-control); border-color: var(--ui-control); color: var(--ui-control-ink); }
-.nss-band:focus-visible, .nss-switch button:focus-visible, .nss-timeline:focus-visible, .nss-dock-btn:focus-visible { outline: 2px solid var(--lifeboat-deep); outline-offset: 2px; }
+/* Indicator light: a 5 px square in the top-left corner, unlit until the band is selected */
+.nss-band { position: relative; }
+.nss-band::before { content: ""; position: absolute; left: 5px; top: 5px; width: 5px; height: 5px; border-radius: 1px; background: var(--ui-led-off); }
+.nss-band[aria-pressed="true"]::before { background: var(--lifeboat); }
+.nss-band:focus-visible, .nss-switch button:focus-visible, .nss-timeline:focus-visible, .nss-menu-btn:focus-visible, .nss-dock-btn:focus-visible, .nss-menu-item:focus-visible { outline: 2px solid var(--lifeboat-deep); outline-offset: 2px; }
 
 /* Key row: colour steps on the left, the swell switch on the right */
 .nss-keyrow { display: flex; align-items: center; gap: var(--space-2); }
@@ -53,14 +57,15 @@
 .nss-tip[data-fading] { opacity: 0.35; }
 @media (prefers-reduced-motion: reduce) { .nss-tip { transition: none; } }
 
-/* Dock and open buttons: same size and same place in both states */
-.nss-dock-btn { flex: 0 0 48px; width: 48px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--ui-track); border-radius: var(--radius-card); background: var(--ui-raised); color: var(--ui-ink); cursor: pointer; }
+/* Menu button: bottom right in both panel states, the same size and spot. (.nss-dock-btn is the retired name, kept as an alias.) */
+.nss-menu-btn, .nss-dock-btn { flex: 0 0 48px; width: 48px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--ui-track); border-radius: var(--radius-card); background: var(--ui-raised); color: var(--ui-ink); cursor: pointer; }
 
 /* Docked column: 64 px on the right edge, timeline no higher than 60% of the screen */
 .nss-column { position: absolute; right: 0; bottom: 0; top: max(0px, calc(40vh - 62px)); width: 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px; padding: 6px var(--space-3) calc(var(--space-2) + env(safe-area-inset-bottom, 0px)) var(--space-1); background: var(--ui-surface); border-left: 1px solid var(--ui-line); border-top: 1px solid var(--ui-line); border-radius: var(--radius-card) 0 0 0; color: var(--ui-ink); }
 .nss-column .nss-bands { flex-direction: column; }
 .nss-column .nss-band-slot { position: relative; height: 44px; }
 .nss-column .nss-band { width: 100%; }
+.nss-column .nss-band::before { left: 4px; top: 4px; }
 .nss-column-time { padding: 6px 2px; border-radius: var(--radius-card); background: var(--ui-display); color: var(--ui-display-ink); display: flex; flex-direction: column; align-items: center; gap: 3px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .nss-column-time b { font-size: 11px; line-height: 1; font-weight: 500; letter-spacing: 0.4px; }
 .nss-column-time strong { font-size: 15px; line-height: 1; font-weight: 500; letter-spacing: -0.4px; }
@@ -80,3 +85,24 @@
 .nss-flyout .nss-key-unit { font-size: 8px; letter-spacing: 0.5px; }
 .nss-flyout .nss-key-step { font-size: 8px; gap: 2px; }
 .nss-flyout .nss-switch button { width: 40px; height: 34px; }
+
+/* Menu: a sheet from the bottom over a scrim; Settings opens as a second sheet in the same place */
+.nss-scrim { position: fixed; inset: 0; background: rgba(14, 18, 20, 0.5); }
+.nss-sheet { position: fixed; left: 0; right: 0; bottom: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px; padding: var(--space-2) var(--space-3) calc(var(--space-2) + env(safe-area-inset-bottom, 0px)); background: var(--ui-surface); border-top: 1px solid var(--ui-line); border-radius: var(--radius-frame) var(--radius-frame) 0 0; color: var(--ui-ink); max-height: 85vh; overflow-y: auto; }
+.nss-sheet-grip { align-self: center; width: 36px; height: 4px; border-radius: 2px; background: var(--ui-track); }
+.nss-sheet-head { display: flex; align-items: center; gap: 10px; padding-bottom: var(--space-1); }
+.nss-sheet-title { margin: 0; font-family: var(--font-mono); font-size: 15px; line-height: 1; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; }
+.nss-sheet-foot { display: flex; justify-content: flex-end; }
+.nss-menu-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.nss-menu-item { width: 100%; min-height: 52px; display: flex; align-items: center; gap: 10px; padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-card); background: transparent; color: var(--ui-ink); text-align: left; cursor: pointer; }
+.nss-menu-item[aria-current="page"] { background: var(--ui-control); color: var(--ui-control-ink); }
+.nss-menu-item[aria-disabled="true"] { opacity: 0.62; cursor: default; }
+.nss-menu-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.nss-menu-name { font-family: var(--font-mono); font-size: 13px; line-height: 1; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; }
+.nss-menu-sub { font-family: var(--font-mono); font-size: 11px; line-height: 1.2; font-weight: 400; color: var(--ui-ink-muted); }
+.nss-menu-item[aria-current="page"] .nss-menu-sub { color: var(--ui-control-ink); }
+.nss-soon { font-family: var(--font-mono); font-size: 9px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; color: var(--ui-ink-muted); border: 1px solid var(--ui-track); border-radius: var(--radius-xs); padding: 3px 4px; }
+.nss-menu-rule { margin: 2px var(--space-3); border: 0; border-top: 1px solid var(--ui-track); }
+.nss-setting { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: var(--space-1) var(--space-3); }
+.nss-setting .nss-switch { width: 176px; }
+.nss-setting .nss-switch button { flex: 1; width: auto; gap: 8px; font-family: var(--font-mono); font-size: 10px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; }

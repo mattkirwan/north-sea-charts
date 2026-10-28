@@ -4,7 +4,8 @@
    model's fields (scripts/chart_frames.py: one small gzipped grid per frame,
    on the frames branch), and one panel: the key, the band buttons, the time
    readout and the timeline. The panel is either open along the bottom or
-   docked to a narrow column on the right; both are in the page, one shown.
+   docked to a narrow column at the side (Menu › Settings › Panel), on the
+   right or the left (› Hand); both are in the page, one shown.
    Time moves only on the timeline; the chart pans and zooms like a map. The
    design system's tokens, panel components and icons (ds/) style
    everything; the canvas reads the same tokens. */
@@ -56,11 +57,15 @@ const ICONS = {
   updated: '<path d="M19 11 A7 7 0 0 0 6.2 8"></path><path d="M5 5 V8.5 H8.5"></path><path d="M5 13 A7 7 0 0 0 17.8 16"></path><path d="M19 19 V15.5 H15.5"></path>',
   offline: '<path d="M12 20 V12"></path><path d="M8.8 9.2 A4.5 4.5 0 0 1 15.2 9.2"></path><path d="M6.2 6.6 A8.2 8.2 0 0 1 17.8 6.6"></path><path d="M4 4 L20 20"></path>',
   old: '<circle cx="12" cy="12" r="8.5"></circle><path d="M12 7 V12 L15.5 14"></path>',
-  dock: '<rect x="3" y="4.5" width="18" height="15"></rect><path d="M15.5 4.5 V19.5"></path><path d="M6.5 12 H12.5 M10 9.5 L12.5 12 L10 14.5"></path>',
-  open: '<rect x="3" y="4.5" width="18" height="15"></rect><path d="M15.5 4.5 V19.5"></path><path d="M12.5 12 H6.5 M9 9.5 L6.5 12 L9 14.5"></path>'
+  menu: '<path d="M4 6.5 H20 M4 12 H20 M4 17.5 H14"></path>',
+  close: '<path d="M6 6 L18 18 M18 6 L6 18"></path>',
+  back: '<path d="M14.5 6 L8.5 12 L14.5 18"></path>',
+  chevron: '<path d="M9.5 6 L15.5 12 L9.5 18"></path>',
+  'panel-bottom': '<rect x="3" y="4.5" width="18" height="15"></rect><path d="M3 14.5 H21"></path>',
+  'panel-side': '<rect x="3" y="4.5" width="18" height="15"></rect><path d="M15.5 4.5 V19.5"></path>'
 };
 const icon = (n, cls = '') => `<svg class="nss-icon${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
-document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
+document.querySelectorAll('[data-icon]').forEach((el) => { el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon, el.dataset.iconSize ? ` nss-icon--${el.dataset.iconSize}` : '')); });
 const KEYS = {
   wind: { unit: 'Wind, mph', steps: ['10', '20', '25', '30', '40', '50+'], tok: 'wind', lev: [10, 20, 25, 30, 40, 50] },
   height: { unit: 'Swell height, m', steps: ['0.5', '1', '1.5', '2', '3', '4', '6+'], tok: 'height', lev: [0.5, 1, 1.5, 2, 3, 4, 6], fig: (l) => `${l} m` },
@@ -70,7 +75,7 @@ const KEYS = {
 // ---- State ----------------------------------------------------------------
 let man = null, frames = [], idx = 0, shown = -1;
 let band = store.get('nss.band', 'pressure'), swellVar = store.get('nss.swell', 'height');
-let docked = store.get('nss.docked', false);
+let docked = store.get('nss.docked', false), hand = store.get('nss.hand', 'right');
 let offline = false, updatedNote = false, failedAt = {};
 const loading = new Set();
 let inflight = 0;
@@ -425,27 +430,28 @@ let W = 0, Hs = 0, dpr = 1;
 const SQ = { x0: -2805, x1: 1795, y0: -650, y1: -5250 }, SIDE = 4600;
 const COL_W = 64;
 const panelH = () => $('#panel').offsetHeight;
-// The part of the screen the chart has to itself: above the open panel, or
-// left of the docked column.
-const vis = () => (docked ? { w: Math.max(100, W - COL_W), h: Hs } : { w: W, h: Math.max(100, Hs - panelH()) });
-// Everything right of x and below y is under the panel.
-const panelBox = () => (docked ? { x: W - COL_W, y: $('#column').offsetTop } : { x: 0, y: Hs - panelH() });
+// The part of the screen the chart has to itself, from x across: above the
+// open panel, or beside the docked column.
+const vis = () => (docked ? { x: hand === 'left' ? COL_W : 0, w: Math.max(100, W - COL_W), h: Hs } : { x: 0, w: W, h: Math.max(100, Hs - panelH()) });
+// Everything between x0 and x1 and below y is under the panel.
+const panelBox = () => (!docked ? { x0: 0, x1: W, y: Hs - panelH() }
+  : { x0: hand === 'left' ? 0 : W - COL_W, x1: hand === 'left' ? COL_W : W, y: $('#column').offsetTop });
 const kMin = () => { const v = vis(); return Math.min(v.w, v.h) / SIDE; }, kMax = () => W / MAX_KM_ACROSS;
 let view = store.get('nss.view', null);
 function fitHome() {
   // Iceland and Svalbard down to the UK.
   const bx0 = -1450, bx1 = 1000, by0 = -760, by1 = -4480, v = vis();
   const k = Math.min(v.w / (bx1 - bx0), v.h / (by0 - by1)) * 0.98;
-  view = { x: (bx0 + bx1) / 2 + (W - v.w) / (2 * k), y: (by0 + by1) / 2 - (Hs - v.h) / (2 * k), k };
+  view = { x: (bx0 + bx1) / 2 - (v.x + v.w / 2 - W / 2) / k, y: (by0 + by1) / 2 - (Hs - v.h) / (2 * k), k };
 }
 function clampView() {
   const v = vis();
   view.k = Math.max(kMin(), Math.min(kMax(), view.k));
-  const k = view.k, halfW = v.w / (2 * k), halfH = v.h / (2 * k), ox = (W - v.w) / (2 * k), oy = (Hs - v.h) / (2 * k);
-  let vx = view.x - ox, vy = view.y + oy;   // world point at the middle of the visible chart
+  const k = view.k, halfW = v.w / (2 * k), halfH = v.h / (2 * k), ox = (v.x + v.w / 2 - W / 2) / k, oy = (Hs - v.h) / (2 * k);
+  let vx = view.x + ox, vy = view.y + oy;   // world point at the middle of the visible chart
   vx = 2 * halfW >= SIDE ? (SQ.x0 + SQ.x1) / 2 : Math.max(SQ.x0 + halfW, Math.min(SQ.x1 - halfW, vx));
   vy = 2 * halfH >= SIDE ? (SQ.y0 + SQ.y1) / 2 : Math.max(SQ.y1 + halfH, Math.min(SQ.y0 - halfH, vy));
-  view.x = vx + ox; view.y = vy - oy;
+  view.x = vx - ox; view.y = vy - oy;
 }
 // After the panel changes shape, ease the map back inside its limits rather
 // than jumping.
@@ -623,7 +629,7 @@ function draw() {
   screen();
   const boxes = [], free = (bx, by, bw, bh) => {
     if (bx < 2 || by < 2 || bx + bw > W - 2 || by + bh > Hs - 2) return false;
-    if (bx + bw > pb.x - 4 && by + bh > pb.y - 4) return false;
+    if (bx + bw > pb.x0 - 4 && bx < pb.x1 + 4 && by + bh > pb.y - 4) return false;
     if (boxes.some((o) => bx < o[0] + o[2] && o[0] < bx + bw && by < o[1] + o[3] && o[1] < by + bh)) return false;
     boxes.push([bx, by, bw, bh]); return true;
   };
@@ -676,7 +682,7 @@ function drawWind(fi, sx, sy, screen) {
     for (let wy = Math.ceil(y0 / s) * s; wy <= y1; wy += s) {
       if (wx < sq.x0 || wx > sq.x1 || wy > sq.y0 || wy < sq.y1) continue;
       const px = sx(wx), py = sy(wy);
-      if (px > pb.x + 10 && py > pb.y + 10) continue;
+      if (px > pb.x0 + 10 && px < pb.x1 - 10 && py > pb.y + 10) continue;
       const gj = (wx - sq.x0) / (sq.x1 - sq.x0) * (P - 1), gi = (sq.y0 - wy) / (sq.y0 - sq.y1) * (P - 1);
       const u = bilinear(d.u, P, gj, gi) / ws, v = bilinear(d.v, P, gj, gi) / ws, sp = Math.hypot(u, v);
       if (sp < 0.3) continue;
@@ -692,7 +698,7 @@ function drawWind(fi, sx, sy, screen) {
   ctx.strokeStyle = C.arrow; ctx.stroke(path);
 }
 
-// ---- Panel: bands, key, swell switch, open or docked ---------------------------------------
+// ---- Panel: bands, key, swell switch, open or docked, right or left -------------------------
 const panelEl = $('#panel'), columnEl = $('#column'), flyout = $('#flyout');
 function renderPanel() {
   document.querySelectorAll('.nss-band').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.band === band)));
@@ -732,16 +738,110 @@ document.querySelectorAll('[data-swell]').forEach((sw) => sw.addEventListener('c
   if (!b || b.dataset.var === swellVar) return;
   swellVar = b.dataset.var; store.set('nss.swell', swellVar); renderPanel(); requestDraw(); warm();
 }));
+// The panel's state and its side are settings (Menu › Settings): applied at
+// once, behind the menu, and kept for next time.
 function setDocked(d, first) {
-  const hadFocus = document.activeElement && document.activeElement.classList.contains('nss-dock-btn');
   docked = d; store.set('nss.docked', d);
   panelEl.toggleAttribute('data-away', d); columnEl.toggleAttribute('data-away', !d);
-  panelEl.inert = d; columnEl.inert = !d;
-  if (hadFocus) (d ? columnEl : panelEl).querySelector('.nss-dock-btn').focus({ preventScroll: true });
-  placeTrack(); renderTips();
+  applyInert(); placeTrack(); renderTips(); renderSettings();
   if (!first) easeClamp();
 }
-document.querySelectorAll('.nss-dock-btn').forEach((b) => b.addEventListener('click', () => setDocked(b.dataset.dock === '1')));
+function setHand(h, first) {
+  hand = h === 'left' ? 'left' : 'right'; store.set('nss.hand', hand);
+  document.documentElement.dataset.hand = hand;
+  renderSettings();
+  if (!first) easeClamp();
+}
+// Only what's showing can be reached: the panel in use, or the menu over it.
+function applyInert() {
+  panelEl.inert = docked || !!sheetOn; columnEl.inert = !docked || !!sheetOn; cv.inert = !!sheetOn;
+}
+
+// ---- Menu: a sheet from the bottom, then Settings or About in its place ---------------------
+const scrim = $('#scrim'), sheets = {};
+document.querySelectorAll('[data-sheet]').forEach((s) => { sheets[s.dataset.sheet] = s; });
+let sheetOn = null, sheetT = 0;
+const menuBtn = () => (docked ? columnEl : panelEl).querySelector('[data-menu]');
+const focusables = (s) => [...s.querySelectorAll('button, a[href]')];
+// Shown or not, sliding there or (switching sheets, or with Reduce Motion) not.
+function reveal(el, on, slide) {
+  if (!slide) el.style.transition = 'none';
+  el.toggleAttribute('data-shown', on);
+  if (!slide) { void el.offsetHeight; el.style.transition = ''; }
+}
+function openSheet(name, focus) {
+  clearTimeout(sheetT);
+  const slide = !sheetOn && !reduced.matches, s = sheets[name];
+  for (const o of Object.values(sheets)) if (o !== s) { o.hidden = true; o.removeAttribute('data-shown'); }
+  scrim.hidden = false; s.hidden = false;
+  void s.offsetHeight;                     // rises from below the screen
+  reveal(s, true, slide); reveal(scrim, true, slide);
+  sheetOn = name; applyInert();
+  (focus ? s.querySelector(focus) : focusables(s)[0]).focus({ preventScroll: true });
+}
+function closeSheet() {
+  if (!sheetOn) return;
+  const s = sheets[sheetOn], slide = !reduced.matches;
+  sheetOn = null; applyInert();
+  reveal(s, false, slide); reveal(scrim, false, slide);
+  sheetT = setTimeout(() => { s.hidden = true; scrim.hidden = true; }, slide ? 240 : 0);
+  menuBtn().focus({ preventScroll: true });
+}
+function renderSettings() {
+  const on = { panel: docked ? 'side' : 'bottom', hand };
+  document.querySelectorAll('[data-set]').forEach((sw) => sw.querySelectorAll('button').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.value === on[sw.dataset.set]));
+  }));
+}
+document.querySelectorAll('[data-menu]').forEach((b) => b.addEventListener('click', () => openSheet('menu')));
+scrim.addEventListener('click', closeSheet);
+document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', closeSheet));
+document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => openSheet(b.dataset.go)));
+document.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', () => {
+  openSheet('menu', `[data-go="${b.closest('[data-sheet]').dataset.sheet}"]`);
+}));
+// Chart is where we are: back to it. The views still to come do nothing.
+document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
+  if (b.getAttribute('aria-current') === 'page') closeSheet();
+}));
+document.querySelectorAll('[data-set]').forEach((sw) => sw.addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (sw.dataset.set === 'panel' && docked !== (b.dataset.value === 'side')) setDocked(b.dataset.value === 'side');
+  if (sw.dataset.set === 'hand' && hand !== b.dataset.value) setHand(b.dataset.value);
+}));
+// Focus stays in the sheet; Escape closes it.
+document.addEventListener('keydown', (e) => {
+  if (!sheetOn) return;
+  if (e.key === 'Escape') { e.preventDefault(); closeSheet(); return; }
+  if (e.key !== 'Tab') return;
+  const f = focusables(sheets[sheetOn]), i = f.indexOf(document.activeElement);
+  if (i < 0 || (e.shiftKey ? i === 0 : i === f.length - 1)) { e.preventDefault(); f[e.shiftKey ? f.length - 1 : 0].focus(); }
+});
+// A swipe down on the grip pulls the sheet down: far or fast enough, it closes.
+document.querySelectorAll('.nss-sheet-grip').forEach((g) => {
+  const s = g.closest('[data-sheet]');
+  let pull = null;
+  g.addEventListener('pointerdown', (e) => {
+    g.setPointerCapture(e.pointerId);
+    pull = { y: e.clientY, t: performance.now(), dy: 0 };
+    s.style.transition = 'none';
+  });
+  g.addEventListener('pointermove', (e) => {
+    if (!pull) return;
+    pull.dy = Math.max(0, e.clientY - pull.y);
+    s.style.transform = `translateY(${pull.dy}px)`;
+  });
+  const end = () => {
+    if (!pull) return;
+    const p = pull, fast = p.dy > 16 && p.dy / (performance.now() - p.t) > 0.5;
+    pull = null;
+    s.style.transition = ''; s.style.transform = '';
+    if (p.dy > 60 || fast) closeSheet();
+  };
+  g.addEventListener('pointerup', end);
+  g.addEventListener('pointercancel', end);
+});
 
 // ---- Time readout and status -------------------------------------------------------------
 const fWeek = new Intl.DateTimeFormat('en-GB', { weekday: 'short' });
@@ -1041,6 +1141,7 @@ if (Q.has('debug')) {
 // ---- Start -------------------------------------------------------------------------------
 readTokens();
 renderPanel();
+setHand(hand, true);
 setDocked(docked, true);
 resize();
 requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.classList.remove('still')));
