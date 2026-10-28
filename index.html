@@ -77,8 +77,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
-<link rel="stylesheet" href="ds/tokens.css">
-<link rel="stylesheet" href="ds/components/bundle.css">
+<link rel="stylesheet" href="ds/tokens.css?v=dev">
+<link rel="stylesheet" href="ds/components/bundle.css?v=dev">
 <style>
   [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; }
@@ -324,7 +324,9 @@
     <div><dt class="nss-menu-name" data-t="ice">Sea ice</dt><dd class="nss-menu-sub" data-t="iceSub">MET Norway's ice chart, once a day</dd></div>
   </dl>
 </div>
-<script src="i18n.js"></script>
-<script src="app.js"></script>
+<!-- ?v= is the deploy's commit (deploy.yml), so a new page never runs
+     the last deploy's scripts kept by the browser. -->
+<script src="i18n.js?v=dev"></script>
+<script src="app.js?v=dev"></script>
 </body>
 </html>

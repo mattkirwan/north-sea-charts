@@ -36,7 +36,13 @@ self.addEventListener('fetch', (e) => {
   else if (url.href.startsWith(CHARTS + 'manifest.json') || url.href.startsWith(DATA) || url.href.startsWith(FRAMES_NEW + 'manifest.json') || url.href.startsWith(FRAMES_NEW + 'ice.json') ||
            (url.origin === location.origin && url.pathname.endsWith('/manifest.json')))
     e.respondWith(latest(req, url.origin + url.pathname));
-  else if (url.origin === location.origin && !url.search) e.respondWith(latest(req, url.href, NSS_STATIC));
+  // The app's own files, ?v= (the deploy, index.html) or not, kept under
+  // their path, so a deploy's copy replaces the last one's. Checked with the
+  // server every time, past the browser's cache: a host that lets the browser
+  // keep scripts for hours (Cloudflare's Browser Cache TTL) would otherwise
+  // pair a new page with the last deploy's app.js.
+  else if (url.origin === location.origin && (!url.search || [...url.searchParams.keys()].join() === 'v'))
+    e.respondWith(latest(new Request(req.url, { cache: 'no-cache' }), url.origin + url.pathname, NSS_STATIC));
   else if (FONTS.some((f) => url.href.startsWith(f))) e.respondWith(kept(req, NSS_STATIC));
 });
 
