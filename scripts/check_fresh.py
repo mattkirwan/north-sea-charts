@@ -20,10 +20,17 @@ import urllib.request
 FRAMES = 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/frames/'
 MAX_AGE_H = 9
 H = 3600e3
+# Asked for as the app asks: from its page (Origin), and not as Python's
+# default client, which Cloudflare's bot protection in front of R2 refuses.
+ORIGIN = 'https://northsea.surf'
+HEADERS = {'User-Agent': 'Mozilla/5.0 (compatible; north-sea-charts freshness check)', 'Origin': ORIGIN}
 
 
 def get(url):
-    with urllib.request.urlopen(url, timeout=60) as r:
+    """The body, if a phone could have read it: the app's page needs a CORS header."""
+    with urllib.request.urlopen(urllib.request.Request(url, headers=HEADERS), timeout=60) as r:
+        if not r.headers.get('Access-Control-Allow-Origin'):
+            raise OSError(f'no CORS header for {ORIGIN}')
         return r.read()
 
 

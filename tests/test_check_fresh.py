@@ -80,5 +80,47 @@ class Fresh(unittest.TestCase):
         self.assertTrue(any('in the past' in p for p in found))
 
 
+
+class AsTheAppAsks(unittest.TestCase):
+    """get() asks as the app does, and refuses what a phone couldn't read."""
+
+    @classmethod
+    def setUpClass(cls):
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        class Domain(BaseHTTPRequestHandler):
+            def do_GET(self):
+                cls.seen = dict(self.headers)
+                # Like Cloudflare's bot protection: Python's own client is refused.
+                if self.headers.get('User-Agent', '').startswith('Python-urllib'):
+                    self.send_response(403)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                if self.path.startswith('/cors'):
+                    self.send_header('Access-Control-Allow-Origin', self.headers.get('Origin', '*'))
+                self.end_headers()
+                self.wfile.write(b'frame')
+
+            def log_message(self, *a):
+                pass
+        cls.server = ThreadingHTTPServer(('127.0.0.1', 0), Domain)
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+        cls.url = f'http://127.0.0.1:{cls.server.server_port}'
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+
+    def test_readable(self):
+        self.assertEqual(cfr.get(self.url + '/cors/f000.bin.gz'), b'frame')
+        self.assertEqual(self.seen['Origin'], cfr.ORIGIN)
+
+    def test_no_cors_header(self):
+        with self.assertRaisesRegex(OSError, 'no CORS header'):
+            cfr.get(self.url + '/plain/f000.bin.gz')
+
+
 if __name__ == '__main__':
     unittest.main()
