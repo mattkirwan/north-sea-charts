@@ -117,6 +117,11 @@
   /* Pressure's key: the two isobar styles as lines, not colour swatches. */
   .nss-key-step i.key-line { height: 6px; background: none; overflow: visible; }
   .key-line svg { display: block; width: 100%; height: 6px; overflow: visible; }
+  /* Open panel: text on the band and swell buttons, with a lifeboat light on the selected band. */
+  .nss-panel .nss-band { flex-direction: column; gap: 6px; font-family: var(--font-mono); font-size: 11px; line-height: 1; font-weight: 500; letter-spacing: 0.8px; text-transform: uppercase; }
+  .nss-panel .nss-band::before { content: ""; width: 6px; height: 6px; border-radius: 1px; background: var(--ui-led-off); }
+  .nss-panel .nss-band[aria-pressed="true"]::before { background: var(--lifeboat); }
+  .nss-panel .nss-switch button { width: 68px; font-family: var(--font-mono); font-size: 10px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase; }
   .nss-band, .nss-switch button, .nss-dock-btn { transition: background-color 120ms, border-color 120ms, color 120ms; }
   .nss-band:active, .nss-switch button:active, .nss-dock-btn:active { transform: scale(0.97); }
 
@@ -161,15 +166,15 @@
     <div class="nss-keyrow">
       <div class="nss-key" data-key></div>
       <div class="nss-switch" data-swell role="group" aria-label="Swell measure">
-        <button type="button" data-var="height" aria-pressed="true" aria-label="Height" data-icon="height"></button>
-        <button type="button" data-var="period" aria-pressed="false" aria-label="Period" data-icon="period"></button>
+        <button type="button" data-var="height" aria-pressed="true" aria-label="Height">Height</button>
+        <button type="button" data-var="period" aria-pressed="false" aria-label="Period">Period</button>
       </div>
     </div>
   </div></div>
   <div class="nss-bands" role="group" aria-label="Chart layer">
-    <button type="button" class="nss-band" data-band="pressure" aria-pressed="true" aria-label="Pressure" data-icon="pressure"></button>
-    <button type="button" class="nss-band" data-band="wind" aria-pressed="false" aria-label="Wind" data-icon="wind"></button>
-    <button type="button" class="nss-band" data-band="swell" aria-pressed="false" aria-label="Swell" data-icon="swell"></button>
+    <button type="button" class="nss-band" data-band="pressure" aria-pressed="true" aria-label="Pressure">Pressure</button>
+    <button type="button" class="nss-band" data-band="wind" aria-pressed="false" aria-label="Wind">Wind</button>
+    <button type="button" class="nss-band" data-band="swell" aria-pressed="false" aria-label="Swell">Swell</button>
   </div>
   <div class="nss-readout" id="readout" role="group" aria-label="Forecast time">
     <span class="nss-readout-day" data-day>–</span>
