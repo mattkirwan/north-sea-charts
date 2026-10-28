@@ -308,6 +308,8 @@ class App(unittest.TestCase):
         self.page.wait_for_function("getComputedStyle(document.querySelector('#column')).opacity === '1'")
         self.assertEqual(round(self.box('#column')['x']), 390 - 64)
         self.assertEqual(self.page.locator('[data-set="hand"] [data-value="right"]').get_attribute('aria-pressed'), 'true')
+        # Each side's button on its own side.
+        self.assertLess(self.box('[data-set="hand"] [data-value="left"]')['x'], self.box('[data-set="hand"] [data-value="right"]')['x'])
         self.setting('hand', 'left')
         self.assertEqual(self.page.locator('html').get_attribute('data-hand'), 'left')
         self.assertEqual(round(self.box('#column')['x']), 0)

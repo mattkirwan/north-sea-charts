@@ -140,6 +140,7 @@
   .nss-about > div { display: flex; flex-direction: column; gap: 4px; padding: var(--space-2) var(--space-3); }
   .nss-about dd { margin: 0; }
   .nss-about-lede { margin: 0; padding: 0 var(--space-3) var(--space-1); font-size: 11px; line-height: 1.5; color: var(--ui-ink-muted); }
+  .nss-about-sign { color: var(--ui-ink); font-weight: 500; }
 
   /* The key row can fold away (data-off), and the panel with it. */
   .keyslot { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 200ms ease, margin-bottom 200ms ease, opacity 160ms ease; }
@@ -280,25 +281,27 @@
   <span class="nss-sheet-grip" aria-hidden="true"></span>
   <div class="nss-sheet-head"><button type="button" class="nss-menu-btn" data-back aria-label="Back to menu" data-icon="back"></button><h2 class="nss-sheet-title">Settings</h2></div>
   <div class="nss-setting">
-    <span class="nss-menu-text"><span class="nss-menu-name" id="setPanel">Panel</span><span class="nss-menu-sub">Along the bottom, or a narrow column</span></span>
+    <span class="nss-menu-text"><span class="nss-menu-name" id="setPanel">Panel</span><span class="nss-menu-sub">Along the bottom or a narrow sidebar</span></span>
     <div class="nss-switch" data-set="panel" role="group" aria-labelledby="setPanel">
       <button type="button" data-value="bottom" aria-pressed="true"><span data-icon="panel-bottom" data-icon-size="sm"></span>Bottom</button>
       <button type="button" data-value="side" aria-pressed="false"><span data-icon="panel-side" data-icon-size="sm"></span>Side</button>
     </div>
   </div>
   <div class="nss-setting">
-    <span class="nss-menu-text"><span class="nss-menu-name" id="setHand">Hand</span><span class="nss-menu-sub">Which side the menu and column sit</span></span>
+    <span class="nss-menu-text"><span class="nss-menu-name" id="setHand">Hand</span><span class="nss-menu-sub">Which side the menu and sidebar sit</span></span>
     <div class="nss-switch" data-set="hand" role="group" aria-labelledby="setHand">
-      <button type="button" data-value="right" aria-pressed="true">Right</button>
       <button type="button" data-value="left" aria-pressed="false">Left</button>
+      <button type="button" data-value="right" aria-pressed="true">Right</button>
     </div>
   </div>
 </div>
-<!-- About: placeholder copy, for review. -->
+<!-- About: Matt's words, then where the data comes from. -->
 <div class="nss-sheet" id="about" data-sheet="about" role="dialog" aria-modal="true" aria-label="About" hidden>
   <span class="nss-sheet-grip" aria-hidden="true"></span>
   <div class="nss-sheet-head"><button type="button" class="nss-menu-btn" data-back aria-label="Back to menu" data-icon="back"></button><h2 class="nss-sheet-title">About</h2></div>
-  <p class="nss-about-lede">North Sea Surf: a forecast chart for surfers who read pressure charts, from Svalbard to the Dover Strait. It shows what the models say and leaves the reading to you.</p>
+  <p class="nss-about-lede">I'm dedicated to building the perfect tool and data set so that surfers can learn to accurately predict the conditions for their location wherever they are along the North Sea coastlines.</p>
+  <p class="nss-about-lede">I'm hyper-focused on providing a beautiful and intuitive interface backed by realtime data tuned for the quirks of our beloved North Sea.</p>
+  <p class="nss-about-lede nss-about-sign">– Matt</p>
   <dl class="nss-about">
     <div><dt class="nss-menu-name">GFS</dt><dd class="nss-menu-sub">Pressure and wind, from NOAA's Global Forecast System, four runs a day</dd></div>
     <div><dt class="nss-menu-name">GFS-Wave</dt><dd class="nss-menu-sub">Swell height and period, from NOAA's wave model, run with GFS</dd></div>
