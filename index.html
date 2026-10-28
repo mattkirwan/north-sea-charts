@@ -141,6 +141,10 @@
   .nss-about dd { margin: 0; }
   .nss-about-lede { margin: 0; padding: 0 var(--space-3) var(--space-1); font-size: 11px; line-height: 1.5; color: var(--ui-ink-muted); }
   .nss-about-sign { color: var(--ui-ink); font-weight: 500; }
+  /* Language: the one in use marked like the view we're on, with a tick. */
+  .nss-menu-item[aria-checked="true"] { background: var(--ui-control); color: var(--ui-control-ink); }
+  .nss-menu-item[aria-checked="true"] .nss-menu-sub { color: var(--ui-control-ink); }
+  .nss-menu-item[aria-checked="false"] .nss-icon { visibility: hidden; }
 
   /* The key row can fold away (data-off), and the panel with it. */
   .keyslot { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 200ms ease, margin-bottom 200ms ease, opacity 160ms ease; }
@@ -190,32 +194,33 @@
 </style>
 </head>
 <body>
-<canvas id="chart" aria-label="Weather chart of the North Sea and the seas round it. Drag to move the map, pinch to zoom, double-tap to zoom in." role="img"></canvas>
+<canvas id="chart" aria-label="Weather chart of the North Sea and the seas round it. Drag to move the map, pinch to zoom, double-tap to zoom in." data-t-label="chartLabel" role="img"></canvas>
 
-<!-- Open: full width along the bottom. -->
+<!-- Open: full width along the bottom. Each word on the page carries its key
+     in i18n.js: data-t for its text, data-t-label for its aria-label. -->
 <div class="nss-panel" id="panel">
   <div class="keyslot" id="keyslot"><div>
     <div class="nss-keyrow">
       <div class="nss-key" data-key></div>
-      <div class="nss-switch" data-swell role="group" aria-label="Swell measure">
-        <button type="button" data-var="height" aria-pressed="true" aria-label="Height">Height</button>
-        <button type="button" data-var="period" aria-pressed="false" aria-label="Period">Period</button>
+      <div class="nss-switch" data-swell role="group" aria-label="Swell measure" data-t-label="swellMeasure">
+        <button type="button" data-var="height" aria-pressed="true" aria-label="Height" data-t="height" data-t-label="height">Height</button>
+        <button type="button" data-var="period" aria-pressed="false" aria-label="Period" data-t="period" data-t-label="period">Period</button>
       </div>
     </div>
   </div></div>
-  <div class="nss-bands" role="group" aria-label="Chart layer">
-    <button type="button" class="nss-band" data-band="pressure" aria-pressed="true" aria-label="Pressure">Pressure</button>
-    <button type="button" class="nss-band" data-band="wind" aria-pressed="false" aria-label="Wind">Wind</button>
-    <button type="button" class="nss-band" data-band="swell" aria-pressed="false" aria-label="Swell">Swell</button>
+  <div class="nss-bands" role="group" aria-label="Chart layer" data-t-label="layer">
+    <button type="button" class="nss-band" data-band="pressure" aria-pressed="true" aria-label="Pressure" data-t="pressure" data-t-label="pressure">Pressure</button>
+    <button type="button" class="nss-band" data-band="wind" aria-pressed="false" aria-label="Wind" data-t="wind" data-t-label="wind">Wind</button>
+    <button type="button" class="nss-band" data-band="swell" aria-pressed="false" aria-label="Swell" data-t="swell" data-t-label="swell">Swell</button>
   </div>
-  <div class="nss-readout" id="readout" role="group" aria-label="Forecast time">
+  <div class="nss-readout" id="readout" role="group" aria-label="Forecast time" data-t-label="forecastTime">
     <span class="nss-readout-day" data-day>–</span>
     <span class="nss-readout-lead" data-lead></span>
     <span class="nss-readout-time" data-time>–</span>
     <span class="nss-readout-status" id="rStatus" hidden></span>
   </div>
   <div class="nss-panel-timerow">
-    <div class="nss-timeline" data-axis="x" role="slider" tabindex="0" aria-label="Forecast timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+    <div class="nss-timeline" data-axis="x" role="slider" tabindex="0" aria-label="Forecast timeline" data-t-label="timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
       <span class="nss-timeline-arrow"></span>
       <div class="nss-scale">
         <div class="nss-track" data-track></div>
@@ -223,7 +228,7 @@
         <span class="nss-tip" data-tip hidden></span>
       </div>
     </div>
-    <button type="button" class="nss-menu-btn" data-menu aria-label="Menu" aria-haspopup="dialog" data-icon="menu"></button>
+    <button type="button" class="nss-menu-btn" data-menu aria-label="Menu" data-t-label="menu" aria-haspopup="dialog" data-icon="menu"></button>
   </div>
 </div>
 
@@ -233,7 +238,7 @@
     <b data-day>–</b><strong data-time>–</strong><small data-lead></small>
     <span class="col-status" id="colStatus" hidden></span>
   </div>
-  <div class="nss-vtimeline" data-axis="y" role="slider" tabindex="0" aria-orientation="vertical" aria-label="Forecast timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+  <div class="nss-vtimeline" data-axis="y" role="slider" tabindex="0" aria-orientation="vertical" aria-label="Forecast timeline" data-t-label="timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
     <div class="nss-vtimeline-track">
       <div class="nss-vtrack" data-track></div>
       <span class="nss-needle"></span>
@@ -241,73 +246,85 @@
     <span class="nss-vtimeline-arrow"></span>
     <span class="nss-tip" data-tip hidden></span>
   </div>
-  <div class="nss-bands" role="group" aria-label="Chart layer">
-    <div class="nss-band-slot"><button type="button" class="nss-band" data-band="pressure" aria-pressed="true" aria-label="Pressure" data-icon="pressure"></button></div>
-    <div class="nss-band-slot"><button type="button" class="nss-band" data-band="wind" aria-pressed="false" aria-label="Wind" data-icon="wind"></button></div>
-    <div class="nss-band-slot"><button type="button" class="nss-band" data-band="swell" aria-pressed="false" aria-label="Swell" data-icon="swell"></button></div>
+  <div class="nss-bands" role="group" aria-label="Chart layer" data-t-label="layer">
+    <div class="nss-band-slot"><button type="button" class="nss-band" data-band="pressure" aria-pressed="true" aria-label="Pressure" data-t-label="pressure" data-icon="pressure"></button></div>
+    <div class="nss-band-slot"><button type="button" class="nss-band" data-band="wind" aria-pressed="false" aria-label="Wind" data-t-label="wind" data-icon="wind"></button></div>
+    <div class="nss-band-slot"><button type="button" class="nss-band" data-band="swell" aria-pressed="false" aria-label="Swell" data-t-label="swell" data-icon="swell"></button></div>
   </div>
-  <button type="button" class="nss-menu-btn" data-menu aria-label="Menu" aria-haspopup="dialog" data-icon="menu"></button>
+  <button type="button" class="nss-menu-btn" data-menu aria-label="Menu" data-t-label="menu" aria-haspopup="dialog" data-icon="menu"></button>
   <div class="nss-flyout" id="flyout" hidden>
     <div class="nss-key" data-key></div>
-    <div class="nss-switch" data-swell role="group" aria-label="Swell measure">
-      <button type="button" data-var="height" aria-pressed="true" aria-label="Height" data-icon="height"></button>
-      <button type="button" data-var="period" aria-pressed="false" aria-label="Period" data-icon="period"></button>
+    <div class="nss-switch" data-swell role="group" aria-label="Swell measure" data-t-label="swellMeasure">
+      <button type="button" data-var="height" aria-pressed="true" aria-label="Height" data-t-label="height" data-icon="height"></button>
+      <button type="button" data-var="period" aria-pressed="false" aria-label="Period" data-t-label="period" data-icon="period"></button>
     </div>
   </div>
 </div>
 <!-- The menu, from the menu button: views first, then Settings and About.
      Each opens as a sheet in the same place, so only one shows at a time. -->
 <div class="nss-scrim" id="scrim" hidden></div>
-<div class="nss-sheet" id="menu" data-sheet="menu" role="dialog" aria-modal="true" aria-label="Menu" hidden>
+<div class="nss-sheet" id="menu" data-sheet="menu" role="dialog" aria-modal="true" aria-label="Menu" data-t-label="menu" hidden>
   <span class="nss-sheet-grip" aria-hidden="true"></span>
   <!-- Views not built yet stay listed, dimmed and still focusable. They are
        the prediction system's, behind its flag (index.html, above); when one
        is built, drop its aria-disabled and its tag and route to it. -->
-  <nav aria-label="Views"><ul class="nss-menu-list">
-    <li><button type="button" class="nss-menu-item" data-view="chart" aria-current="page"><span class="nss-menu-text"><span class="nss-menu-name">Chart</span><span class="nss-menu-sub">Pressure, wind and swell</span></span></button></li>
-    <li><button type="button" class="nss-menu-item" data-view="spots" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name">Spots</span><span class="nss-menu-sub">Your breaks and their forecasts</span></span><span class="nss-soon">SOON</span></button></li>
-    <li><button type="button" class="nss-menu-item" data-view="buoys" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name">Buoys</span><span class="nss-menu-sub">Waves measured at sea</span></span><span class="nss-soon">SOON</span></button></li>
-    <li><button type="button" class="nss-menu-item" data-view="reports" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name">Reports</span><span class="nss-menu-sub">What surfers saw</span></span><span class="nss-soon">SOON</span></button></li>
-    <li><button type="button" class="nss-menu-item" data-view="skill" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name">How far out</span><span class="nss-menu-sub">How the forecast has done</span></span><span class="nss-soon">SOON</span></button></li>
+  <nav aria-label="Views" data-t-label="views"><ul class="nss-menu-list">
+    <li><button type="button" class="nss-menu-item" data-view="chart" aria-current="page"><span class="nss-menu-text"><span class="nss-menu-name" data-t="chart">Chart</span><span class="nss-menu-sub" data-t="chartSub">Pressure, wind and swell</span></span></button></li>
+    <li><button type="button" class="nss-menu-item" data-view="spots" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name" data-t="spots">Spots</span><span class="nss-menu-sub" data-t="spotsSub">Your breaks and their forecasts</span></span><span class="nss-soon" data-t="soon">SOON</span></button></li>
+    <li><button type="button" class="nss-menu-item" data-view="buoys" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name" data-t="buoys">Buoys</span><span class="nss-menu-sub" data-t="buoysSub">Waves measured at sea</span></span><span class="nss-soon" data-t="soon">SOON</span></button></li>
+    <li><button type="button" class="nss-menu-item" data-view="reports" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name" data-t="reports">Reports</span><span class="nss-menu-sub" data-t="reportsSub">What surfers saw</span></span><span class="nss-soon" data-t="soon">SOON</span></button></li>
+    <li><button type="button" class="nss-menu-item" data-view="skill" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name" data-t="skill">How far out</span><span class="nss-menu-sub" data-t="skillSub">How the forecast has done</span></span><span class="nss-soon" data-t="soon">SOON</span></button></li>
   </ul></nav>
   <hr class="nss-menu-rule">
   <ul class="nss-menu-list">
-    <li><button type="button" class="nss-menu-item" data-go="settings"><span class="nss-menu-text"><span class="nss-menu-name">Settings</span><span class="nss-menu-sub">Panel, units, theme</span></span><span data-icon="chevron" data-icon-size="sm"></span></button></li>
-    <li><button type="button" class="nss-menu-item" data-go="about"><span class="nss-menu-text"><span class="nss-menu-name">About</span><span class="nss-menu-sub">The app and the data</span></span><span data-icon="chevron" data-icon-size="sm"></span></button></li>
+    <li><button type="button" class="nss-menu-item" data-go="settings"><span class="nss-menu-text"><span class="nss-menu-name" data-t="settings">Settings</span><span class="nss-menu-sub" data-t="settingsSub">Panel, hand, language</span></span><span data-icon="chevron" data-icon-size="sm"></span></button></li>
+    <li><button type="button" class="nss-menu-item" data-go="about"><span class="nss-menu-text"><span class="nss-menu-name" data-t="about">About</span><span class="nss-menu-sub" data-t="aboutSub">The app and the data</span></span><span data-icon="chevron" data-icon-size="sm"></span></button></li>
   </ul>
-  <div class="nss-sheet-foot"><button type="button" class="nss-menu-btn" data-close aria-label="Close menu" data-icon="close"></button></div>
+  <div class="nss-sheet-foot"><button type="button" class="nss-menu-btn" data-close aria-label="Close menu" data-t-label="closeMenu" data-icon="close"></button></div>
 </div>
-<div class="nss-sheet" id="settings" data-sheet="settings" role="dialog" aria-modal="true" aria-label="Settings" hidden>
+<div class="nss-sheet" id="settings" data-sheet="settings" role="dialog" aria-modal="true" aria-label="Settings" data-t-label="settings" hidden>
   <span class="nss-sheet-grip" aria-hidden="true"></span>
-  <div class="nss-sheet-head"><button type="button" class="nss-menu-btn" data-back aria-label="Back to menu" data-icon="back"></button><h2 class="nss-sheet-title">Settings</h2></div>
+  <div class="nss-sheet-head"><button type="button" class="nss-menu-btn" data-back aria-label="Back to menu" data-t-label="back" data-icon="back"></button><h2 class="nss-sheet-title" data-t="settings">Settings</h2></div>
   <div class="nss-setting">
-    <span class="nss-menu-text"><span class="nss-menu-name" id="setPanel">Panel</span><span class="nss-menu-sub">Along the bottom or a narrow sidebar</span></span>
+    <span class="nss-menu-text"><span class="nss-menu-name" id="setPanel" data-t="panel">Panel</span><span class="nss-menu-sub" data-t="panelSub">Along the bottom or a narrow sidebar</span></span>
     <div class="nss-switch" data-set="panel" role="group" aria-labelledby="setPanel">
-      <button type="button" data-value="bottom" aria-pressed="true"><span data-icon="panel-bottom" data-icon-size="sm"></span>Bottom</button>
-      <button type="button" data-value="side" aria-pressed="false"><span data-icon="panel-side" data-icon-size="sm"></span>Side</button>
+      <button type="button" data-value="bottom" aria-pressed="true"><span data-icon="panel-bottom" data-icon-size="sm"></span><span data-t="bottom">Bottom</span></button>
+      <button type="button" data-value="side" aria-pressed="false"><span data-icon="panel-side" data-icon-size="sm"></span><span data-t="side">Side</span></button>
     </div>
   </div>
   <div class="nss-setting">
-    <span class="nss-menu-text"><span class="nss-menu-name" id="setHand">Hand</span><span class="nss-menu-sub">Which side the menu and sidebar sit</span></span>
+    <span class="nss-menu-text"><span class="nss-menu-name" id="setHand" data-t="hand">Hand</span><span class="nss-menu-sub" data-t="handSub">Which side the menu and sidebar sit</span></span>
     <div class="nss-switch" data-set="hand" role="group" aria-labelledby="setHand">
-      <button type="button" data-value="left" aria-pressed="false">Left</button>
-      <button type="button" data-value="right" aria-pressed="true">Right</button>
+      <button type="button" data-value="left" aria-pressed="false" data-t="left">Left</button>
+      <button type="button" data-value="right" aria-pressed="true" data-t="right">Right</button>
     </div>
   </div>
+  <!-- Language has a sheet of its own: more languages than a switch holds. -->
+  <button type="button" class="nss-menu-item" data-go="language"><span class="nss-menu-text"><span class="nss-menu-name" data-t="language">Language</span><span class="nss-menu-sub" data-lang-name>English</span></span><span data-icon="chevron" data-icon-size="sm"></span></button>
+</div>
+<!-- Language: from Settings, or by itself on first open (data-first), with the
+     phone's own language picked. app.js lists the languages (i18n.js). -->
+<div class="nss-sheet" id="language" data-sheet="language" role="dialog" aria-modal="true" aria-label="Language" data-t-label="language" hidden>
+  <span class="nss-sheet-grip" aria-hidden="true"></span>
+  <div class="nss-sheet-head"><button type="button" class="nss-menu-btn" data-back="settings" aria-label="Back to settings" data-t-label="backSettings" data-icon="back"></button><h2 class="nss-sheet-title" data-t="language">Language</h2></div>
+  <p class="nss-about-lede" data-lang-lede data-t="languageLede" hidden>Choose the app's language. You can change it later in Settings.</p>
+  <ul class="nss-menu-list" role="radiogroup" aria-label="Language" data-t-label="language" data-langs></ul>
+  <div class="nss-sheet-foot" data-lang-foot hidden><button type="button" class="nss-menu-btn" data-close aria-label="Close" data-t-label="close" data-icon="close"></button></div>
 </div>
 <!-- About: Matt's words, then where the data comes from. -->
-<div class="nss-sheet" id="about" data-sheet="about" role="dialog" aria-modal="true" aria-label="About" hidden>
+<div class="nss-sheet" id="about" data-sheet="about" role="dialog" aria-modal="true" aria-label="About" data-t-label="about" hidden>
   <span class="nss-sheet-grip" aria-hidden="true"></span>
-  <div class="nss-sheet-head"><button type="button" class="nss-menu-btn" data-back aria-label="Back to menu" data-icon="back"></button><h2 class="nss-sheet-title">About</h2></div>
-  <p class="nss-about-lede">I'm dedicated to building the perfect tool and data set so that surfers can learn to accurately predict the conditions for their location wherever they are along the North Sea coastlines.</p>
-  <p class="nss-about-lede">I'm hyper-focused on providing a beautiful and intuitive interface backed by realtime data tuned for the quirks of our beloved North Sea.</p>
+  <div class="nss-sheet-head"><button type="button" class="nss-menu-btn" data-back aria-label="Back to menu" data-t-label="back" data-icon="back"></button><h2 class="nss-sheet-title" data-t="about">About</h2></div>
+  <p class="nss-about-lede" data-t="aboutLede1">I'm dedicated to building the perfect tool and data set so that surfers can learn to accurately predict the conditions for their location wherever they are along the North Sea coastlines.</p>
+  <p class="nss-about-lede" data-t="aboutLede2">I'm hyper-focused on providing a beautiful and intuitive interface backed by realtime data tuned for the quirks of our beloved North Sea.</p>
   <p class="nss-about-lede nss-about-sign">– Matt</p>
   <dl class="nss-about">
-    <div><dt class="nss-menu-name">GFS</dt><dd class="nss-menu-sub">Pressure and wind, from NOAA's Global Forecast System, four runs a day</dd></div>
-    <div><dt class="nss-menu-name">GFS-Wave</dt><dd class="nss-menu-sub">Swell height and period, from NOAA's wave model, run with GFS</dd></div>
-    <div><dt class="nss-menu-name">Sea ice</dt><dd class="nss-menu-sub">MET Norway's ice chart, once a day</dd></div>
+    <div><dt class="nss-menu-name">GFS</dt><dd class="nss-menu-sub" data-t="gfsSub">Pressure and wind, from NOAA's Global Forecast System, four runs a day</dd></div>
+    <div><dt class="nss-menu-name">GFS-Wave</dt><dd class="nss-menu-sub" data-t="waveSub">Swell height and period, from NOAA's wave model, run with GFS</dd></div>
+    <div><dt class="nss-menu-name" data-t="ice">Sea ice</dt><dd class="nss-menu-sub" data-t="iceSub">MET Norway's ice chart, once a day</dd></div>
   </dl>
 </div>
+<script src="i18n.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
