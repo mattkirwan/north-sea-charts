@@ -861,6 +861,10 @@ function animateTo(target, dur = 220) {
 }
 const settle = () => animateTo(Math.round(Math.max(0, Math.min(maxPos(), tl.raw))));
 let drag = null, tlTap = 0;
+// An event's own time on the page's clock (performance.now), whichever clock
+// the browser stamps it with: some give time since 1970, which the animation
+// frames' times can't be taken from.
+const evTime = (e) => (e.timeStamp > 1e11 ? e.timeStamp - performance.timeOrigin : e.timeStamp);
 // How fast the scale was moving as the finger left it, in frames per ms: from
 // the last moments of the drag, and none if the finger stopped before lifting.
 function releaseSpeed(d, now) {
@@ -874,7 +878,7 @@ for (const T of TL) {
     if (!man) return;
     T.el.setPointerCapture(e.pointerId);
     cancelAnimationFrame(tl.anim);
-    drag = { c: along(e), c0: along(e), t0: e.timeStamp, samples: [[e.timeStamp, tl.raw]] };
+    drag = { c: along(e), c0: along(e), t0: evTime(e), samples: [[evTime(e), tl.raw]] };
     tipTouched();
   });
   T.el.addEventListener('pointermove', (e) => {
@@ -885,13 +889,13 @@ for (const T of TL) {
     moveTo(tl.raw - dc / TICK);
     if (Math.abs(drag.c - drag.c0) > 6) firstInteraction('rail');
     // When the finger moved (the event's own time), not when we got to it.
-    const now = e.timeStamp;
+    const now = evTime(e);
     drag.samples.push([now, tl.raw]);
     while (drag.samples.length > 2 && now - drag.samples[0][0] > 120) drag.samples.shift();
   });
   const end = (e) => {
     if (!drag) return;
-    const now = e.timeStamp, d = drag;
+    const now = evTime(e), d = drag;
     drag = null;
     if (Math.abs(d.c - d.c0) < 6 && now - d.t0 < 300) {
       if (now - tlTap < 320) { tlTap = 0; firstInteraction('rail'); animateTo(nearestIndex(man, Date.now()), 360); return; }
@@ -903,7 +907,7 @@ for (const T of TL) {
     // one a few hours, a hard one (faster swipes count for more) the whole run.
     let vel = v * (1 + 6 * Math.abs(v)), last = now;
     const step = (t) => {
-      const dt = Math.min(100, t - last); last = t;
+      const dt = Math.max(0, Math.min(100, t - last)); last = t;
       vel *= Math.pow(0.9975, dt);
       let r = tl.raw + vel * dt;
       if (r < 0 || r > maxPos()) {
