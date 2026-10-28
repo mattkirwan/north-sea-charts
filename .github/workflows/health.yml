@@ -2,7 +2,8 @@
 # (scripts/check_fresh.py). When they aren't, the run fails and an issue
 # titled "Chart data is stale" is opened (once; GitHub notifies the repo's
 # watchers), and it's closed again when the frames are back. Separate from
-# the loop in tick.yml, so it still speaks up if that loop has stopped.
+# the loop in tick.yml, so it still speaks up if that loop has stopped; the
+# loop also starts it every hour, in case GitHub turns this schedule off.
 name: Check the charts are fresh
 
 on:

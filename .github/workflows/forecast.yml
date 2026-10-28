@@ -35,7 +35,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install
-        run: pip install -q numpy scipy shapely pyshp
+        run: pip install -q -r requirements/forecast.txt
       - name: Forecast
         id: fc
         env:

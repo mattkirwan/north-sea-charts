@@ -100,8 +100,9 @@ function decode(b, P, S) {
 // Each run's frames sit in a folder named for it (m.dir), so a frame asked for
 // by an older manifest is missing once the next run is published, never the
 // next run's frame passed off as this one's. (Manifests from before m.dir:
-// the frames at the top of the branch.)
-const frameUrl = (m, i) => `${FR}${m.dir ? m.dir + '/' : ''}f${String(m.steps[i]).padStart(m.pad || 3, '0')}.bin.gz?run=${m.run}`;
+// the frames at the top of the branch.) The frames themselves come from
+// m.base (Cloudflare R2) when the manifest names it, else the branch.
+const frameUrl = (m, i) => `${m.base || FR}${m.dir ? m.dir + '/' : ''}f${String(m.steps[i]).padStart(m.pad || 3, '0')}.bin.gz?run=${m.run}`;
 let goneAt = 0;
 async function fetchFrame(m, i) {
   const r = await fetch(frameUrl(m, i), { mode: 'cors', credentials: 'omit' });
