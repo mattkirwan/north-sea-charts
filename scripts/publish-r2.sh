@@ -14,8 +14,9 @@
 # https://frames.northsea.surf/), R2_ACCOUNT_ID, R2_BUCKET,
 # R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY; R2_ENDPOINT overrides the S3
 # address (for testing), APP_ORIGIN the app's (default https://northsea.surf).
-# The bucket's CORS policy must let the app's pages GET from it:
-#   [{"AllowedOrigins": ["https://northsea.surf"], "AllowedMethods": ["GET"], "MaxAgeSeconds": 86400}]
+# The bucket's CORS policy must let the app's pages GET from it, staging's too:
+#   [{"AllowedOrigins": ["https://northsea.surf", "https://staging.northsea.surf"],
+#     "AllowedMethods": ["GET"], "MaxAgeSeconds": 86400}]
 set -e
 cd "$1" 2>/dev/null && [ -f manifest.json ] || { echo 'Nothing new to publish'; exit 0; }
 [ -n "$R2_PUBLIC_URL" ] || { echo 'R2 not set up (no R2_PUBLIC_URL); frames from the branch only'; exit 0; }

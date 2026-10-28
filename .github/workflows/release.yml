@@ -1,0 +1,23 @@
+# Releases the app to production, https://northsea.surf (deploy.yml), once
+# it's been tried on staging. Started by hand: main is what staging has. To
+# roll back, run it again with an earlier release-... tag.
+name: Release to production
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'What to release: main (what staging has), or a release tag to roll back to'
+        type: string
+        default: main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ref: ${{ inputs.ref }}
+      branch: production
+    secrets: inherit

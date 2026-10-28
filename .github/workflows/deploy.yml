@@ -1,0 +1,92 @@
+# Puts the app on Cloudflare Pages, in the project `northsea`, as one of its
+# branches: `main` is staging (https://staging.northsea.surf, staging.yml),
+# `production` is https://northsea.surf (release.yml). Each deploy of a
+# branch replaces the last; Cloudflare keeps them all, so any can be rolled
+# back to from its dashboard too. A production deploy is tagged
+# release-<date>-<time> in git.
+#
+# The app only: it reads the same data branches and R2 frames wherever it's
+# served, and the data jobs run from main as soon as it's merged.
+#
+# Needs CLOUDFLARE_API_TOKEN (a token with Account > Cloudflare Pages > Edit)
+# and the account ID (R2_ACCOUNT_ID, as frames.yml uses). The project is made
+# on the first deploy, with `production` as its production branch.
+name: Deploy
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'The commit, branch or tag to deploy'
+        type: string
+        required: true
+      branch:
+        description: 'The Pages branch: main (staging) or production'
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  PROJECT: northsea
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: deploy-${{ inputs.branch }}
+      cancel-in-progress: ${{ inputs.branch != 'production' }}
+    environment:
+      name: ${{ inputs.branch == 'production' && 'production' || 'staging' }}
+      url: ${{ inputs.branch == 'production' && 'https://northsea.surf' || 'https://staging.northsea.surf' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Is Cloudflare set up
+        id: cf
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          if [ -n "$TOKEN" ]; then echo "go=1" >> "$GITHUB_OUTPUT"
+          elif [ "$BRANCH" = production ]; then echo '::error::No CLOUDFLARE_API_TOKEN; nothing released'; exit 1
+          else echo '::notice::Cloudflare not set up (no CLOUDFLARE_API_TOKEN); nothing deployed'; fi
+      # Everything the pages could ask for, as GitHub Pages served it. Staging
+      # isn't for search engines (Cloudflare already keeps them off pages.dev).
+      - name: The site
+        id: site
+        if: steps.cf.outputs.go
+        env:
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          rsync -a --exclude .git --exclude .github --exclude CNAME ./ "$RUNNER_TEMP/site/"
+          [ "$BRANCH" = production ] || printf '/*\n  X-Robots-Tag: noindex\n' > "$RUNNER_TEMP/site/_headers"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Make the project the first time
+        if: steps.cf.outputs.go
+        continue-on-error: true
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
+          command: pages project create ${{ env.PROJECT }} --production-branch production
+      - name: Deploy
+        if: steps.cf.outputs.go
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
+          command: >-
+            pages deploy ${{ runner.temp }}/site --project-name ${{ env.PROJECT }}
+            --branch ${{ inputs.branch }} --commit-hash ${{ steps.site.outputs.sha }} --commit-dirty true
+      - name: Tag the release
+        if: steps.cf.outputs.go && inputs.branch == 'production'
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          tag="release-$(date -u +%Y-%m-%d-%H%M)"
+          git tag "$tag" && git push -q origin "$tag"
+          echo "Released $(git log -1 --format='%h %s') ($REF) as $tag" | tee -a "$GITHUB_STEP_SUMMARY"

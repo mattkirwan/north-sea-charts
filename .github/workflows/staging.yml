@@ -1,0 +1,21 @@
+# Every merge to main goes to staging first, https://staging.northsea.surf
+# (deploy.yml), to try on a phone before it's released to production
+# (release.yml). Not counted in the analytics: index.html only counts
+# northsea.surf.
+name: Deploy to staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  staging:
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ref: ${{ github.sha }}
+      branch: main
+    secrets: inherit
