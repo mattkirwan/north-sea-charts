@@ -2,8 +2,9 @@
 as served, reading a made-up run published the way chart_frames.py publishes
 one (manifest.json and gzipped frames, encoded by its own encode()), from a
 local server. It opens on the frame nearest now and draws it, the timeline
-moves the forecast on, the bands switch and are remembered, and without a
-manifest it says it's offline. Nothing leaves the machine: requests to any
+moves the forecast on, the bands switch and are remembered, the menu opens
+and closes as a sheet (keyboard, scrim, grip) with the panel and hand
+settings in it, and without a manifest it says it's offline. Nothing leaves the machine: requests to any
 other host (fonts, the usage stats) are dropped.
 
 Skipped without Playwright (pip install playwright && playwright install
@@ -196,13 +197,227 @@ class App(unittest.TestCase):
         self.assertEqual(self.page.locator('#panel .nss-band[data-band="swell"]').get_attribute('aria-pressed'), 'true')
         self.assertEqual(self.page.locator('#panel .nss-band[data-band="pressure"]').get_attribute('aria-pressed'), 'false')
 
-    def test_docks_and_opens_again(self):
+    # ---- The menu ------------------------------------------------------------------
+    def box(self, sel):
+        return self.page.locator(sel).bounding_box()
+
+    def shown(self):
+        """The sheet showing, by its label, or None once the menu has closed."""
+        return self.page.evaluate("(() => { const s = [...document.querySelectorAll('[data-sheet]')].find((s) => !s.hidden);"
+                                  " return s ? s.getAttribute('aria-label') : null; })()")
+
+    def closed(self):
+        self.page.wait_for_function("[...document.querySelectorAll('[data-sheet]')].every((s) => s.hidden) && document.querySelector('#scrim').hidden")
+
+    def focused(self):
+        return self.page.evaluate("(() => { const a = document.activeElement; return a.getAttribute('aria-label') || a.textContent.trim(); })()")
+
+    def setting(self, name, value):
+        """Menu › Settings › name › value, from the menu button showing; leaves Settings open."""
+        if self.shown() is None:
+            self.page.click('#panel:not([inert]) [data-menu], #column:not([inert]) [data-menu]')
+        if self.shown() != 'Settings':
+            self.page.click('[data-go="settings"]')
+        self.page.click(f'[data-set="{name}"] [data-value="{value}"]')
+
+    def test_one_menu_button_in_the_same_spot(self):
         self.loaded()
-        self.page.click('#panel .nss-dock-btn')
+        self.assertEqual(self.page.locator('.nss-dock-btn').count(), 0)
+        for b in ('#panel [data-menu]', '#column [data-menu]'):
+            self.assertEqual(self.page.locator(b).get_attribute('aria-label'), 'Menu')
+            self.assertEqual(self.page.locator(b).get_attribute('aria-haspopup'), 'dialog')
+        for hand, x in (('right', 390 - 12 - 48), ('left', 12)):
+            if hand == 'left':
+                self.setting('hand', 'left')
+                self.setting('panel', 'bottom')
+                self.page.keyboard.press('Escape')
+                self.closed()
+            self.page.wait_for_function("!document.querySelector('#panel').hasAttribute('data-away')")
+            open_ = self.box('#panel [data-menu]')
+            self.setting('panel', 'side')
+            self.page.wait_for_function("getComputedStyle(document.querySelector('#column')).opacity === '1'")
+            side = self.box('#column [data-menu]')
+            for b in (open_, side):
+                self.assertEqual((round(b['x']), round(b['width']), round(b['height'])), (x, 48, 44), hand)
+            self.assertEqual(round(open_['y']), round(side['y']), hand)
+            # The close button takes the same spot, so the same thumb closes it.
+            self.page.click('#settings [data-back]')
+            close = self.box('#menu [data-close]')
+            self.assertEqual((round(close['x']), round(close['y'])), (x, round(side['y'])), hand)
+
+    def test_menu_lists_the_views_then_settings_and_about(self):
+        self.loaded()
+        self.page.click('#panel [data-menu]')
+        self.assertEqual(self.shown(), 'Menu')
+        self.assertEqual(self.page.locator('#menu').get_attribute('role'), 'dialog')
+        items = self.page.locator('#menu .nss-menu-item')
+        self.assertEqual([n.strip() for n in self.page.locator('#menu .nss-menu-name').all_text_contents()],
+                         ['Chart', 'Spots', 'Buoys', 'Reports', 'How far out', 'Settings', 'About'])
+        self.assertEqual(items.nth(0).get_attribute('aria-current'), 'page')
+        self.assertEqual(items.nth(0).get_attribute('aria-disabled'), None)
+        self.assertEqual(self.page.locator('#menu nav[aria-label="Views"] .nss-menu-item').count(), 5)
+        for i in range(1, 5):
+            self.assertEqual(items.nth(i).get_attribute('aria-disabled'), 'true')
+            self.assertEqual(items.nth(i).locator('.nss-soon').text_content(), 'SOON')
+        for i in (5, 6):
+            self.assertEqual(items.nth(i).get_attribute('aria-disabled'), None)
+            self.assertEqual(items.nth(i).locator('.nss-soon').count(), 0)
+        # A view still to come does nothing, and stays where focus can find it.
+        items.nth(1).focus()
+        self.page.keyboard.press('Enter')
+        items.nth(1).click(force=True)
+        self.assertEqual(self.shown(), 'Menu')
+        self.assertEqual(self.focused().startswith('Spots'), True)
+        # Chart is where we are: choosing it closes the menu.
+        items.nth(0).click()
+        self.closed()
+
+    def test_timeline_spans_the_panel_but_the_menu_button(self):
+        self.loaded()
+        tl, btn = self.box('#panel .nss-timeline'), self.box('#panel [data-menu]')
+        self.assertEqual(round(tl['width']), 390 - 2 * 12 - 6 - 48)
+        self.assertEqual(round(btn['x'] - (tl['x'] + tl['width'])), 6)
+
+    def test_panel_setting_applies_at_once_and_is_remembered(self):
+        self.loaded()
+        self.page.click('#panel [data-menu]')
+        self.page.click('[data-go="settings"]')
+        self.assertEqual(self.shown(), 'Settings')
+        sw = self.page.locator('[data-set="panel"]')
+        self.assertEqual(sw.get_attribute('role'), 'group')
+        self.assertEqual(self.page.locator('#' + sw.get_attribute('aria-labelledby')).text_content(), 'Panel')
+        self.assertEqual(sw.locator('[data-value="bottom"]').get_attribute('aria-pressed'), 'true')
+        sw.locator('[data-value="side"]').click()
+        # Applied behind the sheet, which stays open.
         self.page.wait_for_function("document.querySelector('#panel').hasAttribute('data-away')")
         self.assertEqual(self.page.locator('#column').get_attribute('data-away'), None)
-        self.page.click('#column .nss-dock-btn')
+        self.assertEqual(self.shown(), 'Settings')
+        self.assertEqual(sw.locator('[data-value="side"]').get_attribute('aria-pressed'), 'true')
+        self.assertEqual(sw.locator('[data-value="bottom"]').get_attribute('aria-pressed'), 'false')
+        self.page.reload()
+        self.page.wait_for_function("document.querySelector('.nss-vtimeline').getAttribute('aria-valuemax') !== '0'")
+        self.assertEqual(self.page.locator('#column').get_attribute('data-away'), None)
+        self.assertEqual(self.page.locator('#panel').get_attribute('data-away'), '')
+        self.assertEqual(self.shown(), None)
+        self.setting('panel', 'bottom')
         self.page.wait_for_function("document.querySelector('#column').hasAttribute('data-away')")
+
+    def test_hand_setting_moves_the_column_and_the_menu_button(self):
+        self.loaded()
+        self.setting('panel', 'side')
+        self.page.wait_for_function("getComputedStyle(document.querySelector('#column')).opacity === '1'")
+        self.assertEqual(round(self.box('#column')['x']), 390 - 64)
+        self.assertEqual(self.page.locator('[data-set="hand"] [data-value="right"]').get_attribute('aria-pressed'), 'true')
+        self.setting('hand', 'left')
+        self.assertEqual(self.page.locator('html').get_attribute('data-hand'), 'left')
+        self.assertEqual(round(self.box('#column')['x']), 0)
+        self.assertEqual(self.page.locator('[data-set="hand"] [data-value="left"]').get_attribute('aria-pressed'), 'true')
+        # The key comes out of the column towards the chart: to its right now.
+        self.page.keyboard.press('Escape')
+        self.closed()
+        self.page.click('#column .nss-band[data-band="wind"]')
+        self.page.wait_for_function("!document.querySelector('#flyout').getAnimations().length")
+        self.assertGreaterEqual(self.box('#flyout')['x'], 64)
+        self.page.reload()
+        self.page.wait_for_function("document.querySelector('.nss-vtimeline').getAttribute('aria-valuemax') !== '0'")
+        self.assertEqual(self.page.locator('html').get_attribute('data-hand'), 'left')
+        self.assertEqual(round(self.box('#column')['x']), 0)
+        # The open panel too: the menu button at the left end of the timeline row.
+        self.setting('panel', 'bottom')
+        self.page.wait_for_function("!document.querySelector('#panel').hasAttribute('data-away')")
+        tl, btn = self.box('#panel .nss-timeline'), self.box('#panel [data-menu]')
+        self.assertEqual(round(btn['x']), 12)
+        self.assertGreater(tl['x'], btn['x'] + btn['width'])
+        self.assertEqual(round(tl['width']), 390 - 2 * 12 - 6 - 48)
+
+    def test_menu_leaves_the_time_band_and_map_alone(self):
+        slider = self.loaded()
+        self.page.wait_for_function(ALL_IN)
+        slider.focus()
+        self.page.keyboard.press('Home')
+        self.page.keyboard.press('ArrowRight')
+        self.page.click('#panel .nss-band[data-band="wind"]')
+        before = (slider.get_attribute('aria-valuenow'), self.chart())
+        self.page.click('#panel [data-menu]')
+        self.page.click('[data-go="settings"]')
+        self.page.click('#settings [data-back]')
+        self.page.click('[data-go="about"]')
+        self.page.click('#about [data-back]')
+        self.page.click('#menu [data-close]')
+        self.closed()
+        self.assertEqual((slider.get_attribute('aria-valuenow'), self.chart()), before)
+        self.assertEqual(self.page.locator('#panel .nss-band[data-band="wind"]').get_attribute('aria-pressed'), 'true')
+
+    def test_menu_by_keyboard_keeps_focus_and_gives_it_back(self):
+        self.loaded()
+        self.page.focus('#panel [data-menu]')
+        self.page.keyboard.press('Enter')
+        self.assertEqual(self.shown(), 'Menu')
+        self.assertEqual(self.focused().startswith('Chart'), True)
+        # Behind the menu nothing can be reached.
+        for sel in ('#panel', '#column', '#chart'):
+            self.assertEqual(self.page.evaluate(f"document.querySelector('{sel}').inert"), True, sel)
+        inside = "!!document.activeElement.closest('#menu')"
+        for _ in range(10):
+            self.page.keyboard.press('Tab')
+            self.assertEqual(self.page.evaluate(inside), True)
+        self.page.focus('#menu .nss-menu-item[data-view="chart"]')
+        self.page.keyboard.press('Shift+Tab')
+        self.assertEqual(self.focused(), 'Close menu')
+        self.page.keyboard.press('Tab')
+        self.assertEqual(self.focused().startswith('Chart'), True)
+        # Settings, and Back, by keyboard.
+        self.page.focus('[data-go="settings"]')
+        self.page.keyboard.press('Enter')
+        self.assertEqual(self.shown(), 'Settings')
+        self.assertEqual(self.focused(), 'Back to menu')
+        for _ in range(6):
+            self.page.keyboard.press('Tab')
+            self.assertEqual(self.page.evaluate("!!document.activeElement.closest('#settings')"), True)
+        self.page.focus('#settings [data-back]')
+        self.page.keyboard.press('Enter')
+        self.assertEqual(self.shown(), 'Menu')
+        self.assertEqual(self.focused().startswith('Settings'), True)
+        self.page.keyboard.press('Escape')
+        self.closed()
+        self.assertEqual(self.page.evaluate("document.activeElement === document.querySelector('#panel [data-menu]')"), True)
+        self.assertEqual(self.page.evaluate("document.querySelector('#panel').inert || document.querySelector('#chart').inert"), False)
+
+    def test_escape_from_settings_gives_focus_to_the_new_panel(self):
+        self.loaded()
+        self.setting('panel', 'side')
+        self.page.keyboard.press('Escape')
+        self.closed()
+        self.assertEqual(self.page.evaluate("document.activeElement === document.querySelector('#column [data-menu]')"), True)
+
+    def test_scrim_and_grip_close_the_menu(self):
+        self.loaded()
+        self.page.click('#panel [data-menu]')
+        self.page.wait_for_function("getComputedStyle(document.querySelector('#menu')).transform === 'none'")
+        self.page.mouse.click(195, 60)                               # the scrim, above the sheet
+        self.closed()
+        self.page.click('#panel [data-menu]')
+        self.page.click('[data-go="about"]')
+        self.assertEqual(self.shown(), 'About')
+        self.assertIn('MET Norway', self.page.locator('#about').text_content())
+        g = self.box('#about .nss-sheet-grip')
+        x, y = g['x'] + g['width'] / 2, g['y'] + g['height'] / 2
+        # A short pull springs back; a long one closes it.
+        self.page.mouse.move(x, y); self.page.mouse.down(); self.page.mouse.move(x, y + 20, steps=4)
+        self.page.wait_for_timeout(300); self.page.mouse.up()
+        self.assertEqual(self.shown(), 'About')
+        self.page.wait_for_function("getComputedStyle(document.querySelector('#about')).transform === 'none'")
+        self.page.mouse.move(x, y); self.page.mouse.down(); self.page.mouse.move(x, y + 150, steps=6); self.page.mouse.up()
+        self.closed()
+
+    def test_menu_without_sliding_with_reduce_motion(self):
+        self.new_page(service_workers='block', reduced_motion='reduce')
+        self.loaded()
+        self.page.click('#panel [data-menu]')
+        self.assertEqual(self.page.evaluate("getComputedStyle(document.querySelector('#menu')).transform"), 'none')
+        self.assertEqual(self.page.evaluate("getComputedStyle(document.querySelector('#menu')).transitionDuration"), '0s')
+        self.page.keyboard.press('Escape')
+        self.closed()
 
     def test_opens_without_a_signal(self):
         # sw.js keeps the page, the app and the frames seen: with no network
