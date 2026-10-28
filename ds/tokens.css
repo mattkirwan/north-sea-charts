@@ -8,6 +8,7 @@
   --ui-control-ink: #EEF0EE;
   --ui-track: #C3C9C8;
   --ui-raised: #EEF0EE;
+  --ui-led-off: #B9C2C4;
   --ui-display: #1F262A;
   --ui-display-ink: #EEF0EE;
   --ui-display-muted: #B9C2C4;
@@ -49,6 +50,7 @@
   --ui-control-ink: #1F262A;
   --ui-track: #3A4246;
   --ui-raised: #2E3539;
+  --ui-led-off: #4A5357;
   --ui-display: #0E1214;
   --ui-display-ink: #E4E8E7;
   --ui-display-muted: #9AA5A8;
