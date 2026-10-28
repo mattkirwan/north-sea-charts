@@ -36,7 +36,7 @@ function readTokens() {
   const cs = getComputedStyle(document.documentElement), v = (n) => cs.getPropertyValue(n).trim();
   C = {
     sea: v('--chart-sea'), land: v('--chart-land'), coast: v('--chart-coast'), grid: v('--chart-grid'),
-    iso: v('--chart-isobar'), high: v('--chart-high'), arrow: v('--chart-arrow'),
+    iso: v('--chart-isobar'), high: v('--chart-high'), arrow: v('--chart-arrow'), ice: v('--chart-ice'),
     height: [1, 2, 3, 4, 5, 6, 7].map((i) => v(`--height-${i}`)),
     period: [1, 2, 3, 4, 5].map((i) => v(`--period-${i}`)),
     wind: [1, 2, 3, 4, 5, 6].map((i) => v(`--wind-${i}`))
@@ -148,6 +148,31 @@ async function getManifest() {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
+// The sea ice: one chart a day, the same on every band (ice.json beside the
+// manifest), as concentration classes of rings in the square's km.
+let ice = null;
+async function loadIce(m) {
+  if (!m.ice) { ice = null; return; }
+  if (ice && ice.date === m.ice.date) return;
+  try {
+    const r = await fetch(`${FR}${m.ice.file}?d=${m.ice.date}`, { mode: 'cors', credentials: 'omit' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    ice = {
+      date: j.date,
+      classes: j.classes.map((c) => {
+        const rings = c.rings.map((a) => {
+          const out = new Float64Array(a.length);
+          let x = 0, y = 0;
+          for (let k = 0; k < a.length; k += 2) { x += a[k]; y += a[k + 1]; out[k] = x * j.unit; out[k + 1] = y * j.unit; }
+          return out;
+        });
+        return { alpha: 0.3 + 0.6 * c.t / 10, path: pathOf(rings, true) };
+      })
+    };
+    requestDraw();
+  } catch {}
+}
 const validAt = (m, i) => m.run + m.steps[i] * H;
 function nearestIndex(m, t) {
   let best = 0;
@@ -159,7 +184,7 @@ async function refreshManifest() {
   // A manifest from the phone's own copy still counts as offline.
   try { m = await getManifest(); offline = navigator.onLine === false; } catch { offline = true; renderStatus(); return; }
   if (!man) {
-    man = m; frames = [];
+    man = m; frames = []; loadIce(m);
     idx = nearestIndex(m, Date.now());
     tl.raw = tl.target = idx;
     buildTicks(); setFrame(idx, true); pump(); showTip();
@@ -168,7 +193,7 @@ async function refreshManifest() {
     const t = validAt(man, idx), j = nearestIndex(m, t);
     try {
       const d = await fetchFrame(m, j);
-      man = m; frames = []; frames[j] = d; failedAt = {}; idx = j; tl.raw = tl.target = j; geomCache.clear();
+      man = m; frames = []; loadIce(m); frames[j] = d; failedAt = {}; idx = j; tl.raw = tl.target = j; geomCache.clear();
       buildTicks(); markTick(j); setFrame(j, true);
       updatedNote = true; setTimeout(fadeUpdated, 3000);
       pump();
@@ -533,6 +558,16 @@ function draw() {
   if (band === 'wind' && fi >= 0) {
     world();
     windGeom(fi).forEach((p, i) => { ctx.fillStyle = C.wind[i]; ctx.fill(p, 'evenodd'); });
+  }
+  if (ice) {
+    // Sea ice on every band: under the land and the weather, over the sea colours.
+    world();
+    ctx.lineJoin = 'round'; ctx.strokeStyle = C.ice; ctx.fillStyle = C.ice; ctx.lineWidth = 0.8 / k;
+    for (const c of ice.classes) {
+      ctx.globalAlpha = c.alpha; ctx.fill(c.path, 'evenodd');
+      ctx.globalAlpha = 0.9; ctx.stroke(c.path);
+    }
+    ctx.globalAlpha = 1;
   }
   if (baseMap) {
     // The land, graticule and coast change only when the map moves: kept in
