@@ -1109,6 +1109,140 @@ class App(unittest.TestCase):
         self.assertRegex(text, r'peak \d+\.\d s from \d+°, longest \d+\.\d s from \d+°')
         self.assertIn("frame's 25 km node", text)
 
+    # ---- Beacon ---------------------------------------------------------------------
+    # The cells run's tiles (test_grid.fake_boxes): Saltburn's own cell
+    # d4:218:-4 and those round it are land, but for the wave model's cell
+    # north of it, d4:219:-4, whose wave height is 1.0 + k/10 m at step k.
+    def beacon_run(self, query=''):
+        self.page.goto(f'{self.origin}/index.html?{query}frames={self.origin}/_frames/cells/')
+        self.page.wait_for_function("document.querySelector('#rStatus').hidden")
+
+    def to_saltburn(self):
+        """Zoomed in off Saltburn, its sea cell's cross on screen: where it is."""
+        self.page.evaluate("""() => { const [x, y] = grid.lonLatToKm(-0.95, 54.8); view.k = 3; view.x = x + 30; view.y = y;
+            clampView(); requestDraw(); }""")
+        self.page.wait_for_function("crossPts.some((p) => p.c.id === 'd4:219:-4')")
+        return self.page.evaluate("(() => { const c = crossPts.find((p) => p.c.id === 'd4:219:-4'); return [c.px, c.py]; })()")
+
+    def drop(self):
+        self.page.mouse.click(*self.to_saltburn())
+        self.page.wait_for_function("document.querySelector('[data-val=\"hs\"]').textContent.endsWith(' m')")
+
+    def swell_at_needle(self):
+        return self.page.locator('[data-val="hs"]').text_content()
+
+    def test_crosses_on_sea_points_once_zoomed_in(self):
+        self.beacon_run()
+        self.chart()
+        self.assertEqual(self.page.evaluate('crossPts.length'), 0)      # the opening view: none
+        self.to_saltburn()
+        self.assertGreater(self.page.evaluate('crossPts.length'), 0)
+        ids = self.page.evaluate("[...crossTiles.values()].flatMap((t) => (t || []).map((c) => c.id))")
+        self.assertIn('d4:219:-4', ids)
+        self.assertNotIn('d4:218:-4', ids)                                # land: no cross
+
+    def test_a_tap_on_a_cross_drops_the_beacon_and_its_sheet(self):
+        self.beacon_run()
+        # A tap on land, away from every cross, does nothing new.
+        x, y = self.page.evaluate("""() => { const [x, y] = grid.lonLatToKm(-0.95, 54.8); view.k = 3; view.x = x + 30; view.y = y; clampView(); requestDraw();
+            const [lx, ly] = grid.lonLatToKm(-1.5, 54.25); return [W / 2 + (lx - view.x) * view.k, Hs / 2 - (ly - view.y) * view.k]; }""")
+        self.page.wait_for_function("crossPts.length > 0")
+        self.page.mouse.click(x, y)
+        self.assertIsNone(self.page.locator('#panel').get_attribute('data-beacon'))
+        self.drop()
+        self.assertEqual(self.page.locator('#panel').get_attribute('data-beacon'), '')
+        self.assertEqual(self.page.locator('#panel .nss-beacon-head h2').text_content(), 'Beacon')
+        for hidden in ('#panel .nss-bands', '#panel [data-key]', '#panel [data-menu]'):
+            self.assertTrue(self.page.locator(hidden).is_hidden(), hidden)
+        self.assertTrue(self.page.locator('#panel .nss-readout').is_visible())
+        self.assertTrue(self.page.locator('[data-beacon-mark]').is_visible())
+        # Recentred above the needle, clear of the sheet, then tied to it.
+        self.page.wait_for_function("document.documentElement.hasAttribute('data-tied')")
+        m, panel = self.box('[data-beacon-mark]'), self.box('#panel')
+        self.assertAlmostEqual(m['x'] + m['width'] / 2, 195, delta=1.5)
+        self.assertAlmostEqual(panel['y'] - (m['y'] + m['height'] / 2), 160, delta=1.5)
+        # The numbers are the tile's at the needle, and move with it.
+        slider = self.page.locator('#panel .nss-timeline')
+        i = int(slider.get_attribute('aria-valuenow'))
+        self.assertEqual(self.swell_at_needle(), f'{1 + i / 10:.1f} m')
+        self.assertRegex(slider.get_attribute('aria-valuetext'), rf'\. Wind \d+ mph from [a-z-]+\. Swell {1 + i / 10:.1f} m, \d+ s, from [a-z-]+\.$')
+        self.assertEqual(slider.get_attribute('aria-label'), 'Forecast timeline with swell and wind at this beacon')
+        self.assertRegex(self.page.locator('[data-val="sdir"]').text_content(), r'^[NESW]{1,3}$')
+        slider.focus()
+        self.page.keyboard.press('Home')
+        self.assertEqual(self.swell_at_needle(), '1.0 m')
+        self.page.keyboard.press('ArrowRight')
+        self.assertEqual(self.swell_at_needle(), '1.1 m')
+        # The rows ride on the scale's own offset.
+        same = "document.querySelector('[data-rows-track]').style.transform === document.querySelector('#panel [data-track]').style.transform"
+        self.assertTrue(self.page.evaluate(same))
+        # Time never moves the map.
+        mark = self.box('[data-beacon-mark]')
+        self.page.keyboard.press('End')
+        self.assertEqual(self.box('[data-beacon-mark]'), mark)
+
+    def test_close_brings_the_panel_back_as_it_was(self):
+        self.beacon_run()
+        self.chart()
+        before = self.box('#panel')
+        self.drop()
+        self.page.click('[data-beacon-close]')
+        self.assertIsNone(self.page.locator('#panel').get_attribute('data-beacon'))
+        self.assertTrue(self.page.locator('[data-beacon-mark]').is_hidden())
+        self.assertFalse(self.page.evaluate("document.documentElement.hasAttribute('data-tied')"))
+        for shown in ('#panel .nss-bands', '#panel [data-key]', '#panel [data-menu]'):
+            self.assertTrue(self.page.locator(shown).is_visible(), shown)
+        self.assertEqual(self.box('#panel'), before)
+        self.assertEqual(self.page.locator('#panel .nss-timeline').get_attribute('aria-label'), 'Forecast timeline')
+        # Escape closes it too.
+        self.drop()
+        self.page.keyboard.press('Escape')
+        self.assertIsNone(self.page.locator('#panel').get_attribute('data-beacon'))
+
+    def test_panning_away_loses_the_tie(self):
+        self.beacon_run()
+        self.drop()
+        self.page.wait_for_function("document.documentElement.hasAttribute('data-tied')")
+        self.page.mouse.move(100, 150)
+        self.page.mouse.down()
+        self.page.mouse.move(160, 200, steps=4)
+        self.page.mouse.up()
+        self.assertFalse(self.page.evaluate("document.documentElement.hasAttribute('data-tied')"))
+        self.assertTrue(self.page.locator('[data-beacon-mark]').is_visible())
+
+    def test_the_link_is_copied_and_opens_the_beacon(self):
+        self.context.grant_permissions(['clipboard-read', 'clipboard-write'], origin=self.origin)
+        self.beacon_run()
+        self.drop()
+        self.page.click('[data-beacon-copy]')
+        self.page.wait_for_function("document.querySelector('[data-beacon-said]').textContent === 'Link copied'")
+        link = self.page.evaluate('navigator.clipboard.readText()')
+        self.assertTrue(link.endswith('/index.html?at=54.75,-1.00'), link)
+        self.beacon_run('at=54.75,-1.00&')
+        self.page.wait_for_function("document.querySelector('[data-val=\"hs\"]').textContent.endsWith(' m')")
+        self.assertEqual(self.page.evaluate('beacon.id'), 'd4:219:-4')
+        self.assertTrue(self.page.locator('[data-beacon-mark]').is_visible())
+        self.page.click('[data-beacon-close]')
+        self.assertNotIn('at=', self.page.url)
+
+    def test_the_beacon_without_motion_with_reduce_motion(self):
+        self.new_page(service_workers='block', reduced_motion='reduce')
+        self.beacon_run()
+        self.drop()
+        self.assertTrue(self.page.evaluate("document.documentElement.hasAttribute('data-tied')"))
+        self.assertEqual(self.page.evaluate("getComputedStyle(document.querySelector('[data-beacon-mark]'), '::after').animationName"), 'none')
+
+    def test_docked_the_sheet_opens_along_the_bottom(self):
+        self.beacon_run()
+        self.page.evaluate('setDocked(true)')
+        self.page.wait_for_timeout(400)                                  # the map eases into its new room first
+        self.drop()
+        self.assertIsNone(self.page.locator('#panel').get_attribute('data-away'))
+        self.assertEqual(self.page.locator('#column').get_attribute('data-away'), '')
+        self.page.click('[data-beacon-close]')
+        self.assertEqual(self.page.locator('#panel').get_attribute('data-away'), '')
+        self.assertIsNone(self.page.locator('#column').get_attribute('data-away'))
+
     # ---- Play ---------------------------------------------------------------------
     def playing(self, panel='#panel'):
         return self.page.locator(f'{panel} [data-play]').get_attribute('aria-pressed') == 'true'

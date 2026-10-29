@@ -42,7 +42,11 @@ const LANGS = {
     g1Title: 'The chart', g1Body: 'Drag to move, pinch to zoom, double-tap to centre and zoom.', g1Try: 'Pinch in on your own stretch of coast',
     g2Title: 'Pressure, wind, swell', g2Body: 'Low and high pressures, wind strength and direction, swell height and period.',
     g3Title: 'The key', g3Body: 'Each colour on the sea is a value on the key.', g3Try: 'Switch to period',
-    g4Title: 'The timeline', g4Body: 'The needle stays put and the days slide under it, sixteen days ahead. The orange tick is now.', g4Try: 'Slide it, then double-tap to come back to now'
+    g4Title: 'The timeline', g4Body: 'The needle stays put and the days slide under it, sixteen days ahead. The orange tick is now.', g4Try: 'Slide it, then double-tap to come back to now',
+    beacon: 'Beacon', copyBeacon: 'Copy link to this beacon', closeBeacon: 'Close beacon', collapseBeacon: 'Collapse beacon', linkCopied: 'Link copied',
+    beaconTimeline: 'Forecast timeline with swell and wind at this beacon', beaconWind: 'Wind {speed} mph from {from}.', beaconSwell: 'Swell {hs} m, {tp} s, from {from}.',
+    compass: 'N NNE NE ENE E ESE SE SSE S SSW SW WSW W WNW NW NNW',
+    compassLong: 'north,north-north-east,north-east,east-north-east,east,east-south-east,south-east,south-south-east,south,south-south-west,south-west,west-south-west,west,west-north-west,north-west,north-north-west'
   } },
   nb: { name: 'Norsk', places: 'Norge', tag: 'nb-NO', t: {
     chartLabel: 'Værkart over Nordsjøen og havene rundt. Dra for å flytte kartet, knip for å zoome, dobbelttrykk for å zoome inn.',
@@ -77,7 +81,11 @@ const LANGS = {
     g1Title: 'Kartet', g1Body: 'Dra for å flytte, knip for å zoome, dobbelttrykk for å sentrere og zoome.', g1Try: 'Knip inn på din egen kyststrekning',
     g2Title: 'Lufttrykk, vind, dønninger', g2Body: 'Lav- og høytrykk, vindstyrke og -retning, dønningshøyde og -periode.',
     g3Title: 'Fargeskalaen', g3Body: 'Hver farge på havet er en verdi på fargeskalaen.', g3Try: 'Bytt til periode',
-    g4Title: 'Tidslinjen', g4Body: 'Nålen står stille og dagene glir under den, seksten dager fram. Det oransje merket er nå.', g4Try: 'Dra i den, og dobbelttrykk for å komme tilbake til nå'
+    g4Title: 'Tidslinjen', g4Body: 'Nålen står stille og dagene glir under den, seksten dager fram. Det oransje merket er nå.', g4Try: 'Dra i den, og dobbelttrykk for å komme tilbake til nå',
+    beacon: 'Båke', copyBeacon: 'Kopier lenke til denne båken', closeBeacon: 'Lukk båken', collapseBeacon: 'Skjul båken', linkCopied: 'Lenken er kopiert',
+    beaconTimeline: 'Tidslinje for prognosen med dønninger og vind ved denne båken', beaconWind: 'Vind {speed} mph fra {from}.', beaconSwell: 'Dønninger {hs} m, {tp} s, fra {from}.',
+    compass: 'N NNØ NØ ØNØ Ø ØSØ SØ SSØ S SSV SV VSV V VNV NV NNV',
+    compassLong: 'nord,nord-nordøst,nordøst,øst-nordøst,øst,øst-sørøst,sørøst,sør-sørøst,sør,sør-sørvest,sørvest,vest-sørvest,vest,vest-nordvest,nordvest,nord-nordvest'
   } },
   da: { name: 'Dansk', places: 'Danmark', tag: 'da-DK', t: {
     chartLabel: 'Vejrkort over Nordsøen og havene omkring den. Træk for at flytte kortet, knib for at zoome, dobbelttryk for at zoome ind.',
@@ -112,7 +120,11 @@ const LANGS = {
     g1Title: 'Kortet', g1Body: 'Træk for at flytte, knib for at zoome, dobbelttryk for at centrere og zoome.', g1Try: 'Knib ind på din egen kyststrækning',
     g2Title: 'Lufttryk, vind, dønning', g2Body: 'Lav- og højtryk, vindstyrke og -retning, dønningshøjde og -periode.',
     g3Title: 'Farveskalaen', g3Body: 'Hver farve på havet er en værdi på farveskalaen.', g3Try: 'Skift til periode',
-    g4Title: 'Tidslinjen', g4Body: 'Nålen står stille, og dagene glider under den, seksten dage frem. Det orange mærke er nu.', g4Try: 'Træk i den, og dobbelttryk for at komme tilbage til nu'
+    g4Title: 'Tidslinjen', g4Body: 'Nålen står stille, og dagene glider under den, seksten dage frem. Det orange mærke er nu.', g4Try: 'Træk i den, og dobbelttryk for at komme tilbage til nu',
+    beacon: 'Båke', copyBeacon: 'Kopiér link til denne båke', closeBeacon: 'Luk båken', collapseBeacon: 'Skjul båken', linkCopied: 'Linket er kopieret',
+    beaconTimeline: 'Tidslinje for prognosen med dønninger og vind ved denne båke', beaconWind: 'Vind {speed} mph fra {from}.', beaconSwell: 'Dønninger {hs} m, {tp} s, fra {from}.',
+    compass: 'N NNØ NØ ØNØ Ø ØSØ SØ SSØ S SSV SV VSV V VNV NV NNV',
+    compassLong: 'nord,nordnordøst,nordøst,østnordøst,øst,østsydøst,sydøst,sydsydøst,syd,sydsydvest,sydvest,vestsydvest,vest,vestnordvest,nordvest,nordnordvest'
   } },
   de: { name: 'Deutsch', places: 'Deutschland', tag: 'de-DE', t: {
     chartLabel: 'Wetterkarte der Nordsee und der Meere ringsum. Ziehen verschiebt die Karte, mit zwei Fingern zoomen, doppelt tippen vergrößert.',
@@ -147,7 +159,11 @@ const LANGS = {
     g1Title: 'Die Karte', g1Body: 'Ziehen verschiebt, zwei Finger zoomen, doppelt tippen zentriert und vergrößert.', g1Try: 'Zoome auf deinen eigenen Küstenabschnitt',
     g2Title: 'Luftdruck, Wind, Dünung', g2Body: 'Tief- und Hochdruck, Windstärke und -richtung, Dünungshöhe und -periode.',
     g3Title: 'Die Farbskala', g3Body: 'Jede Farbe auf dem Meer ist ein Wert auf der Farbskala.', g3Try: 'Wechsle zur Periode',
-    g4Title: 'Die Zeitleiste', g4Body: 'Die Nadel bleibt stehen, die Tage gleiten darunter, sechzehn Tage voraus. Die orange Marke ist jetzt.', g4Try: 'Schieb sie, dann doppelt tippen, um zu jetzt zurückzukehren'
+    g4Title: 'Die Zeitleiste', g4Body: 'Die Nadel bleibt stehen, die Tage gleiten darunter, sechzehn Tage voraus. Die orange Marke ist jetzt.', g4Try: 'Schieb sie, dann doppelt tippen, um zu jetzt zurückzukehren',
+    beacon: 'Bake', copyBeacon: 'Link zu dieser Bake kopieren', closeBeacon: 'Bake schließen', collapseBeacon: 'Bake einklappen', linkCopied: 'Link kopiert',
+    beaconTimeline: 'Prognose-Zeitleiste mit Dünung und Wind an dieser Bake', beaconWind: 'Wind {speed} mph aus {from}.', beaconSwell: 'Dünung {hs} m, {tp} s, aus {from}.',
+    compass: 'N NNO NO ONO O OSO SO SSO S SSW SW WSW W WNW NW NNW',
+    compassLong: 'Nord,Nordnordost,Nordost,Ostnordost,Ost,Ostsüdost,Südost,Südsüdost,Süd,Südsüdwest,Südwest,Westsüdwest,West,Westnordwest,Nordwest,Nordnordwest'
   } },
   nl: { name: 'Nederlands', places: 'Nederland, België', tag: 'nl-NL', t: {
     chartLabel: 'Weerkaart van de Noordzee en de zeeën eromheen. Sleep om de kaart te verschuiven, knijp om te zoomen, tik twee keer om in te zoomen.',
@@ -182,7 +198,11 @@ const LANGS = {
     g1Title: 'De kaart', g1Body: 'Sleep om te verschuiven, knijp om te zoomen, tik twee keer om te centreren en in te zoomen.', g1Try: 'Zoom in op je eigen stuk kust',
     g2Title: 'Luchtdruk, wind, deining', g2Body: 'Lage- en hogedrukgebieden, windkracht en -richting, deininghoogte en -periode.',
     g3Title: 'De kleurschaal', g3Body: 'Elke kleur op zee is een waarde op de kleurschaal.', g3Try: 'Wissel naar periode',
-    g4Title: 'De tijdlijn', g4Body: 'De naald staat stil en de dagen schuiven eronder door, zestien dagen vooruit. Het oranje streepje is nu.', g4Try: 'Schuif hem, en tik twee keer om terug te gaan naar nu'
+    g4Title: 'De tijdlijn', g4Body: 'De naald staat stil en de dagen schuiven eronder door, zestien dagen vooruit. Het oranje streepje is nu.', g4Try: 'Schuif hem, en tik twee keer om terug te gaan naar nu',
+    beacon: 'Baken', copyBeacon: 'Link naar dit baken kopiëren', closeBeacon: 'Baken sluiten', collapseBeacon: 'Baken inklappen', linkCopied: 'Link gekopieerd',
+    beaconTimeline: 'Tijdlijn van de verwachting met deining en wind bij dit baken', beaconWind: 'Wind {speed} mph uit het {from}.', beaconSwell: 'Deining {hs} m, {tp} s, uit het {from}.',
+    compass: 'N NNO NO ONO O OZO ZO ZZO Z ZZW ZW WZW W WNW NW NNW',
+    compassLong: 'noorden,noordnoordoosten,noordoosten,oostnoordoosten,oosten,oostzuidoosten,zuidoosten,zuidzuidoosten,zuiden,zuidzuidwesten,zuidwesten,westzuidwesten,westen,westnoordwesten,noordwesten,noordnoordwesten'
   } },
   fr: { name: 'Français', places: 'France, Belgique', tag: 'fr-FR', t: {
     chartLabel: 'Carte météo de la mer du Nord et des mers alentour. Faites glisser pour déplacer la carte, pincez pour zoomer, touchez deux fois pour agrandir.',
@@ -217,6 +237,10 @@ const LANGS = {
     g1Title: 'La carte', g1Body: 'Faites glisser pour déplacer, pincez pour zoomer, touchez deux fois pour centrer et agrandir.', g1Try: 'Zoomez sur votre bout de côte',
     g2Title: 'Pression, vent, houle', g2Body: 'Dépressions et anticyclones, force et direction du vent, hauteur et période de la houle.',
     g3Title: 'La légende', g3Body: 'Chaque couleur sur la mer est une valeur de la légende.', g3Try: 'Passez à la période',
-    g4Title: 'La frise', g4Body: 'L’aiguille reste en place et les jours défilent dessous, seize jours à l’avance. Le repère orange, c’est maintenant.', g4Try: 'Faites-la glisser, puis touchez deux fois pour revenir à maintenant'
+    g4Title: 'La frise', g4Body: 'L’aiguille reste en place et les jours défilent dessous, seize jours à l’avance. Le repère orange, c’est maintenant.', g4Try: 'Faites-la glisser, puis touchez deux fois pour revenir à maintenant',
+    beacon: 'Balise', copyBeacon: 'Copier le lien de cette balise', closeBeacon: 'Fermer la balise', collapseBeacon: 'Replier la balise', linkCopied: 'Lien copié',
+    beaconTimeline: 'Frise de la prévision avec la houle et le vent à cette balise', beaconWind: 'Vent {speed} mph, secteur {from}.', beaconSwell: 'Houle {hs} m, {tp} s, secteur {from}.',
+    compass: 'N NNE NE ENE E ESE SE SSE S SSO SO OSO O ONO NO NNO',
+    compassLong: 'nord,nord-nord-est,nord-est,est-nord-est,est,est-sud-est,sud-est,sud-sud-est,sud,sud-sud-ouest,sud-ouest,ouest-sud-ouest,ouest,ouest-nord-ouest,nord-ouest,nord-nord-ouest'
   } }
 };
