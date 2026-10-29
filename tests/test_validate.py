@@ -82,6 +82,44 @@ class Problems(unittest.TestCase):
         self.assertTrue(vf.problems(r))
 
 
+class CellProblems(unittest.TestCase):
+    """The cell tiles against NOAA's own grid points (made-up values here)."""
+
+    class Src:
+        def __init__(self, **over):
+            self.over = over
+
+        def cell(self, cid):
+            return {**dict(hs=1.23, tl=11.04, dp=359.3, p=1012.31, u=-3.1, v=4.2), **self.over}
+
+    @staticmethod
+    def ours(**over):
+        # As stored: rounded to the tiles' steps (grid.py).
+        return lambda cid: {**dict(hs=1.2, tl=11.0, dp=0.0, p=1012.3, u=-3.0, v=4.0), **over}
+
+    def test_rounded_as_stored_passes(self):
+        self.assertEqual(vf.cell_problems(self.ours(), self.Src()), [])
+
+    def test_only_points_over_the_north_sea(self):
+        seen = []
+        vf.cell_problems(lambda cid: seen.append(cid) or self.ours()(cid), self.Src())
+        self.assertIn('d4:219:-4', seen)
+        self.assertEqual(len(seen), sum(1 for _, la, lo in vf.POINTS if 48 <= la < 64 and -12 <= lo < 16))
+
+    def test_a_resampled_value_is_a_fault(self):
+        found = vf.cell_problems(self.ours(hs=1.4), self.Src())
+        self.assertTrue(found and all('cell hs' in f for f in found))
+
+    def test_direction_wraps_past_north(self):
+        self.assertEqual(vf.cell_problems(self.ours(dp=0.0), self.Src(dp=359.5)), [])
+        self.assertTrue(vf.cell_problems(self.ours(dp=358.0), self.Src(dp=0.4)))
+
+    def test_land_matches_land(self):
+        nan = float('nan')
+        self.assertEqual(vf.cell_problems(self.ours(hs=nan, tl=nan, dp=nan), self.Src(hs=nan, tl=nan, dp=nan)), [])
+        self.assertTrue(vf.cell_problems(self.ours(hs=nan), self.Src()))
+
+
 class WetterzentraleStaysInternal(unittest.TestCase):
     def test_pictures_are_only_written_where_git_ignores_them(self):
         with tempfile.TemporaryDirectory() as d:

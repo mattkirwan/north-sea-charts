@@ -8,7 +8,8 @@
 #
 # Frames are kept a year in caches (a run's folder never changes); this run
 # and the one before stay on R2, so a phone still on the last manifest
-# finishes its frames; older runs are deleted.
+# finishes its frames; older runs are deleted. The cell tiles (cells/) are
+# kept for good: the cells' history.
 #
 # Needs R2_PUBLIC_URL (where the bucket is served, e.g.
 # https://frames.northsea.surf/), R2_ACCOUNT_ID, R2_BUCKET,
@@ -34,6 +35,14 @@ s3() { aws s3 --endpoint-url "${R2_ENDPOINT:-https://$R2_ACCOUNT_ID.r2.cloudflar
 s3 cp --only-show-errors --recursive "$dir" "s3://$R2_BUCKET/$dir" \
   --cache-control 'public, max-age=31536000, immutable' --content-type application/octet-stream
 echo "Frames on R2: $R2_PUBLIC_URL$dir/ ($(ls "$dir" | wc -l) files)"
+# The run's cell tiles (cells/<run>/<steps>/, grid.py), if it has them. Kept
+# for good, run after run: the deleting below is only of the run folders at
+# the top of the bucket.
+if [ -d cells ]; then
+  s3 cp --only-show-errors --recursive cells "s3://$R2_BUCKET/cells" \
+    --cache-control 'public, max-age=31536000, immutable' --content-type application/octet-stream
+  echo "Cell tiles on R2: $(find cells -type f | wc -l) files"
+fi
 
 # Only point phones at R2 once a phone could read a frame there: a 200 from
 # the public address, with the CORS header the app's page needs. (An address

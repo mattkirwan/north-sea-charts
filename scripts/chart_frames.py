@@ -32,6 +32,13 @@ layer over every band. The manifest's ice names it and the chart's date. The
 ice is a nice-to-have: if the chart can't be had, the last ice.json published
 stays (its date says how old), and without one the frames still publish.
 
+The grid itself (the square's projection and sizes, and NOAA's own cells) is
+defined in grid.py. Over the North Sea the job also keeps each cell's own
+values (not resampled) for the whole run, in tiles under cells/<run>/<steps>/
+that the manifest's cells names: one place's forecast in one small file,
+where the frames give the whole sea at one hour. Kept on R2 run after run.
+Like the ice, the frames publish without them.
+
   python scripts/chart_frames.py OUT_DIR [RUN as 2026-10-26-06z] [--steps 0,1,2]
   python scripts/chart_frames.py --base assets/base.json     # the land, once
 """
@@ -47,51 +54,20 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 
 import gfs_latest
+import grid
+from grid import FWD, P_N, PROJ4, S_N, X0, X1, Y0, Y1, nodes
 
-PROJ4 = '+proj=stere +lat_0=90 +lat_ts=60 +lon_0=0 +R=6371229 +units=km'
-X0, X1, Y0, Y1 = -2805.0, 1795.0, -650.0, -5250.0   # km: west, east, north, south
-P_N = 116                                          # pressure and wind: ~40 km
-S_N = 185                                          # swell: 25 km, the model's grid
 AREA = dict(w=-80, e=72, s=35, n=88)               # what to cut from the global grids
 STEPS = list(range(0, 121)) + list(range(123, 385, 3))
 GFS = {'PRMSL:mean sea level': 'p', 'UGRD:10 m above ground': 'u', 'VGRD:10 m above ground': 'v'}
 WAVE = {'HTSGW:surface': 'hs', 'PERPW:surface': 'tp', **{f'SWELL:{k} in sequence': f'sh{k}' for k in (1, 2, 3)},
-        **{f'SWPER:{k} in sequence': f'sp{k}' for k in (1, 2, 3)}}
+        **{f'SWPER:{k} in sequence': f'sp{k}' for k in (1, 2, 3)}, 'DIRPW:surface': 'dp',
+        **{f'SWDIR:{k} in sequence': f'sd{k}' for k in (1, 2, 3)}}
 SCALE = dict(p=[20, 850], wind=2, h=10, t=10)     # stored = (value - base) * scale; the manifest's scale
 LONG_MIN_M = 0.1
-R = 6371.229
 ICE_URL = 'https://cryo.met.no/sites/cryo/files/latest/NIS_arctic_latest_pl_a.zip'
 ICE_SIMPLIFY_KM = 0.5
 WAIT_MIN = 20                                      # the loop starts us once +384 h is out; well inside the job's hour
-
-
-def _stere():
-    """Forward and inverse polar stereographic (north, lon 0, true at 60°N), km."""
-    k0 = (1 + np.sin(np.radians(60))) / 2
-
-    def inv(x, y):
-        rho = np.hypot(x, y)
-        c = 2 * np.arctan(rho / (2 * R * k0))
-        lat = np.degrees(np.arcsin(np.cos(c)))
-        lon = np.degrees(np.arctan2(x, -y))
-        return lon, lat
-
-    def fwd(lon, lat):
-        lam, phi = np.radians(lon), np.radians(lat)
-        rho = 2 * R * k0 * np.tan(np.pi / 4 - phi / 2)
-        return rho * np.sin(lam), -rho * np.cos(lam)
-    return fwd, inv
-
-
-FWD, INV = _stere()
-
-
-def nodes(n):
-    """The grid's nodes: x west to east, y north to south (km), and their lon/lat."""
-    xs, ys = np.linspace(X0, X1, n), np.linspace(Y0, Y1, n)
-    gx, gy = np.meshgrid(xs, ys)
-    lon, lat = INV(gx, gy)
-    return lon, lat
 
 
 def get(url, rng=None, timeout=90):
@@ -185,14 +161,45 @@ def frame(run, step):
     lam = np.radians(plon)
     ux, uy = u * np.cos(lam) - v * np.sin(lam), u * np.sin(lam) + v * np.cos(lam)
     hs, lat0, lon0 = w['hs']
-    per = np.stack([np.where(np.nan_to_num(w[f'sh{k}'][0]) >= LONG_MIN_M, w[f'sp{k}'][0], np.nan) for k in (1, 2, 3)])
-    tp = np.where(np.isfinite(hs), np.nan_to_num(np.nanmax(np.where(np.isfinite(per), per, -1), axis=0), nan=-1), np.nan)
-    tp = np.where(tp > 0, tp, w['tp'][0])
+    tp, dl = longest_swell(w)
     h = sample(to_coast(hs), lat0, lon0, slon, slat)
     t = sample(to_coast(tp), lat0, lon0, slon, slat)
     check(step, p, u, v, h, t)
-    return encode(p, ux, uy, h, t), dict(p=[round(float(p.min()), 1), round(float(p.max()), 1)], h=round(float(np.nanmax(h)), 1),
-                      t=round(float(np.nanmax(t)), 1), wind=round(float(np.nanmax(np.hypot(u, v))), 1))
+    stats = dict(p=[round(float(p.min()), 1), round(float(p.max()), 1)], h=round(float(np.nanmax(h)), 1),
+                 t=round(float(np.nanmax(t)), 1), wind=round(float(np.nanmax(np.hypot(u, v))), 1))
+    try:
+        box = cells(a, w, tp, dl)
+    except Exception as e:
+        # The frame doesn't wait on its cells: without them there are no tiles this run.
+        print(f'  f{step:03d} no cells: {type(e).__name__}: {e}', flush=True)
+        box = None
+    return encode(p, ux, uy, h, t), stats, box
+
+
+def longest_swell(w):
+    """The period of the longest of the model's separate swells of 0.1 m or
+    more, and the direction it comes from, on the wave model's grid; the peak
+    period and direction where there's only wind sea, NaN where there's no sea."""
+    hs = w['hs'][0]
+    per = np.stack([np.where(np.nan_to_num(w[f'sh{k}'][0]) >= LONG_MIN_M, np.nan_to_num(w[f'sp{k}'][0], nan=-1), -1) for k in (1, 2, 3)])
+    which = np.argmax(per, axis=0)[None]
+    longest = np.take_along_axis(per, which, 0)[0]
+    dirs = np.stack([w[f'sd{k}'][0] for k in (1, 2, 3)])
+    swell = np.isfinite(hs) & (longest > 0)
+    return (np.where(swell, longest, w['tp'][0]),
+            np.where(swell, np.take_along_axis(dirs, which, 0)[0], w['dp'][0]))
+
+
+def cells(a, w, tl, dl):
+    """The frame's hour in the cells of grid.CELL_BOX: the model's own values,
+    as grid.py lists them, float32 (rows north to south, columns west to east)."""
+    wlat, wlon = w['hs'][1], w['hs'][2]
+    alat, alon = a['p'][1], a['p'][2]
+    wave = lambda f: grid.cut(f, wlat, wlon)
+    atmos = lambda f: grid.cut(f, alat, alon)
+    out = dict(hs=wave(w['hs'][0]), tp=wave(w['tp'][0]), tl=wave(tl), dl=wave(dl), dp=wave(w['dp'][0]),
+               u=atmos(a['u'][0]), v=atmos(a['v'][0]), p=atmos(a['p'][0] / 100))
+    return {k: v.astype(np.float32) for k, v in out.items()}
 
 
 def check(step, p, u, v, h, t):
@@ -232,14 +239,14 @@ def _one(args):
     run, step, out = args
     for attempt in range(3):
         try:
-            body, stats = frame(run, step)
+            body, stats, box = frame(run, step)
             with open(os.path.join(out, f'f{step:03d}.bin.gz'), 'wb') as f:
                 f.write(gzip.compress(body, 9))
-            return step, stats, None
+            return step, stats, box, None
         except Exception as e:
             err = f'{type(e).__name__}: {e}'
             time.sleep(20)
-    return step, None, err
+    return step, None, None, err
 
 
 def ice_layer(out, url=ICE_URL):
@@ -308,6 +315,37 @@ def run_dir(run):
     return f'{run:%Y-%m-%d-%H}z'
 
 
+def cell_dir(run, keep):
+    """Where a run's cell tiles go: cells/<run>/<steps>/. The number of steps
+    is in it because a tile holds them all: a run published short and then
+    again in full gets new addresses rather than changing files phones keep."""
+    return f'cells/{run_dir(run)}/{len(keep)}'
+
+
+def cell_tiles(out, run, keep, boxes):
+    """Write the run's cell tiles (grid.py) for the steps published. Returns
+    the manifest's cells entry, or None without them: the frames publish anyway."""
+    try:
+        missing = [s for s in keep if boxes.get(s) is None]
+        if missing:
+            raise RuntimeError(f'no cells for +{missing[0]} h' + (f' and {len(missing) - 1} more' if len(missing) > 1 else ''))
+        d = cell_dir(run, keep)
+        os.makedirs(os.path.join(out, d), exist_ok=True)
+        box = {k: np.stack([boxes[s][k] for s in keep]) for k, _ in grid.VARS}
+        size = 0
+        for name, t in grid.tiles(box).items():
+            path = os.path.join(out, d, f'{name}.bin.gz')
+            with open(path, 'wb') as f:
+                f.write(gzip.compress(grid.encode_tile(t), 9))
+            size += os.path.getsize(path)
+        names = grid.tile_names()
+        print(f'cells: {len(names)} tiles in {d}, {size / 1e6:.1f} MB')
+        return grid.manifest_entry(d, names)
+    except Exception as e:
+        print(f'No cell tiles this run: {type(e).__name__}: {e}')
+        return None
+
+
 def to_publish(steps, done, had=0):
     """The frames to publish: the unbroken run of them from the start. Under
     60% of the run is refused (SystemExit). A run published short is marked
@@ -326,14 +364,14 @@ def run_frames(out, run, steps):
     d = run_dir(run)
     os.makedirs(os.path.join(out, d), exist_ok=True)
     t0 = time.time()
-    done, failed = {}, {}
+    done, failed, boxes = {}, {}, {}
     with ProcessPoolExecutor(max_workers=int(os.environ.get('WORKERS', '6'))) as pool:
-        for step, stats, err in pool.map(_one, [(run, s, os.path.join(out, d)) for s in steps]):
+        for step, stats, box, err in pool.map(_one, [(run, s, os.path.join(out, d)) for s in steps]):
             if err:
                 failed[step] = err
                 print(f'  f{step:03d} FAILED {err}', flush=True)
             else:
-                done[step] = stats
+                done[step], boxes[step] = stats, box
                 print(f'  f{step:03d} {stats}', flush=True)
     print(f'{len(done)} frames in {time.time() - t0:.0f} s; failed: {sorted(failed)}')
     good = sorted(done)
@@ -346,7 +384,7 @@ def run_frames(out, run, steps):
             os.unlink(os.path.join(out, d, f'f{s:03d}.bin.gz'))
     ice = ice_layer(out)
     manifest = dict(
-        ice=ice, run=int(run.replace(tzinfo=dt.timezone.utc).timestamp() * 1000), runLabel=gfs_latest.label(run),
+        ice=ice, cells=cell_tiles(out, run, keep, boxes), run=int(run.replace(tzinfo=dt.timezone.utc).timestamp() * 1000), runLabel=gfs_latest.label(run),
         made=int(time.time() * 1000), steps=keep, complete=upto == len(steps), dir=d, file='{dir}/f{step}.bin.gz', pad=3,
         square=dict(x0=X0, x1=X1, y0=Y0, y1=Y1, proj=PROJ4),
         grids=dict(p=P_N, s=S_N), scale=SCALE, encoding='row-delta-v1',

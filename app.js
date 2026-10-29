@@ -221,12 +221,27 @@ function nearestIndex(m, t) {
   for (let i = 1; i < m.steps.length; i++) if (Math.abs(validAt(m, i) - t) < Math.abs(validAt(m, best) - t)) best = i;
   return best;
 }
+// The grid (grid.js): NOAA's own cells and the run's cell tiles. Nothing
+// shows them yet but the ?debug=1 readout.
+let grid = null;
+function makeGrid(m) {
+  try {
+    return NSSGrid.fromManifest(m, {
+      base: m.base || FR,
+      get: async (url) => {
+        const r = await fetch(url, { mode: 'cors', credentials: 'omit' });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return gunzip(await r.arrayBuffer());
+      }
+    });
+  } catch { return null; }
+}
 async function refreshManifest() {
   let m;
   // A manifest from the phone's own copy still counts as offline.
   try { m = await getManifest(); offline = navigator.onLine === false; } catch { offline = true; renderStatus(); return; }
   if (!man) {
-    man = m; frames = []; loadIce(m);
+    man = m; frames = []; loadIce(m); grid = makeGrid(m);
     idx = nearestIndex(m, Date.now());
     tl.raw = tl.target = idx;
     buildTicks(); setFrame(idx, true); pump(); showTip();
@@ -235,7 +250,7 @@ async function refreshManifest() {
     const t = validAt(man, idx), j = nearestIndex(m, t);
     try {
       const d = await fetchFrame(m, j);
-      man = m; frames = []; loadIce(m); frames[j] = d; failedAt = {}; idx = j; tl.raw = tl.target = j; geomCache.clear();
+      man = m; frames = []; loadIce(m); grid = makeGrid(m); frames[j] = d; failedAt = {}; idx = j; tl.raw = tl.target = j; geomCache.clear();
       buildTicks(); markTick(j); setFrame(j, true);
       updatedNote = true; setTimeout(fadeUpdated, 3000);
       pump();
@@ -525,7 +540,7 @@ function resize() {
 addEventListener('resize', resize);
 
 const ptrs = new Map();
-let gesture = null, lastTap = null, zoomAnim = 0;
+let gesture = null, lastTap = null, zoomAnim = 0, onTap = null;
 cv.addEventListener('pointerdown', (e) => {
   cv.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -555,7 +570,10 @@ const endPtr = (e) => {
   const now = performance.now(), tap = !gesture.multi && gesture.moved < 10 && now - gesture.t < 300;
   if (tap && lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) {
     animateZoom(e.clientX, e.clientY, 2); lastTap = null; firstInteraction('zoom');
-  } else lastTap = tap ? { t: now, x: e.clientX, y: e.clientY } : null;
+  } else {
+    lastTap = tap ? { t: now, x: e.clientX, y: e.clientY } : null;
+    if (tap && onTap) onTap(e.clientX, e.clientY);
+  }
   gesture = null;
 };
 cv.addEventListener('pointerup', endPtr);
@@ -1221,8 +1239,39 @@ if (Q.has('debug')) {
     out.textContent = [location.host, `surface ${document.documentElement.dataset.surface}${document.documentElement.hasAttribute('data-short') ? ', short' : ''}`,
       `safe top ${cs.paddingTop}, bottom ${cs.paddingBottom}`,
       `window ${innerWidth}×${innerHeight}`, vv ? `visible ${Math.round(vv.width)}×${Math.round(vv.height)}` : '',
-      `screen ${screen.width}×${screen.height}`, ...timelineLines()].filter(Boolean).join('\n');
+      `screen ${screen.width}×${screen.height}`, ...timelineLines(), ...cellLines()].filter(Boolean).join('\n');
   };
+  // The grid: the cell under the last tap, its own numbers from the run's
+  // cell tile at the needle's hour, and the frame's 25 km node nearest it.
+  let pick = null;
+  onTap = (cx, cy) => {
+    if (!grid || !man) return;
+    const wx = view.x + (cx - W / 2) / view.k, wy = view.y - (cy - Hs / 2) / view.k, [lon, lat] = grid.kmToLonLat(wx, wy);
+    const p = pick = { lon, lat, wx, wy, id: grid.cellAt(lon, lat), s: undefined };
+    grid.series(p.id).then((s) => { p.s = s; show(); }).catch((e) => { p.s = null; p.err = e.message; show(); });
+    show();
+  };
+  const ll = (lat, lon) => `${Math.abs(lat).toFixed(2)}${lat < 0 ? 'S' : 'N'} ${Math.abs(lon).toFixed(2)}${lon < 0 ? 'W' : 'E'}`;
+  function cellLines() {
+    if (!pick || !man) return grid ? ['cell: tap the chart'] : [];
+    const p = pick, c = grid.cellOf(p.id), out = [`cell ${p.id} (${ll(c.lat, c.lon)}), tapped ${ll(p.lat, p.lon)}`];
+    const f = (x, d = 1) => (Number.isNaN(x) ? '–' : x.toFixed(d)), i = idx;
+    if (p.s === undefined) out.push('  loading its tile');
+    else if (!p.s) out.push(p.err ? `  no tile: ${p.err}` : '  outside the cell tiles');
+    else {
+      const s = p.s, from = (deg) => (Number.isNaN(deg) ? '–' : Math.round(deg) + '°');
+      const wind = Math.hypot(s.u[i], s.v[i]), wfrom = (Math.atan2(-s.u[i], -s.v[i]) * 180 / Math.PI + 360) % 360;
+      out.push(s.sea ? `  +${s.steps[i]} h sea: Hs ${f(s.hs[i])} m, peak ${f(s.tp[i])} s from ${from(s.dp[i])}, longest ${f(s.tl[i])} s from ${from(s.dl[i])}`
+        : `  +${s.steps[i]} h land: wind and pressure only`, `  wind ${f(wind)} m/s from ${from(wfrom)}, ${f(s.p[i])} hPa`);
+    }
+    const d = frames[i], S = man.grids.s, sq = man.square;
+    const gj = Math.round((p.wx - sq.x0) / (sq.x1 - sq.x0) * (S - 1)), gi = Math.round((sq.y0 - p.wy) / (sq.y0 - sq.y1) * (S - 1));
+    if (d && gi >= 0 && gj >= 0 && gi < S && gj < S) {
+      const h = d.h[gi * S + gj], t = d.t[gi * S + gj];
+      out.push(`  frame's 25 km node: ${h === 255 ? 'no sea' : `Hs ${(h / man.scale.h).toFixed(1)} m, longest ${(t / man.scale.t).toFixed(1)} s`}`);
+    }
+    return out;
+  }
   show(); addEventListener('resize', show); window.visualViewport && visualViewport.addEventListener('resize', show);
   // The timeline: whether iOS let the page have the whole touch, how many
   // moves reached it, how slow the slowest frame was while it moved, and how

@@ -3,9 +3,10 @@ which fails (and opens an issue) when it isn't.
 
 Reads the frames branch as a phone would: the manifest, then the first and
 last frames it lists (from R2 if the manifest says so), each of which must
-unpack to the size the manifest's grids give. The frames are published about
-5 h after each of NOAA's runs (00, 06, 12 and 18 UTC), so they're normally up
-to 6 h old; MAX_AGE_H allows one run missed by a little, not two.
+unpack to the size the manifest's grids give, and the first of the cell
+tiles it names, if any. The frames are published about 5 h after each of
+NOAA's runs (00, 06, 12 and 18 UTC), so they're normally up to 6 h old;
+MAX_AGE_H allows one run missed by a little, not two.
 
 Standard library only:
 
@@ -39,6 +40,12 @@ def frame_url(base, m, step):
     return f"{m.get('base') or base}{m['dir'] + '/' if m.get('dir') else ''}f{step:0{m.get('pad', 3)}d}.bin.gz?run={m['run']}"
 
 
+def cell_url(base, m, tile):
+    """Where a phone gets a cell tile (grid.py): beside the frames."""
+    c = m['cells']
+    return f"{m.get('base') or base}{c['file'].format(dir=c['dir'], tile=tile)}?run={m['run']}"
+
+
 def problems(base, now_ms, fetch=get):
     """What's wrong with the published frames, as sentences; empty if nothing."""
     try:
@@ -62,6 +69,19 @@ def problems(base, now_ms, fetch=get):
             continue
         if n != size:
             out.append(f'Frame +{step} h is {n} bytes; the grids make {size}')
+    # The cell tiles are a nice-to-have (the manifest has none if they failed),
+    # but one it names must be there and whole: pressure is 2 bytes, the rest 1.
+    c = m.get('cells')
+    if c:
+        tile = c['tiles'][0]
+        size = c['tile'] ** 2 * len(m['steps']) * sum(2 if v == 'p' else 1 for v in c['vars'])
+        url = cell_url(base, m, tile)
+        try:
+            n = len(gzip.decompress(fetch(url)))
+            if n != size:
+                out.append(f'Cell tile {tile} is {n} bytes; {len(m["steps"])} steps make {size}')
+        except Exception as e:
+            out.append(f'Cell tile {tile} unreadable ({url}): {e}')
     return out
 
 

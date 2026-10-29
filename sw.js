@@ -6,12 +6,13 @@
    there is one and from the last copy kept when there isn't. The old app
    (legacy.html, behind the prediction flag) works as it always has:
 
-   A run's chart frames (and its ice, grid and swell window) never change once
-   drawn, and each one's address names its run, so each is downloaded once and
-   kept; when a newer run's frames arrive, the older run's are cleared. The
-   page itself, the charts' manifest and the latest readings come from the
-   network when there is one and from the last copy kept when there isn't, so
-   the app still opens, with the last charts, where there's no signal.
+   A run's chart frames (and its cell tiles, ice, grid and swell window)
+   never change once drawn, and each one's address names its run, so each is
+   downloaded once and kept; when a newer run's frames arrive, the older
+   run's are cleared. The page itself, the charts' manifest and the latest
+   readings come from the network when there is one and from the last copy
+   kept when there isn't, so the app still opens, with the last charts,
+   where there's no signal.
    Registered by index.html. */
 const CHARTS = 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/charts/';
 const DATA = 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/data/';
@@ -31,7 +32,8 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.href.startsWith(CHARTS) && url.searchParams.has('run')) e.respondWith(frame(e, url));
-  else if (/\/f\d{3}\.bin\.gz$/.test(url.pathname) && url.searchParams.has('run')) e.respondWith(frame(e, url, NSS_FRAMES));
+  else if ((/\/f\d{3}\.bin\.gz$/.test(url.pathname) || /\/cells\/.+\.bin\.gz$/.test(url.pathname)) && url.searchParams.has('run'))
+    e.respondWith(frame(e, url, NSS_FRAMES));
   else if (req.mode === 'navigate' && url.origin === location.origin) e.respondWith(latest(req, url.origin + url.pathname));
   else if (url.href.startsWith(CHARTS + 'manifest.json') || url.href.startsWith(DATA) || url.href.startsWith(FRAMES_NEW + 'manifest.json') || url.href.startsWith(FRAMES_NEW + 'ice.json') ||
            (url.origin === location.origin && url.pathname.endsWith('/manifest.json')))

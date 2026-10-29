@@ -126,13 +126,18 @@ class PublishR2(unittest.TestCase):
         if not self.bucket_exists():
             self.s3.create_bucket(Bucket=self.BUCKET)
         # Three older runs and something that isn't a run, already on R2.
-        for key in ('2026-10-26-18z/f000.bin.gz', '2026-10-27-00z/f000.bin.gz', '2026-10-27-06z/f000.bin.gz', 'notes/readme.txt'):
+        # And an older run's cell tiles, which are kept for good.
+        for key in ('2026-10-26-18z/f000.bin.gz', '2026-10-27-00z/f000.bin.gz', '2026-10-27-06z/f000.bin.gz', 'notes/readme.txt',
+                    'cells/2026-10-26-18z/209/52_-4.bin.gz'):
             self.s3.put_object(Bucket=self.BUCKET, Key=key, Body=b'old')
         self.out = tempfile.mkdtemp()
         os.makedirs(os.path.join(self.out, self.RUN))
         for step in (0, 1, 384):
             with open(os.path.join(self.out, self.RUN, f'f{step:03d}.bin.gz'), 'wb') as f:
                 f.write(gzip.compress(b'frame'))
+        os.makedirs(os.path.join(self.out, 'cells', self.RUN, '3'))
+        with open(os.path.join(self.out, 'cells', self.RUN, '3', '52_-4.bin.gz'), 'wb') as f:
+            f.write(gzip.compress(b'tile'))
         with open(os.path.join(self.out, 'manifest.json'), 'w') as f:
             json.dump(dict(runLabel='2026-10-27 12z', dir=self.RUN, steps=[0, 1, 384]), f)
 
@@ -160,7 +165,11 @@ class PublishR2(unittest.TestCase):
         r = self.publish()
         self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
         self.assertEqual(self.keys(), ['2026-10-27-06z/f000.bin.gz', f'{self.RUN}/f000.bin.gz', f'{self.RUN}/f001.bin.gz',
-                                       f'{self.RUN}/f384.bin.gz', 'manifest.json', 'notes/readme.txt'])
+                                       f'{self.RUN}/f384.bin.gz', 'cells/2026-10-26-18z/209/52_-4.bin.gz',
+                                       f'cells/{self.RUN}/3/52_-4.bin.gz', 'manifest.json', 'notes/readme.txt'])
+        tile = self.s3.get_object(Bucket=self.BUCKET, Key=f'cells/{self.RUN}/3/52_-4.bin.gz')
+        self.assertIn('immutable', tile['CacheControl'])
+        self.assertEqual(tile['ContentType'], 'application/octet-stream')
         frame = self.s3.get_object(Bucket=self.BUCKET, Key=f'{self.RUN}/f001.bin.gz')
         self.assertEqual(gzip.decompress(frame['Body'].read()), b'frame')
         self.assertEqual(frame['ContentType'], 'application/octet-stream')

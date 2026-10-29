@@ -8,6 +8,8 @@ chart_frames.py (units, orientation, the wind's rotation, the swell period,
 what smoothing and rounding do) shows up as a difference rather than as a
 chart that looks right. At a set of points and over each whole grid:
 pressure (hPa), wind speed (m/s) and direction, wave height (m) and period (s).
+At the points over the North Sea, the cell tiles too (grid.py), which are the
+model's own grid points, so they must be NOAA's numbers to the rounding.
 
   python scripts/validate_frames.py [--steps 0,24,72] [--frames-url URL]
                                     [--local RUN] [--json OUT.json]
@@ -41,6 +43,7 @@ sys.path.insert(0, HERE)
 import chart_frames as cf  # noqa: E402
 import check_fresh  # noqa: E402
 import gfs_latest  # noqa: E402
+import grid  # noqa: E402
 
 BRANCH = 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/frames/'
 STEPS = [0, 24, 72, 120, 240, 384]
@@ -61,6 +64,9 @@ POINTS = [
 # a flipped grid or a bad rotation is far outside them.
 LIMITS = dict(p_point=2.0, p_rms=0.8, wind_point=2.5, wind_rms=0.8, dir_point=25.0,
               hs_point=0.35, hs_rms=0.12, tp_point=1.5, tp_rms=0.6)
+# The cell tiles are NOAA's own grid points, not resampled: all that's allowed
+# is rounding to the steps they're stored in (grid.py), half a step either way.
+CELL_LIMITS = dict(hs=0.05, tl=0.05, p=0.025, u=0.25, v=0.25, dp=1.0)
 MIN_WIND_FOR_DIRECTION = 5.0     # m/s: below it the direction is mostly noise
 MIN_HS_FOR_PERIOD = 0.5          # m: a flat sea's period means little
 
@@ -90,6 +96,21 @@ def decode(body, P, S):
 def published(base, manifest, step):
     url = check_fresh.frame_url(base, manifest, step)
     return gzip.decompress(check_fresh.get(url))
+
+
+def published_cells(base, manifest, tiles, step):
+    """cell_at() for a step over the run's published cell tiles, fetched once
+    into tiles; None if the run has none."""
+    if not manifest.get('cells'):
+        return None
+    n = len(manifest['steps'])
+
+    def cell_at(cid):
+        name = grid.tile_of(cid)
+        if name not in tiles:
+            tiles[name] = grid.decode_tile(gzip.decompress(check_fresh.get(check_fresh.cell_url(base, manifest, name))), n)
+        return tile_reader(tiles, manifest['steps'].index(step))(cid)
+    return cell_at
 
 
 def frame_at(fr, name, lon, lat):
@@ -129,6 +150,14 @@ class Source:
         periods = [np.where(np.nan_to_num(w[f'sh{k}'][0]) >= cf.LONG_MIN_M, w[f'sp{k}'][0], -1) for k in (1, 2, 3)]
         longest = np.maximum.reduce(periods)
         self.tp = np.where(np.isfinite(self.hs), np.where(longest > 0, longest, w['tp'][0]), np.nan)
+        self.dp = w['dp'][0]
+
+    def cell(self, cid):
+        """The model's own values at a cell's grid point, named as the tiles name them."""
+        lat, lon = grid.cell_of(cid)
+        w = lambda a: a[int(round((self.wlat0 - lat) / 0.25)), int(round((lon - self.wlon0) / 0.25))]
+        g = lambda a: a[int(round((self.lat0 - lat) / 0.25)), int(round((lon - self.lon0) / 0.25))]
+        return dict(hs=w(self.hs), tl=w(self.tp), dp=w(self.dp), p=g(self.p), u=g(self.u), v=g(self.v))
 
     def at(self, name, lon, lat):
         wave = name in ('hs', 'tp')
@@ -202,6 +231,35 @@ def problems(res):
         elif g['rms'] > lim:
             out.append(f"{key}: root mean square {g['rms']} {unit} over the grid (limit {lim}), worst {g['max']}")
     return out
+
+
+def cell_problems(cell_at, src):
+    """Sentences for every cell value at the points (inside grid.CELL_BOX) that
+    isn't NOAA's own, rounded as stored; empty if none. cell_at(cid) gives a
+    cell's values from our tiles at this step."""
+    out = []
+    for name, lat, lon in POINTS:
+        cid = grid.cell_id(lat, lon)
+        if grid.tile_of(cid) is None:
+            continue
+        ours, theirs = cell_at(cid), src.cell(cid)
+        for key, lim in CELL_LIMITS.items():
+            a, b = float(ours[key]), float(theirs[key])
+            if np.isnan(a) and np.isnan(b):
+                continue
+            d = angle_diff(a, b) if key == 'dp' else abs(a - b)
+            if not d <= lim + 1e-6:
+                out.append(f'{name} ({cid}): cell {key} {a} against NOAA\'s {b} (limit {lim})')
+    return out
+
+
+def tile_reader(tiles, step_index):
+    """cell_at() over decoded tiles ({name: grid.decode_tile()}), at one step."""
+    def cell_at(cid):
+        name = grid.tile_of(cid)
+        i, j = grid.tile_cell(name, cid)
+        return {k: tiles[name][k][step_index, i, j] for k in tiles[name]}
+    return cell_at
 
 
 # ---- Wetterzentrale: to look at, nothing more ---------------------------------------------------
@@ -298,12 +356,20 @@ def main(argv=None):
     glon, glat = cf.nodes(P)
     slon, slat = cf.nodes(S)
     found, report = [], []
+    tiles = {}
     for step in steps:
-        body = cf.frame(run, step)[0] if args.local else published(args.frames_url, manifest, step)
+        if args.local:
+            body, _, box = cf.frame(run, step)
+            # As the job stores them: one step's tiles, through the tiles' encoding.
+            cell_at = box and tile_reader({n: grid.decode_tile(grid.encode_tile(t), 1) for n, t in grid.tiles({k: v[None] for k, v in box.items()}).items()}, 0)
+        else:
+            body = published(args.frames_url, manifest, step)
+            cell_at = published_cells(args.frames_url, manifest, tiles, step)
         fr = decode(body, P, S)
-        res = compare(fr, Source(run, step), glon, glat, slon, slat)
+        src = Source(run, step)
+        res = compare(fr, src, glon, glat, slon, slat)
         res['step'] = step
-        bad = problems(res)
+        bad = problems(res) + (cell_problems(cell_at, src) if cell_at else [])
         report.append(res)
         found += [f'+{step} h: {b}' for b in bad]
         g = res['grid']
