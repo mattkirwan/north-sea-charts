@@ -238,6 +238,11 @@ class App(unittest.TestCase):
             self.assertIsNone(self.tip())
         self.tip_due('Slide timeline')
         self.assertTrue(self.page.locator('#panel [data-tip]').is_visible())
+        # On top of the needle's arrow, centred over it (once it's slid in).
+        self.page.wait_for_timeout(400)
+        tip, arrow = self.box('#panel [data-tip]'), self.box('#panel .nss-timeline-arrow')
+        self.assertAlmostEqual(tip['x'] + tip['width'] / 2, arrow['x'] + arrow['width'] / 2, delta=1)
+        self.assertLessEqual(tip['y'] + tip['height'], arrow['y'])
         self.slide()
         self.assertIsNone(self.tip())
         self.assertEqual(self.hints()['seen'], {'tip.timeline.slide': 'retired'})
