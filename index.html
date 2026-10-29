@@ -91,6 +91,11 @@
   /* Less space under the panels than the full home-indicator inset (the menu
      button keeps the same spot in both, and the menu's close button too). */
   .nss-panel, .nss-column, .nss-sheet { z-index: 2; padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px) * 0.35); }
+  /* In Instagram, scrubbing that low catches the phone's swipe gestures: keep
+     clear of them with the full home-indicator inset (34 px on iPhone), never
+     less than Android's 24 px gesture bar, on top of the usual 8 px. */
+  [data-surface="instagram"] .nss-panel, [data-surface="instagram"] .nss-column, [data-surface="instagram"] .nss-sheet {
+    padding-bottom: calc(var(--space-2) + max(env(safe-area-inset-bottom, 0px), 24px)); }
   /* Fixed to the screen edge, with the page behind in the panel colour: iOS 26
      carries the colour of what is fixed at the bottom edge into any space it
      keeps below the page (a gap on the home screen, behind Safari's bar). */
