@@ -35,7 +35,9 @@ const LANGS = {
     tipSlide: 'Slide timeline', tipReset: 'Double-tap to reset',
     tipPeriod: 'Tap for wave period',
     tips: 'Tips', tipsSub: 'Short hints beside the controls', tipsOn: 'On', tipsOff: 'Off',
-    tipsAgain: 'Show tips again', tipsAgainSub: 'From the start, one at a time', tipsAgainDone: "They'll show again"
+    tipsAgain: 'Show tips again', tipsAgainSub: 'From the start, one at a time', tipsAgainDone: "They'll show again",
+    newTag: 'New · {name}', gotIt: 'Got it', showMe: 'Show me', somethingNew: ', something new',
+    newPanelName: 'Side panel', newPanelKicker: 'New in the menu', newPanelBody: 'Fold the controls into a narrow column at the side and give the chart the whole width. Menu › Settings › Panel.'
   } },
   nb: { name: 'Norsk', places: 'Norge', tag: 'nb-NO', t: {
     chartLabel: 'Værkart over Nordsjøen og havene rundt. Dra for å flytte kartet, knip for å zoome, dobbelttrykk for å zoome inn.',
@@ -63,7 +65,9 @@ const LANGS = {
     tipSlide: 'Dra i tidslinjen', tipReset: 'Dobbelttrykk for å tilbakestille',
     tipPeriod: 'Trykk for bølgeperiode',
     tips: 'Tips', tipsSub: 'Korte hint ved kontrollene', tipsOn: 'På', tipsOff: 'Av',
-    tipsAgain: 'Vis tipsene igjen', tipsAgainSub: 'Fra begynnelsen, ett om gangen', tipsAgainDone: 'De vises igjen'
+    tipsAgain: 'Vis tipsene igjen', tipsAgainSub: 'Fra begynnelsen, ett om gangen', tipsAgainDone: 'De vises igjen',
+    newTag: 'Nytt · {name}', gotIt: 'Skjønner', showMe: 'Vis meg', somethingNew: ', noe nytt',
+    newPanelName: 'Sidepanel', newPanelKicker: 'Nytt i menyen', newPanelBody: 'Legg kontrollene i et smalt felt på siden og gi kartet hele bredden. Meny › Innstillinger › Panel.'
   } },
   da: { name: 'Dansk', places: 'Danmark', tag: 'da-DK', t: {
     chartLabel: 'Vejrkort over Nordsøen og havene omkring den. Træk for at flytte kortet, knib for at zoome, dobbelttryk for at zoome ind.',
@@ -91,7 +95,9 @@ const LANGS = {
     tipSlide: 'Træk i tidslinjen', tipReset: 'Dobbelttryk for at nulstille',
     tipPeriod: 'Tryk for bølgeperiode',
     tips: 'Tips', tipsSub: 'Korte hints ved knapperne', tipsOn: 'Til', tipsOff: 'Fra',
-    tipsAgain: 'Vis tips igen', tipsAgainSub: 'Fra begyndelsen, ét ad gangen', tipsAgainDone: 'De vises igen'
+    tipsAgain: 'Vis tips igen', tipsAgainSub: 'Fra begyndelsen, ét ad gangen', tipsAgainDone: 'De vises igen',
+    newTag: 'Nyt · {name}', gotIt: 'Forstået', showMe: 'Vis mig', somethingNew: ', noget nyt',
+    newPanelName: 'Sidepanel', newPanelKicker: 'Nyt i menuen', newPanelBody: 'Saml knapperne i en smal bjælke i siden, og giv kortet hele bredden. Menu › Indstillinger › Panel.'
   } },
   de: { name: 'Deutsch', places: 'Deutschland', tag: 'de-DE', t: {
     chartLabel: 'Wetterkarte der Nordsee und der Meere ringsum. Ziehen verschiebt die Karte, mit zwei Fingern zoomen, doppelt tippen vergrößert.',
@@ -119,7 +125,9 @@ const LANGS = {
     tipSlide: 'Zeitleiste schieben', tipReset: 'Doppelt tippen zum Zurücksetzen',
     tipPeriod: 'Für Wellenperiode tippen',
     tips: 'Tipps', tipsSub: 'Kurze Hinweise neben den Bedienelementen', tipsOn: 'An', tipsOff: 'Aus',
-    tipsAgain: 'Tipps erneut zeigen', tipsAgainSub: 'Von vorn, einer nach dem anderen', tipsAgainDone: 'Sie erscheinen wieder'
+    tipsAgain: 'Tipps erneut zeigen', tipsAgainSub: 'Von vorn, einer nach dem anderen', tipsAgainDone: 'Sie erscheinen wieder',
+    newTag: 'Neu · {name}', gotIt: 'Verstanden', showMe: 'Zeig mir', somethingNew: ', etwas Neues',
+    newPanelName: 'Seitenleiste', newPanelKicker: 'Neu im Menü', newPanelBody: 'Die Bedienelemente in einer schmalen Leiste an der Seite, und die Karte nutzt die ganze Breite. Menü › Einstellungen › Leiste.'
   } },
   nl: { name: 'Nederlands', places: 'Nederland, België', tag: 'nl-NL', t: {
     chartLabel: 'Weerkaart van de Noordzee en de zeeën eromheen. Sleep om de kaart te verschuiven, knijp om te zoomen, tik twee keer om in te zoomen.',
@@ -147,7 +155,9 @@ const LANGS = {
     tipSlide: 'Schuif de tijdlijn', tipReset: 'Tik twee keer om te resetten',
     tipPeriod: 'Tik voor golfperiode',
     tips: 'Tips', tipsSub: 'Korte hints bij de knoppen', tipsOn: 'Aan', tipsOff: 'Uit',
-    tipsAgain: 'Tips opnieuw tonen', tipsAgainSub: 'Van voren af aan, één voor één', tipsAgainDone: 'Ze verschijnen weer'
+    tipsAgain: 'Tips opnieuw tonen', tipsAgainSub: 'Van voren af aan, één voor één', tipsAgainDone: 'Ze verschijnen weer',
+    newTag: 'Nieuw · {name}', gotIt: 'Begrepen', showMe: 'Laat zien', somethingNew: ', iets nieuws',
+    newPanelName: 'Zijpaneel', newPanelKicker: 'Nieuw in het menu', newPanelBody: 'Zet de knoppen in een smalle balk aan de zijkant en geef de kaart de hele breedte. Menu › Instellingen › Paneel.'
   } },
   fr: { name: 'Français', places: 'France, Belgique', tag: 'fr-FR', t: {
     chartLabel: 'Carte météo de la mer du Nord et des mers alentour. Faites glisser pour déplacer la carte, pincez pour zoomer, touchez deux fois pour agrandir.',
@@ -175,6 +185,8 @@ const LANGS = {
     tipSlide: 'Faites glisser la frise', tipReset: 'Touchez deux fois pour revenir',
     tipPeriod: 'Touchez pour la période',
     tips: 'Astuces', tipsSub: 'De courtes aides près des commandes', tipsOn: 'Oui', tipsOff: 'Non',
-    tipsAgain: 'Revoir les astuces', tipsAgainSub: 'Depuis le début, une à la fois', tipsAgainDone: 'Elles reviendront'
+    tipsAgain: 'Revoir les astuces', tipsAgainSub: 'Depuis le début, une à la fois', tipsAgainDone: 'Elles reviendront',
+    newTag: 'Nouveau · {name}', gotIt: 'Compris', showMe: 'Montrez-moi', somethingNew: ', du nouveau',
+    newPanelName: 'Panneau latéral', newPanelKicker: 'Nouveau dans le menu', newPanelBody: 'Rangez les commandes dans une colonne étroite sur le côté et laissez toute la largeur à la carte. Menu › Réglages › Panneau.'
   } }
 };

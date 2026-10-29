@@ -187,7 +187,12 @@
   .nss-timeline > .nss-tip { left: 50%; top: auto; bottom: calc(100% + 2px); translate: -50% 0; }
   /* Floating, over the part of a control it points at (app.js places it): over the panel, under the menu. */
   .nss-tip--float { position: fixed; z-index: 3; }
-  .nss-tip--float .nss-tip-notch { bottom: -4px; }
+  .nss-tip--float .nss-tip-notch, .nss-new-tag .nss-tip-notch { bottom: -4px; }
+  /* A new feature: its light in the corner of each control on the way to it,
+     and the tag and card by the control (app.js places them). */
+  .nss-menu-btn, .nss-menu-item, .nss-setting { position: relative; }
+  .nss-new-tag, .nss-hint-card { position: fixed; }
+  .nss-hint-actions:has([data-show-me][hidden]) [data-got-it] { flex: 1; }
   .nss-vtimeline .nss-tip { left: auto; right: calc(100% + 14px); top: calc(50% - 11px); }
 
   .nss-flyout { animation: fly-in 180ms cubic-bezier(.2, .8, .2, 1); }
@@ -259,12 +264,21 @@
         <span class="nss-needle"></span>
       </div>
     </div>
-    <button type="button" class="nss-menu-btn" data-menu aria-label="Menu" data-t-label="menu" aria-haspopup="dialog" data-icon="menu"></button>
+    <button type="button" class="nss-menu-btn" data-menu data-hint-target="menu-button" aria-label="Menu" data-t-label="menu" aria-haspopup="dialog" data-icon="menu"></button>
   </div>
 </div>
 
 <!-- A tip over part of a control, in either panel (app.js places it). -->
 <span class="nss-tip nss-tip--float" data-tip data-tip-float hidden></span>
+<!-- A new feature's tag, and the card it opens. -->
+<button type="button" class="nss-new-tag" data-new-tag hidden></button>
+<div class="nss-hint-card" data-hint-card role="dialog" hidden>
+  <span class="nss-hint-kicker" data-card-kicker></span>
+  <span class="nss-hint-title" data-card-title></span>
+  <span class="nss-hint-body" data-card-body></span>
+  <div class="nss-hint-actions"><button type="button" class="nss-btn" data-got-it data-t="gotIt">Got it</button><button type="button" class="nss-btn nss-btn--primary" data-show-me data-t="showMe">Show me</button></div>
+  <span class="nss-card-notch" aria-hidden="true"></span>
+</div>
 
 <!-- Docked: a narrow column on the right (or the left, for the left hand). -->
 <div class="nss-column" id="column" data-away>
@@ -285,7 +299,7 @@
     <div class="nss-band-slot"><button type="button" class="nss-band" data-band="wind" aria-pressed="false" aria-label="Wind" data-t-label="wind" data-icon="wind"></button></div>
     <div class="nss-band-slot"><button type="button" class="nss-band" data-band="swell" aria-pressed="false" aria-label="Swell" data-t-label="swell" data-icon="swell"></button></div>
   </div>
-  <button type="button" class="nss-menu-btn" data-menu aria-label="Menu" data-t-label="menu" aria-haspopup="dialog" data-icon="menu"></button>
+  <button type="button" class="nss-menu-btn" data-menu data-hint-target="menu-button" aria-label="Menu" data-t-label="menu" aria-haspopup="dialog" data-icon="menu"></button>
   <div class="nss-flyout" id="flyout" hidden>
     <div class="nss-key" data-key></div>
     <div class="nss-switch" data-swell data-hint-target="swell" role="group" aria-label="Swell measure" data-t-label="swellMeasure">
@@ -312,7 +326,7 @@
   </form>
   <hr class="nss-menu-rule">
   <ul class="nss-menu-list">
-    <li><button type="button" class="nss-menu-item" data-go="settings"><span class="nss-menu-text"><span class="nss-menu-name" data-t="settings">Settings</span><span class="nss-menu-sub" data-t="settingsSub">Panel, hand, language</span></span><span data-icon="chevron" data-icon-size="sm"></span></button></li>
+    <li><button type="button" class="nss-menu-item" data-go="settings" data-hint-target="menu.settings"><span class="nss-menu-text"><span class="nss-menu-name" data-t="settings">Settings</span><span class="nss-menu-sub" data-t="settingsSub">Panel, hand, language</span></span><span data-icon="chevron" data-icon-size="sm"></span></button></li>
     <li><button type="button" class="nss-menu-item" data-go="about"><span class="nss-menu-text"><span class="nss-menu-name" data-t="about">About</span><span class="nss-menu-sub" data-t="aboutSub">The app and the data</span></span><span data-icon="chevron" data-icon-size="sm"></span></button></li>
   </ul>
   <div class="nss-sheet-foot"><button type="button" class="nss-menu-btn" data-close aria-label="Close menu" data-t-label="closeMenu" data-icon="close"></button></div>
@@ -320,7 +334,7 @@
 <div class="nss-sheet" id="settings" data-sheet="settings" role="dialog" aria-modal="true" aria-label="Settings" data-t-label="settings" hidden>
   <span class="nss-sheet-grip" aria-hidden="true"></span>
   <div class="nss-sheet-head"><button type="button" class="nss-menu-btn" data-back aria-label="Back to menu" data-t-label="back" data-icon="back"></button><h2 class="nss-sheet-title" data-t="settings">Settings</h2></div>
-  <div class="nss-setting">
+  <div class="nss-setting" data-hint-target="settings.panel">
     <span class="nss-menu-text"><span class="nss-menu-name" id="setPanel" data-t="panel">Panel</span><span class="nss-menu-sub" data-t="panelSub">Along the bottom or a narrow sidebar</span></span>
     <div class="nss-switch" data-set="panel" role="group" aria-labelledby="setPanel">
       <button type="button" data-value="bottom" aria-pressed="true"><span data-icon="panel-bottom" data-icon-size="sm"></span><span data-t="bottom">Bottom</span></button>
