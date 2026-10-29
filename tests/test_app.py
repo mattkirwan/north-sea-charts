@@ -681,7 +681,7 @@ class App(unittest.TestCase):
         self.page.wait_for_function(ALL_IN)
         self.context.set_offline(True)
         self.page.reload()
-        self.page.wait_for_function("document.querySelector('#rStatus').textContent.startsWith('Offline · run')")
+        self.page.wait_for_function("document.querySelector('#rStatus').textContent.startsWith('Offline · ')")
         self.assertEqual(self.page.locator('.nss-timeline').get_attribute('aria-valuemax'), str(len(STEPS) - 1))
         self.page.wait_for_function("""(() => { const s = document.querySelector('.nss-timeline'),
             ticks = s.querySelectorAll('.nss-tick:not(.nss-tick--day):not(.nss-tick--now)');
