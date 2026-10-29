@@ -141,6 +141,17 @@
   .nss-about dd { margin: 0; }
   .nss-about-lede { margin: 0; padding: 0 var(--space-3) var(--space-1); font-size: 11px; line-height: 1.5; color: var(--ui-ink-muted); }
   .nss-about-sign { color: var(--ui-ink); font-weight: 500; }
+  /* Feedback: a box and a send button, in the menu. */
+  .nss-feedback { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) var(--space-3); }
+  .nss-feedback textarea { box-sizing: border-box; width: 100%; min-height: 72px; resize: vertical; padding: var(--space-2); border: 1px solid var(--ui-track);
+    border-radius: var(--radius-card); background: var(--ui-raised); color: var(--ui-ink); font: 400 13px/1.4 var(--font-mono); -webkit-user-select: text; user-select: text; }
+  .nss-feedback textarea:focus-visible, .nss-feedback-send:focus-visible { outline: 2px solid var(--lifeboat-deep); outline-offset: 2px; }
+  .nss-feedback-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+  .nss-feedback-send { flex: 0 0 auto; height: 40px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-card); background: var(--ui-control); color: var(--ui-control-ink);
+    font: 500 11px/1 var(--font-mono); letter-spacing: 0.6px; text-transform: uppercase; cursor: pointer; }
+  .nss-feedback-send:disabled { opacity: 0.45; cursor: default; }
+  /* With the keyboard up, the sheets sit on it (app.js sets --kb). */
+  .nss-sheet { bottom: var(--kb, 0px); max-height: calc((100vh - var(--kb, 0px)) * 0.85); }
   /* Language: the one in use marked like the view we're on, with a tick. */
   .nss-menu-item[aria-checked="true"] { background: var(--ui-control); color: var(--ui-control-ink); }
   .nss-menu-item[aria-checked="true"] .nss-menu-sub { color: var(--ui-control-ink); }
@@ -260,21 +271,22 @@
     </div>
   </div>
 </div>
-<!-- The menu, from the menu button: views first, then Settings and About.
+<!-- The menu, from the menu button: views first, then feedback, then Settings and About.
      Each opens as a sheet in the same place, so only one shows at a time. -->
 <div class="nss-scrim" id="scrim" hidden></div>
 <div class="nss-sheet" id="menu" data-sheet="menu" role="dialog" aria-modal="true" aria-label="Menu" data-t-label="menu" hidden>
   <span class="nss-sheet-grip" aria-hidden="true"></span>
-  <!-- Views not built yet stay listed, dimmed and still focusable. They are
-       the prediction system's, behind its flag (index.html, above); when one
-       is built, drop its aria-disabled and its tag and route to it. -->
   <nav aria-label="Views" data-t-label="views"><ul class="nss-menu-list">
     <li><button type="button" class="nss-menu-item" data-view="chart" aria-current="page"><span class="nss-menu-text"><span class="nss-menu-name" data-t="chart">Chart</span><span class="nss-menu-sub" data-t="chartSub">Pressure, wind and swell</span></span></button></li>
-    <li><button type="button" class="nss-menu-item" data-view="spots" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name" data-t="spots">Spots</span><span class="nss-menu-sub" data-t="spotsSub">Your breaks and their forecasts</span></span><span class="nss-soon" data-t="soon">SOON</span></button></li>
-    <li><button type="button" class="nss-menu-item" data-view="buoys" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name" data-t="buoys">Buoys</span><span class="nss-menu-sub" data-t="buoysSub">Waves measured at sea</span></span><span class="nss-soon" data-t="soon">SOON</span></button></li>
-    <li><button type="button" class="nss-menu-item" data-view="reports" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name" data-t="reports">Reports</span><span class="nss-menu-sub" data-t="reportsSub">What surfers saw</span></span><span class="nss-soon" data-t="soon">SOON</span></button></li>
-    <li><button type="button" class="nss-menu-item" data-view="skill" aria-disabled="true"><span class="nss-menu-text"><span class="nss-menu-name" data-t="skill">How far out</span><span class="nss-menu-sub" data-t="skillSub">How the forecast has done</span></span><span class="nss-soon" data-t="soon">SOON</span></button></li>
   </ul></nav>
+  <!-- Feedback and ideas: one box, emailed to Matt (feedback/, the Worker
+       at /api/feedback). The website field is for bots only. -->
+  <form class="nss-feedback" id="feedback" novalidate>
+    <label class="nss-menu-text" for="fbText"><span class="nss-menu-name" data-t="feedback">Feedback &amp; ideas</span><span class="nss-menu-sub" data-t="feedbackSub">Straight to Matt: what's missing, what's wrong, what you'd like.</span></label>
+    <textarea id="fbText" name="text" rows="3" maxlength="2000"></textarea>
+    <input class="vh" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <div class="nss-feedback-row"><span class="nss-menu-sub" id="fbState" role="status"></span><button type="submit" class="nss-feedback-send" data-t="send" disabled>Send</button></div>
+  </form>
   <hr class="nss-menu-rule">
   <ul class="nss-menu-list">
     <li><button type="button" class="nss-menu-item" data-go="settings"><span class="nss-menu-text"><span class="nss-menu-name" data-t="settings">Settings</span><span class="nss-menu-sub" data-t="settingsSub">Panel, hand, language</span></span><span data-icon="chevron" data-icon-size="sm"></span></button></li>

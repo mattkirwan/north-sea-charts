@@ -1,0 +1,45 @@
+# Deploys the feedback Worker (feedback/), which emails what people send from
+# the chart app's menu to FEEDBACK_TO. One Worker for staging and production:
+# it answers /api/feedback on both (feedback/wrangler.toml). On a merge to main
+# that changes it, or by hand.
+#
+# Needs, once, in Cloudflare: Email Routing on northsea.surf, with FEEDBACK_TO
+# added and verified as a destination address. In GitHub: the FEEDBACK_TO
+# secret, and CLOUDFLARE_API_TOKEN able to edit Workers scripts and the zone's
+# Workers routes (as well as Pages, for deploy.yml).
+name: Feedback Worker
+
+on:
+  push:
+    branches: [main]
+    paths: ['feedback/**', '.github/workflows/feedback.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Is Cloudflare set up
+        id: cf
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TO: ${{ secrets.FEEDBACK_TO }}
+        run: |
+          if [ -n "$TOKEN" ] && [ -n "$TO" ]; then echo "go=1" >> "$GITHUB_OUTPUT"
+          else echo '::notice::No CLOUDFLARE_API_TOKEN or FEEDBACK_TO; the feedback Worker is not deployed'; fi
+      - name: Deploy
+        if: steps.cf.outputs.go
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
+          workingDirectory: feedback
+          command: deploy
+          secrets: FEEDBACK_TO
+        env:
+          FEEDBACK_TO: ${{ secrets.FEEDBACK_TO }}
