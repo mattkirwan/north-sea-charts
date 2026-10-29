@@ -991,7 +991,12 @@ function renderReadout() {
 }
 const zHour = (t) => String(new Date(t).getUTCHours()).padStart(2, '0');
 function runName(m) { return tr('run', { day: weekday(m.run), hh: zHour(m.run) }); }
-const statusEls = [$('#rStatus'), $('#colStatus')];
+const statusEls = [$('#rStatus'), $('#colStatus')], madeEl = $('#rMade');
+// When the run on show was published: its time, and its day too if not today.
+function madeName(m) {
+  const t = m.made || m.run, day = new Date(t).toDateString() === new Date().toDateString() ? '' : `${weekday(t)} `;
+  return tr('made', { when: day + fHour.format(t) });
+}
 function renderStatus() {
   let text = '', kind = '';
   if (!man) [text, kind] = offline ? [tr('offline'), 'offline'] : [tr('loading'), 'loading'];
@@ -999,6 +1004,9 @@ function renderStatus() {
   else if (offline) [text, kind] = [tr('offlineRun', { run: runName(man) }), 'offline'];
   else if (Date.now() - man.run > 12 * H) [text, kind] = [tr('old', { n: Math.round((Date.now() - man.run) / H) }), 'old'];
   else if (updatedNote) [text, kind] = [tr('updated', { hh: zHour(man.run) }), 'updated'];
+  // A quiet "Updated 14:32" while there's nothing else to say.
+  const made = man && !kind ? madeName(man) : '';
+  madeEl.textContent = made; madeEl.hidden = !made;
   const [open, col] = statusEls, key = `${kind}|${text}`;
   if (open.dataset.shown === key) return;
   open.dataset.shown = key;
