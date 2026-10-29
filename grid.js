@@ -126,6 +126,30 @@ const NSSGrid = (() => {
         return pts.flatMap(([lat, lon]) => P.toKm(lon, lat));
       },
       tileOf,
+      // The run's tiles over a box of latitude and longitude (degrees).
+      tilesIn(s, n, w, e) {
+        if (!C) return [];
+        const step = C.tile / C.lattice, out = [];
+        for (let la = Math.floor(s / step) * step; la <= n; la += step) {
+          for (let lo = Math.floor(w / step) * step; lo <= e; lo += step) {
+            const name = `${la}_${lo}`;
+            if (C.tiles.includes(name)) out.push(name);
+          }
+        }
+        return out;
+      },
+      // A tile's cells with sea in them over the run (the grid points a
+      // beacon can go on), each with its name and where it is.
+      async seaCells(name) {
+        const t = await tile(name), [lat0, lon0] = name.split('_').map(Number), n = C.lattice, out = [];
+        for (let row = lat0 * n; row < lat0 * n + C.tile; row++) {
+          for (let col = lon0 * n; col < lon0 * n + C.tile; col++) {
+            const id = `d${n}:${row}:${col}`;
+            if (isSea(t, where(name, id))) out.push({ id, lat: row / n, lon: col / n });
+          }
+        }
+        return out;
+      },
       // A cell's forecast over the run, or null outside the tiles: wave
       // height and periods (m, s), the directions the longest swell and the
       // peak waves come from (degrees), the wind towards east and north

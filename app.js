@@ -73,6 +73,7 @@ function readTokens() {
   C = {
     sea: v('--chart-sea'), land: v('--chart-land'), coast: v('--chart-coast'), grid: v('--chart-grid'),
     iso: v('--chart-isobar'), high: v('--chart-high'), arrow: v('--chart-arrow'), ice: v('--chart-ice'),
+    ink: v('--ui-ink'), control: v('--ui-control'), raised: v('--ui-raised'),
     height: [1, 2, 3, 4, 5, 6, 7].map((i) => v(`--height-${i}`)),
     period: [1, 2, 3, 4, 5].map((i) => v(`--period-${i}`)),
     wind: [1, 2, 3, 4, 5, 6].map((i) => v(`--wind-${i}`))
@@ -100,7 +101,8 @@ const ICONS = {
   'panel-side': '<rect x="3" y="4.5" width="18" height="15"></rect><path d="M15.5 4.5 V19.5"></path>',
   check: '<path d="M5 12.5 L10 17.5 L19 7"></path>',
   play: '<path class="nss-play-icon" d="M8 5.5 L18.5 12 L8 18.5 Z"></path>',
-  pause: '<path d="M8.5 5.5 V18.5 M15.5 5.5 V18.5" stroke-width="2.2"></path>'
+  pause: '<path d="M8.5 5.5 V18.5 M15.5 5.5 V18.5" stroke-width="2.2"></path>',
+  share: '<path d="M12 3.5 V14"></path><path d="M8 7.5 L12 3.5 L16 7.5"></path><path d="M5.5 11 V20 H18.5 V11"></path>'
 };
 const icon = (n, cls = '') => `<svg class="nss-icon${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
 document.querySelectorAll('[data-icon]').forEach((el) => { el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon, el.dataset.iconSize ? ` nss-icon--${el.dataset.iconSize}` : '')); });
@@ -246,13 +248,14 @@ async function refreshManifest() {
     man = m; frames = []; loadIce(m); grid = makeGrid(m);
     idx = nearestIndex(m, Date.now());
     tl.raw = tl.target = idx;
-    buildTicks(); setFrame(idx, true); pump(); hintWait();
+    buildTicks(); setFrame(idx, true); pump(); hintWait(); openAt();
   } else if (m.run > man.run) {
     // Keep the needle on the same valid time: load that frame of the new run first, then swap.
     const t = validAt(man, idx), j = nearestIndex(m, t);
     try {
       const d = await fetchFrame(m, j);
       man = m; frames = []; loadIce(m); grid = makeGrid(m); frames[j] = d; failedAt = {}; idx = j; tl.raw = tl.target = play.pos = j; geomCache.clear();
+      if (beacon) loadBeacon();
       buildTicks(); markTick(j); setFrame(j, true);
       updatedNote = true; setTimeout(fadeUpdated, 3000);
       pump(); hintWait();
@@ -483,11 +486,14 @@ let W = 0, Hs = 0, dpr = 1;
 const SQ = { x0: -2805, x1: 1795, y0: -650, y1: -5250 }, SIDE = 4600;
 const COL_W = 64;
 const panelH = () => $('#panel').offsetHeight;
+// The docked column is in use: docked, and no beacon open (its sheet is always
+// the open panel, along the bottom).
+const sideOn = () => docked && !beacon;
 // The part of the screen the chart has to itself, from x across: above the
 // open panel, or beside the docked column.
-const vis = () => (docked ? { x: hand === 'left' ? COL_W : 0, w: Math.max(100, W - COL_W), h: Hs } : { x: 0, w: W, h: Math.max(100, Hs - panelH()) });
+const vis = () => (sideOn() ? { x: hand === 'left' ? COL_W : 0, w: Math.max(100, W - COL_W), h: Hs } : { x: 0, w: W, h: Math.max(100, Hs - panelH()) });
 // Everything between x0 and x1 and below y is under the panel.
-const panelBox = () => (!docked ? { x0: 0, x1: W, y: Hs - panelH() }
+const panelBox = () => (!sideOn() ? { x0: 0, x1: W, y: Hs - panelH() }
   : { x0: hand === 'left' ? 0 : W - COL_W, x1: hand === 'left' ? COL_W : W, y: $('#column').offsetTop });
 const kMin = () => { const v = vis(); return Math.min(v.w, v.h) / SIDE; }, kMax = () => W / MAX_KM_ACROSS;
 let view = store.get('nss.view', null);
@@ -547,7 +553,7 @@ let gesture = null, lastTap = null, zoomAnim = 0, onTap = null;
 cv.addEventListener('pointerdown', (e) => {
   cv.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  cancelAnimationFrame(zoomAnim);
+  cancelAnimationFrame(zoomAnim); cancelAnimationFrame(glideAnim);
   gesture = { t: performance.now(), x: e.clientX, y: e.clientY, moved: 0, multi: ptrs.size > 1 };
 });
 cv.addEventListener('pointermove', (e) => {
@@ -582,7 +588,7 @@ const endPtr = (e) => {
 };
 cv.addEventListener('pointerup', endPtr);
 cv.addEventListener('pointercancel', endPtr);
-cv.addEventListener('wheel', (e) => { e.preventDefault(); firstInteraction('zoom'); emit('map.zoom'); zoomAbout(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.002)); clampView(); requestDraw(); saveView(); }, { passive: false });
+cv.addEventListener('wheel', (e) => { e.preventDefault(); cancelAnimationFrame(glideAnim); firstInteraction('zoom'); emit('map.zoom'); zoomAbout(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.002)); clampView(); requestDraw(); saveView(); }, { passive: false });
 function animateZoom(sx, sy, f) {
   const start = performance.now(), dur = reduced.matches ? 0 : 260;
   let done = 1;
@@ -672,7 +678,7 @@ function draw() {
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(baseLayer.canvas, 0, 0);
   }
-  if (fi < 0) return;
+  if (fi < 0) { screen(); drawCrosses(sx, sy, pb); placeBeacon(); return; }
   if (band === 'wind') drawWind(fi, sx, sy, screen);
   // Isobars, centres and their figures on the Pressure band only.
   const g = band === 'pressure' ? pressureGeom(fi) : { centres: [], labelled: [] };
@@ -683,8 +689,10 @@ function draw() {
   ctx.globalAlpha = 0.85; ctx.lineWidth = 1.6 / k; ctx.setLineDash([0.1 / k, 3.5 / k]); ctx.stroke(g.highs);
   ctx.globalAlpha = 1; ctx.setLineDash([]);
   }
-  // Figures: centres first, then every third isobar, then swell band edges.
+  // The grid points a beacon can go on, over the weather, under the figures.
   screen();
+  drawCrosses(sx, sy, pb);
+  // Figures: centres first, then every third isobar, then swell band edges.
   const boxes = [], free = (bx, by, bw, bh) => {
     if (bx < 2 || by < 2 || bx + bw > W - 2 || by + bh > Hs - 2) return false;
     if (bx + bw > pb.x0 - 4 && bx < pb.x1 + 4 && by + bh > pb.y - 4) return false;
@@ -710,6 +718,7 @@ function draw() {
       }, (t, px, py) => halo(t, px, py, C.iso, cols[i]));
     });
   }
+  placeBeacon();
 }
 // A swell band's edge along the coast runs under the land: no figures there.
 function nearSea(swell, wx, wy) {
@@ -789,7 +798,7 @@ function renderPanel() {
 function setBand(b) {
   band = b; store.set('nss.band', band); renderPanel(); requestDraw(); warm();
   // The open panel grows or shrinks with the key row: settle the map after.
-  if (!docked) setTimeout(easeClamp, reduced.matches ? 0 : 220);
+  if (!sideOn()) setTimeout(easeClamp, reduced.matches ? 0 : 220);
 }
 document.querySelectorAll('.nss-band').forEach((b) => b.addEventListener('click', () => {
   if (band === b.dataset.band) return;
@@ -804,8 +813,7 @@ document.querySelectorAll('[data-swell]').forEach((sw) => sw.addEventListener('c
 // once, behind the menu, and kept for next time.
 function setDocked(d, first) {
   docked = d; store.set('nss.docked', d);
-  panelEl.toggleAttribute('data-away', d); columnEl.toggleAttribute('data-away', !d);
-  applyInert(); placeTrack(); renderHint(); renderSettings();
+  applyPanels(); renderSettings();
   if (!first) { easeClamp(); emit('panel.changed'); }
 }
 function setHand(h, first) {
@@ -814,16 +822,21 @@ function setHand(h, first) {
   renderSettings(); renderHint();
   if (!first) easeClamp();
 }
+// The open panel or the docked column, whichever is in use.
+function applyPanels() {
+  panelEl.toggleAttribute('data-away', sideOn()); columnEl.toggleAttribute('data-away', !sideOn());
+  applyInert(); placeTrack(); renderHint();
+}
 // Only what's showing can be reached: the panel in use, or the menu over it.
 function applyInert() {
-  panelEl.inert = docked || !!sheetOn; columnEl.inert = !docked || !!sheetOn; cv.inert = !!sheetOn;
+  panelEl.inert = sideOn() || !!sheetOn; columnEl.inert = !sideOn() || !!sheetOn; cv.inert = !!sheetOn;
 }
 
 // ---- Menu: a sheet from the bottom, then Settings or About in its place ---------------------
 const scrim = $('#scrim'), sheets = {};
 document.querySelectorAll('[data-sheet]').forEach((s) => { sheets[s.dataset.sheet] = s; });
 let sheetOn = null, sheetT = 0;
-const menuBtn = () => (docked ? columnEl : panelEl).querySelector('[data-menu]');
+const menuBtn = () => (sideOn() ? columnEl : panelEl).querySelector('[data-menu]');
 const focusables = (s) => [...s.querySelectorAll('button, a[href], textarea')].filter((b) => !b.disabled && !b.closest('[hidden]'));
 // Shown or not, sliding there or (switching sheets, or with Reduce Motion) not.
 function reveal(el, on, slide) {
@@ -1072,6 +1085,7 @@ function buildTicks() {
     T.ticks = [...T.track.querySelectorAll('.nss-tick:not(.nss-tick--day):not(.nss-tick--now)')];
     T.el.setAttribute('aria-valuemax', String(n - 1));
   }
+  renderRows();
   placeTrack();
 }
 setInterval(buildTicks, 5 * 60e3);
@@ -1085,6 +1099,7 @@ function shownPos() {
 function placeTrack() {
   const d = (-shownPos() * TICK).toFixed(2);
   for (const T of TL) T.track.style.transform = T.axis === 'x' ? `translateX(${d}px)` : `translateY(${d}px)`;
+  placeRows();
 }
 // Build the band's frames either side of the needle while nothing else is
 // happening, so scanning finds them ready. Not while the timeline moves: each
@@ -1112,10 +1127,10 @@ function setFrame(i, force) {
   const pc = `${maxPos() ? (100 * i / maxPos()).toFixed(2) : 0}%`;
   for (const T of TL) {
     T.el.setAttribute('aria-valuenow', String(i));
-    T.el.setAttribute('aria-valuetext', `${fLong.format(t)}, ${fHour.format(t)}`);
+    T.el.setAttribute('aria-valuetext', `${fLong.format(t)}, ${fHour.format(t)}` + (T.axis === 'x' ? beaconSaid(i) : ''));
     T.progress.style.setProperty('--progress', pc);
   }
-  renderReadout(); renderStatus(); requestDraw(); pump(); warm();
+  renderReadout(); renderStatus(); renderBeaconNumbers(); requestDraw(); pump(); warm();
 }
 function moveTo(raw) {
   tl.raw = raw; placeTrack();
@@ -1270,6 +1285,346 @@ for (const b of playBtns) b.addEventListener('click', () => {
   firstInteraction('play'); startPlay();
 });
 
+// ---- Beacon: a forecast point dropped on a sea grid point -----------------------------------
+// Zoomed in far enough, every sea grid point (one of NOAA's cells, from the
+// run's cell tiles: grid.js) carries a small cross. Tap one and a lifeboat
+// beacon drops there, pings three times, and the map glides once to put it
+// above the needle; the open panel becomes its sheet, with the cell's
+// modelled wind and swell drawn on the timeline's own track, so one needle
+// reads everything. One beacon at a time; the link (?at=lat,lon) opens one.
+const CROSS_GAP = 16, CROSS_HIT = 22, BEACON_LIFT = 160;
+// Not settled yet: crosses hide below the zoom where they'd sit closer than
+// CROSS_GAP px, and a beacon panned off its place loses its tie and notch
+// until the next drop (false: they come back when it's back).
+const TIE_STAYS_OUT = true;
+let beacon = null, glideAnim = 0, crossPts = [], rowArrows = [];
+const crossTiles = new Map();
+const markEl = $('[data-beacon-mark]'), tieEl = $('[data-tie]'), rowsTrack = $('[data-rows-track]');
+const copyBtn = $('[data-beacon-copy]'), saidEl = $('[data-beacon-said]'), grip = $('[data-beacon-grip]');
+const vals = Object.fromEntries([...document.querySelectorAll('[data-val]')].map((el) => [el.dataset.val, el]));
+const marks = Object.fromEntries([...document.querySelectorAll('[data-mark]')].map((el) => [el.dataset.mark, el]));
+const ROWS = { windTop: 50, windH: 24, windMax: 35, arrowY: 39, swellTop: 103, swellH: 50, swellMax: 3 };
+
+function crossesShown() {
+  if (!grid || !grid.tilesIn) return false;
+  const lat = grid.kmToLonLat(view.x, view.y)[1];
+  return 111.2 / grid.lattice * Math.cos(lat * Math.PI / 180) * view.k >= CROSS_GAP;
+}
+// The crosses in sight, from the tiles under the screen (each fetched once).
+function drawCrosses(sx, sy, pb) {
+  crossPts = [];
+  if (!crossesShown()) return;
+  let s = 90, n = -90, w = 180, e = -180;
+  for (const fx of [-0.5, 0, 0.5]) for (const fy of [-0.5, 0, 0.5]) {
+    const [lon, lat] = grid.kmToLonLat(view.x + fx * W / view.k, view.y + fy * Hs / view.k);
+    s = Math.min(s, lat); n = Math.max(n, lat); w = Math.min(w, lon); e = Math.max(e, lon);
+  }
+  const path = new Path2D();
+  for (const name of grid.tilesIn(s - 0.5, n + 0.5, w - 0.5, e + 0.5)) {
+    if (!crossTiles.has(name)) {
+      crossTiles.set(name, null);
+      grid.seaCells(name).then((cells) => {
+        crossTiles.set(name, cells.map((c) => { const [x, y] = grid.lonLatToKm(c.lon, c.lat); return { ...c, x, y }; }));
+        requestDraw();
+      }).catch(() => setTimeout(() => crossTiles.delete(name), 30e3));
+      continue;
+    }
+    for (const c of crossTiles.get(name) || []) {
+      const px = sx(c.x), py = sy(c.y);
+      if (px < -4 || px > W + 4 || py < -4 || py > Hs + 4 || (px > pb.x0 && px < pb.x1 && py > pb.y)) continue;
+      crossPts.push({ c, px, py });
+      path.moveTo(px - 4, py); path.lineTo(px + 4, py); path.moveTo(px, py - 4); path.lineTo(px, py + 4);
+    }
+  }
+  ctx.lineWidth = 1.3; ctx.lineCap = 'butt'; ctx.setLineDash([]);
+  ctx.strokeStyle = band === 'pressure' ? 'rgba(255,255,255,0.5)' : C.ink;
+  ctx.stroke(path);
+}
+// A tap: the nearest cross within reach, or nothing.
+onTap = (cx, cy) => {
+  let best = null, bd = CROSS_HIT;
+  for (const p of crossPts) { const d = Math.hypot(p.px - cx, p.py - cy); if (d <= bd) { bd = d; best = p.c; } }
+  if (best) dropBeacon(best);
+};
+
+// Where the beacon sits once recentred: the middle of the screen, clear above the sheet.
+const beaconY = () => Math.max(56, Hs - panelH() - BEACON_LIFT);
+function dropBeacon(c) {
+  const opening = !beacon;
+  beacon = { id: c.id, lat: c.lat, lon: c.lon, x: c.x, y: c.y, s: null, w: null, tieOk: false };
+  if (opening) {
+    if (hintOn) { hintOn = null; hintCard = false; clearTimeout(hintGoT); renderHint(); }
+    panelEl.setAttribute('data-beacon', '');
+    const T = TL.find((t) => t.axis === 'x');
+    T.el.dataset.tLabel = 'beaconTimeline'; T.el.setAttribute('aria-label', tr('beaconTimeline'));
+    applyPanels();
+  }
+  document.documentElement.removeAttribute('data-tied');
+  markEl.hidden = tieEl.hidden = false;
+  markEl.removeAttribute('data-ping'); void markEl.offsetWidth; markEl.setAttribute('data-ping', '');
+  loadBeacon();
+  setFrame(idx, true);
+  recentre();
+}
+// The beacon's forecast, from its cell's tile (again for a new run).
+function loadBeacon() {
+  const b = beacon;
+  b.s = b.w = null; renderRows();
+  if (!grid) return;
+  grid.series(b.id).then((s) => {
+    if (beacon !== b || !s) return;
+    b.s = s; b.w = beaconWind(s);
+    renderRows(); setFrame(idx, true);
+  }).catch(() => {});
+}
+// The wind at the beacon: its own cell's GFS for now. A finer model near the
+// coast would resolve its own cell from the beacon's lat/lon here.
+function beaconWind(s) {
+  return {
+    speed: Float32Array.from(s.u, (u, i) => Math.hypot(u, s.v[i]) * MPH),
+    from: Float32Array.from(s.u, (u, i) => (Math.atan2(-u, -s.v[i]) * 180 / Math.PI + 360) % 360),
+    u: s.u, v: s.v
+  };
+}
+function closeBeacon() {
+  if (!beacon) return;
+  beacon = null;
+  cancelAnimationFrame(glideAnim);
+  markEl.hidden = tieEl.hidden = true; markEl.removeAttribute('data-ping');
+  document.documentElement.removeAttribute('data-tied');
+  panelEl.removeAttribute('data-beacon');
+  const T = TL.find((t) => t.axis === 'x');
+  T.el.dataset.tLabel = 'timeline'; T.el.setAttribute('aria-label', tr('timeline'));
+  rowsTrack.innerHTML = ''; rowArrows = [];
+  applyPanels(); setFrame(idx, true);
+  if (Q.has('at')) {
+    const u = new URL(location.href);
+    u.searchParams.delete('at');
+    try { history.replaceState(history.state, '', u); } catch {}
+  }
+  easeClamp(); menuBtn().focus({ preventScroll: true }); hintWait();
+}
+// The marker over its grid point, and the tie and notch while it's in its place.
+function placeBeacon() {
+  if (!beacon) return;
+  const px = W / 2 + (beacon.x - view.x) * view.k, py = Hs / 2 - (beacon.y - view.y) * view.k, top = Hs - panelH();
+  markEl.style.transform = `translate(${px.toFixed(1)}px, ${py.toFixed(1)}px)`;
+  tieEl.style.transform = `translate(${(px - 0.75).toFixed(1)}px, ${(py + 10).toFixed(1)}px)`;
+  tieEl.style.height = `${Math.max(0, top - py - 10).toFixed(1)}px`;
+  const at = Math.abs(px - W / 2) <= 1.5 && Math.abs(py - beaconY()) <= 1.5;
+  if (!at && TIE_STAYS_OUT) beacon.tieOk = false;
+  document.documentElement.toggleAttribute('data-tied', beacon.tieOk && at);
+}
+// cubic-bezier(0.2, 0.7, 0.2, 1), the glide's easing.
+function glideEase(q) {
+  const B = (a, b, t) => 3 * a * t * (1 - t) ** 2 + 3 * b * t * t * (1 - t) + t ** 3;
+  let lo = 0, hi = 1, t = q;
+  for (let i = 0; i < 24; i++) { t = (lo + hi) / 2; if (B(0.2, 0.2, t) < q) lo = t; else hi = t; }
+  return B(0.7, 1, t);
+}
+// The one time the map moves itself: on a drop, a single glide (a jump with
+// Reduce Motion) of the same view the fingers move; then the tie.
+function recentre() {
+  cancelAnimationFrame(glideAnim);
+  const b = beacon, from = { ...view };
+  view = { x: b.x, y: b.y + (beaconY() - Hs / 2) / view.k, k: view.k };
+  clampView();
+  const to = { ...view };
+  view = from;
+  const done = () => { view = to; saveView(); if (beacon === b) b.tieOk = true; requestDraw(); };
+  if (reduced.matches) { done(); return; }
+  const start = performance.now();
+  const step = (t) => {
+    const q = Math.min(1, (t - start) / 600), e = glideEase(q);
+    view = { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e, k: from.k };
+    requestDraw();
+    if (q < 1) glideAnim = requestAnimationFrame(step); else done();
+  };
+  glideAnim = requestAnimationFrame(step);
+}
+
+// ---- The beacon's rows: wind and swell on the timeline's track ----
+// A colour from a key's steps, blended between them.
+function ramp(cols, lev, v) {
+  if (!(v > lev[0])) return cols[0];
+  if (v >= lev[lev.length - 1]) return cols[cols.length - 1];
+  let i = 0;
+  while (v >= lev[i + 1]) i++;
+  const f = (v - lev[i]) / (lev[i + 1] - lev[i]), hex = (h) => [1, 3, 5].map((k) => parseInt(h.slice(k, k + 2), 16));
+  const a = hex(cols[i]), b = hex(cols[i + 1]);
+  return `rgb(${a.map((x, k) => Math.round(x + (b[k] - x) * f)).join(',')})`;
+}
+const arrowPath = (x, y, dx, dy, half, head) => {
+  const hx = x + dx * half, hy = y + dy * half, c = Math.cos(Math.PI / 6), s = Math.sin(Math.PI / 6);
+  return `M${(x - dx * half).toFixed(1)} ${(y - dy * half).toFixed(1)}L${hx.toFixed(1)} ${hy.toFixed(1)}` +
+    `M${(hx - head * (dx * c - dy * s)).toFixed(1)} ${(hy - head * (dy * c + dx * s)).toFixed(1)}L${hx.toFixed(1)} ${hy.toFixed(1)}` +
+    `L${(hx - head * (dx * c + dy * s)).toFixed(1)} ${(hy - head * (dy * c - dx * s)).toFixed(1)}`;
+};
+function renderRows() {
+  const s = beacon && beacon.s;
+  rowArrows = [];
+  if (!s || !man || s.run !== man.run) { rowsTrack.innerHTML = ''; return; }
+  const n = Math.min(man.steps.length, s.hs.length), w = beacon.w, now = Date.now(), R = ROWS, out = [];
+  const X = (i) => i * TICK, past = (i) => validAt(man, i) < now;
+  const wy = (i) => R.windTop + R.windH - Math.min(w.speed[i], R.windMax) / R.windMax * R.windH;
+  const hy = (i) => R.swellTop + R.swellH - Math.min(s.hs[i], R.swellMax) / R.swellMax * R.swellH;
+  // Midnights, in line with the scale's day ticks.
+  const first = new Date(validAt(man, 0)); first.setHours(24, 0, 0, 0);
+  for (let d = new Date(first); d.getTime() <= validAt(man, n - 1); d.setDate(d.getDate() + 1)) {
+    const x = (fracIndex(d.getTime()) * TICK).toFixed(1);
+    out.push(`<line x1="${x}" y1="0" x2="${x}" y2="153" stroke="${C.ink}" stroke-opacity="0.12"/>`);
+  }
+  // A fill frame by frame, its top meeting the next frame's halfway.
+  const fill = (y, base, col) => {
+    for (let i = 0; i < n; i++) {
+      const y0 = y(i);
+      if (Number.isNaN(y0)) continue;
+      const yl = i && !Number.isNaN(y(i - 1)) ? (y(i - 1) + y0) / 2 : y0, yr = i < n - 1 && !Number.isNaN(y(i + 1)) ? (y(i + 1) + y0) / 2 : y0;
+      out.push(`<path d="M${X(i) - 4} ${base}V${yl.toFixed(1)}L${X(i)} ${y0.toFixed(1)}L${X(i) + 4} ${yr.toFixed(1)}V${base}Z" fill="${col(i)}"/>`);
+    }
+  };
+  const line = (y) => {
+    let d = '', pen = false;
+    for (let i = 0; i < n; i++) {
+      const v = y(i);
+      if (Number.isNaN(v)) { pen = false; continue; }
+      d += `${pen ? 'L' : 'M'}${X(i)} ${v.toFixed(1)}`; pen = true;
+    }
+    return d;
+  };
+  // Wind: speed up the row in the key's colours, a line on top, and arrows
+  // downwind every third frame.
+  fill(wy, R.windTop + R.windH, (i) => ramp(C.wind, KEYS.wind.lev, w.speed[i]));
+  out.push(`<path d="${line(wy)}" fill="none" stroke="${C.control}" stroke-width="1.2" stroke-linejoin="round"/>`);
+  for (let i = 0; i < n; i += 3) {
+    const sp = Math.hypot(w.u[i], w.v[i]);
+    if (!(sp > 0.2)) continue;
+    out.push(`<path data-x="${X(i)}" data-h="7" d="${arrowPath(X(i), R.arrowY, w.u[i] / sp, -w.v[i] / sp, 7, 4.5)}" fill="none" stroke="${C.ink}"` +
+      ` stroke-width="1.7" stroke-linecap="square"${past(i) ? ' opacity="0.35"' : ''}/>`);
+  }
+  // Swell: height up the row, the fill in the period's colours, the line in
+  // the height's over a darker one, and the swell's way every 6 hours.
+  fill(hy, R.swellTop + R.swellH, (i) => ramp(C.period, KEYS.period.lev, s.tp[i]));
+  out.push(`<path d="${line(hy)}" fill="none" stroke="${C.ink}" stroke-opacity="0.5" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"/>`);
+  for (let i = 0; i < n - 1; i++) {
+    if (Number.isNaN(s.hs[i]) || Number.isNaN(s.hs[i + 1])) continue;
+    out.push(`<line x1="${X(i)}" y1="${hy(i).toFixed(1)}" x2="${X(i + 1)}" y2="${hy(i + 1).toFixed(1)}" stroke="${ramp(C.height, KEYS.height.lev, (s.hs[i] + s.hs[i + 1]) / 2)}" stroke-width="3" stroke-linecap="round"/>`);
+  }
+  for (let i = 0; i < n; i++) {
+    if (man.steps[i] % 6 || Number.isNaN(s.dp[i]) || hy(i) > R.swellTop + R.swellH - 14) continue;
+    const g = (s.dp[i] + 180) * Math.PI / 180;
+    out.push(`<path data-x="${X(i)}" data-h="4" d="${arrowPath(X(i), R.swellTop + R.swellH - 6, Math.sin(g), -Math.cos(g), 4, 3)}" fill="none" stroke="#fff"` +
+      ` stroke-opacity="0.9" stroke-width="1.3" stroke-linecap="square"/>`);
+  }
+  // The past, washed out as the scale's past ticks are.
+  const np = Math.min(X(n - 1) + 4, fracIndex(now) * TICK);
+  if (np > -4) {
+    for (const [y, h] of [[R.windTop, R.windH], [R.swellTop, R.swellH]]) out.push(`<rect x="-4" y="${y}" width="${(np + 4).toFixed(1)}" height="${h}" fill="${C.raised}" fill-opacity="0.6"/>`);
+  }
+  rowsTrack.innerHTML = `<svg width="${X(n)}" height="153" aria-hidden="true">${out.join('')}</svg>`;
+  rowArrows = [...rowsTrack.querySelectorAll('[data-x]')].map((el) => ({ el, x: +el.dataset.x, half: +el.dataset.h, off: false }));
+  placeRows();
+}
+// With the scale: the same offset, the arrows by the needle put away, and
+// the needle's marks where it crosses each curve.
+function placeRows() {
+  if (!beacon) return;
+  const pos = shownPos();
+  rowsTrack.style.transform = `translateX(${(-pos * TICK).toFixed(2)}px)`;
+  for (const a of rowArrows) {
+    const off = Math.abs(a.x - pos * TICK) < 10 + a.half;
+    if (off !== a.off) { a.off = off; a.el.style.visibility = off ? 'hidden' : ''; }
+  }
+  const s = beacon.s, R = ROWS;
+  if (!s || s.run !== man.run) { marks.wind.hidden = marks.swell.hidden = true; return; }
+  const n = Math.min(man.steps.length, s.hs.length), p = Math.max(0, Math.min(n - 1, pos)), i = Math.min(n - 2, Math.floor(p)), f = p - i;
+  const at = (a) => a[i] + (a[i + 1] - a[i]) * f;
+  const mark = (el, v, top, h, max) => {
+    el.hidden = Number.isNaN(v);
+    if (!el.hidden) el.style.top = `${(top + h - Math.min(v, max) / max * h - 3).toFixed(1)}px`;
+  };
+  mark(marks.wind, at(beacon.w.speed), R.windTop, R.windH, R.windMax);
+  mark(marks.swell, at(s.hs), R.swellTop, R.swellH, R.swellMax);
+}
+// The readings at a frame, rounded as shown: m to 0.1, s and mph whole.
+const compass = (deg, long) => (long ? tr('compassLong').split(',') : tr('compass').split(' '))[Math.round(deg / 22.5) % 16];
+function reading(i) {
+  const s = beacon && beacon.s;
+  if (!s || s.run !== man.run || i >= s.hs.length) return null;
+  const w = beacon.w, ok = (x) => !Number.isNaN(x);
+  return {
+    speed: ok(w.speed[i]) ? Math.round(w.speed[i]) : null, wfrom: w.from[i],
+    hs: ok(s.hs[i]) ? s.hs[i].toFixed(1) : null, tp: ok(s.tp[i]) ? Math.round(s.tp[i]) : null, tpRaw: s.tp[i], sfrom: s.dp[i]
+  };
+}
+const dirIcon = (from) => `<svg viewBox="0 0 12 12" aria-hidden="true" style="transform: rotate(${Math.round(from + 180)}deg)">` +
+  '<path d="M6 10.5 V1.8 M2.8 5 L6 1.8 L9.2 5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"></path></svg>';
+function renderBeaconNumbers() {
+  if (!beacon) return;
+  const r = reading(idx), put = (k, html) => { if (vals[k].innerHTML !== html) vals[k].innerHTML = html; };
+  const dir = (deg) => (r && !Number.isNaN(deg) ? dirIcon(deg) + compass(deg) : '');
+  put('wind', !r ? '' : r.speed == null ? '–' : `${r.speed}<small> mph</small>`);
+  put('wdir', r && r.speed ? dir(r.wfrom) : '');
+  put('hs', !r ? '' : r.hs == null ? '–' : `${r.hs}<small> m</small>`);
+  put('tp', !r || r.tp == null ? '' : `<i style="background: ${ramp(C.period, KEYS.period.lev, r.tpRaw)}"></i>${r.tp}<small> s</small>`);
+  put('sdir', r ? dir(r.sfrom) : '');
+}
+// The readings for a screen reader, after the day and time.
+function beaconSaid(i) {
+  const r = beacon && reading(i);
+  if (!r) return '';
+  const out = [];
+  if (r.speed != null) out.push(tr('beaconWind', { speed: r.speed, from: compass(r.wfrom, true) }));
+  if (r.hs != null && r.tp != null && !Number.isNaN(r.sfrom)) out.push(tr('beaconSwell', { hs: r.hs, tp: r.tp, from: compass(r.sfrom, true) }));
+  return out.length ? `. ${out.join(' ')}` : '';
+}
+
+// ---- The sheet's title row: Copy link, the grip, Close ----
+copyBtn.addEventListener('click', async () => {
+  if (!beacon) return;
+  const link = `${location.origin}${location.pathname}?at=${beacon.lat.toFixed(2)},${beacon.lon.toFixed(2)}`;
+  try { await navigator.clipboard.writeText(link); } catch { return; }
+  copyBtn.innerHTML = icon('check'); saidEl.textContent = tr('linkCopied');
+  setTimeout(() => { copyBtn.innerHTML = icon('share'); saidEl.textContent = ''; }, 1500);
+});
+$('[data-beacon-close]').addEventListener('click', closeBeacon);
+// The grip: tapped, or pulled down far or fast enough, the beacon goes.
+let gripPull = null;
+grip.addEventListener('pointerdown', (e) => {
+  grip.setPointerCapture(e.pointerId);
+  gripPull = { y: e.clientY, t: performance.now(), dy: 0 };
+  panelEl.style.transition = 'none';
+});
+grip.addEventListener('pointermove', (e) => {
+  if (!gripPull) return;
+  gripPull.dy = Math.max(0, e.clientY - gripPull.y);
+  panelEl.style.transform = gripPull.dy ? `translateY(${gripPull.dy}px)` : '';
+});
+const gripEnd = () => {
+  const p = gripPull;
+  if (!p) return;
+  gripPull = null;
+  panelEl.style.transition = ''; panelEl.style.transform = '';
+  const fast = p.dy > 16 && p.dy / (performance.now() - p.t) > 0.5;
+  if (p.dy > 60 || fast || p.dy < 6) closeBeacon();
+};
+grip.addEventListener('pointerup', gripEnd);
+grip.addEventListener('pointercancel', () => { gripPull = null; panelEl.style.transition = ''; panelEl.style.transform = ''; });
+// By keyboard, the grip is a button: Enter or Space closes it like a tap.
+grip.addEventListener('click', (e) => { if (e.detail === 0) closeBeacon(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && beacon && !sheetOn && !guideOn()) { e.preventDefault(); closeBeacon(); }
+});
+// The link: ?at=<lat>,<lon> drops the beacon on the nearest sea grid point.
+const atQ = (Q.get('at') || '').split(',').map(Number);
+async function openAt() {
+  if (atQ.length !== 2 || atQ.some(Number.isNaN) || !grid) return;
+  const r = await grid.resolve(atQ[0], atQ[1], 'waves', 30).catch(() => null);
+  if (!r || beacon) return;
+  const c = grid.cellOf(r.id), [x, y] = grid.lonLatToKm(c.lon, c.lat);
+  dropBeacon({ id: r.id, ...c, x, y });
+}
+
 // ---- Hints: what the app teaches (hints.js), one controller for all of it --------------------
 // The rules in one place: one hint on screen at a time, never mid-gesture
 // (1.5 s of quiet first), one new one a visit (a chain of tips counts as
@@ -1319,7 +1674,7 @@ function hintMet(h) {
   return h.when === 'first-load' && !!man;
 }
 const hintDue = (h) => hs.tipsOn && !hs.seen[h.id] && (!hintSpent || hintSpent === chainOf(h)) && hintMet(h);
-const hintBusy = () => !!(ptrs.size || drag || tl.moving || sheetOn || guideOn());
+const hintBusy = () => !!(ptrs.size || drag || tl.moving || sheetOn || guideOn() || beacon);
 const floatTag = $('[data-tip-float]'), newTag = $('[data-new-tag]'), card = $('[data-hint-card]');
 const gotIt = card.querySelector('[data-got-it]'), showMe = card.querySelector('[data-show-me]');
 // What Show me does.
@@ -1333,7 +1688,7 @@ function placeBy(box, pt, notch) {
   const r = pt.getBoundingClientRect(), c = columnEl.getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight;
   const cardNotch = notch.classList.contains('nss-card-notch'), half = cardNotch ? 5 : 4;
   let x, y;
-  if (docked && r.left >= c.left && r.right <= c.right) {
+  if (sideOn() && r.left >= c.left && r.right <= c.right) {
     const mid = r.top + r.height / 2, right = hand === 'right';
     x = right ? c.left - 12 - w : c.right + 12;
     y = Math.max(12, Math.min(innerHeight - 12 - h, mid - h / 2));
@@ -1341,7 +1696,7 @@ function placeBy(box, pt, notch) {
   } else {
     const mid = r.left + r.width / 2;
     let lo = 12, hi = innerWidth - 12;
-    if (docked) { if (mid < c.left) hi = c.left - 12; else lo = c.right + 12; }
+    if (sideOn()) { if (mid < c.left) hi = c.left - 12; else lo = c.right + 12; }
     x = Math.max(lo, Math.min(hi - w, mid - w / 2));
     y = r.top - h - 10;
     Object.assign(notch.style, { left: `${mid - x - half}px`, top: '', bottom: '', transform: '' });
@@ -1566,13 +1921,13 @@ function renderGuide() {
 function placeGuide() {
   const st = GUIDE[guideStep], el = st.target !== 'chart' && hintEl(st), r = el && el.getBoundingClientRect();
   const c = columnEl.getBoundingClientRect(), right = hand === 'right';
-  const w = docked ? (right ? c.left : innerWidth - c.right) - 24 : innerWidth - 24, x = docked && !right ? c.right + 12 : 12;
+  const side = sideOn(), w = side ? (right ? c.left : innerWidth - c.right) - 24 : innerWidth - 24, x = side && !right ? c.right + 12 : 12;
   Object.assign(guideCard.style, { left: `${x}px`, right: 'auto', width: `${w}px` });
   const h = guideCard.offsetHeight, below = (cx) => Object.assign(gNotch.style, {
     left: `${Math.max(12, Math.min(w - 22, cx - x - 5))}px`, top: '', bottom: '', transform: '' });
   let y;
   gNotch.hidden = !r;
-  if (!docked) { y = panelEl.getBoundingClientRect().top - 12 - h; if (r) below(r.left + r.width / 2); }
+  if (!side) { y = panelEl.getBoundingClientRect().top - 12 - h; if (r) below(r.left + r.width / 2); }
   else if (r && r.left >= c.left - 1 && r.right <= c.right + 1) {
     const mid = r.top + r.height / 2;
     y = Math.max(12, Math.min(innerHeight - 12 - h, mid - h / 2));
@@ -1625,7 +1980,9 @@ if (Q.has('debug')) {
   // The grid: the cell under the last tap, its own numbers from the run's
   // cell tile at the needle's hour, and the frame's 25 km node nearest it.
   let pick = null;
+  const beaconTap = onTap;
   onTap = (cx, cy) => {
+    beaconTap(cx, cy);
     if (!grid || !man) return;
     const wx = view.x + (cx - W / 2) / view.k, wy = view.y - (cy - Hs / 2) / view.k, [lon, lat] = grid.kmToLonLat(wx, wy);
     const p = pick = { lon, lat, wx, wy, id: grid.cellAt(lon, lat), s: undefined };

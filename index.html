@@ -250,6 +250,58 @@
     .nss-flyout, .spin .nss-icon, .nss-icon.spin { animation: none; }
     .nss-band:active, .nss-switch button:active, .nss-menu-btn:active { transform: none; }
   }
+  /* The beacon: a lifeboat square on the chart at a grid point, pinging three
+     times when dropped, and tied down to its sheet while it sits above it. */
+  .nss-beacon { position: fixed; left: 0; top: 0; z-index: 1; width: 18px; height: 18px; margin: -9px 0 0 -9px; box-sizing: border-box;
+    border: 2px solid rgba(17,18,20,0.45); background: #fff; pointer-events: none; will-change: transform; }
+  .nss-beacon i { position: absolute; inset: 2px; background: var(--lifeboat); }
+  .nss-beacon::after { content: ""; position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; box-sizing: border-box;
+    transform: translate(-50%, -50%); border: 2px solid var(--lifeboat); opacity: 0; }
+  .nss-beacon[data-ping]::after { animation: nss-beacon-ping 2.4s linear 3; }
+  @keyframes nss-beacon-ping { from { width: 14px; height: 14px; opacity: 0.9; } to { width: 40px; height: 40px; opacity: 0; } }
+  .nss-tie { position: fixed; left: 0; top: 0; z-index: 1; width: 1.5px; height: 0; background: var(--lifeboat-deep); opacity: 0;
+    transition: opacity 0.3s; pointer-events: none; }
+  .nss-beacon-notch { position: absolute; left: calc(50% - 6px); top: -7px; width: 0; height: 0; border-left: 6px solid transparent;
+    border-right: 6px solid transparent; border-bottom: 7px solid var(--lifeboat-deep); opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  [data-tied] .nss-tie { opacity: 0.6; }
+  [data-tied] .nss-beacon-notch { opacity: 1; }
+  /* The sheet: the open panel with the key, the bands and the menu button
+     put away, a title row on top and the beacon's rows over the scale. */
+  #panel[data-beacon] { padding-top: 4px; box-shadow: 0 -8px 24px rgba(14,18,20,0.25); }
+  #panel[data-beacon] > .keyslot, #panel[data-beacon] > .nss-bands, #panel[data-beacon] .nss-panel-timerow > .nss-menu-btn { display: none; }
+  #panel:not([data-beacon]) .nss-beacon-head, #panel:not([data-beacon]) .nss-beacon-notch,
+  #panel:not([data-beacon]) .nss-rows, #panel:not([data-beacon]) .nss-needle--box { display: none; }
+  .nss-beacon-head { display: flex; align-items: center; gap: 6px; }
+  .nss-beacon-title { flex: 1; min-width: 0; height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; }
+  .nss-beacon-title h2 { margin: 0; font: 600 13px/1 var(--font-mono); letter-spacing: 1.2px; text-transform: uppercase; color: var(--ui-ink); }
+  .nss-beacon-grip { position: relative; width: 64px; height: 10px; padding: 0; border: 0; background: transparent; display: flex;
+    align-items: center; justify-content: center; cursor: grab; touch-action: none; }
+  .nss-beacon-grip::after { content: ""; position: absolute; inset: -10px -30px; }
+  .nss-beacon-grip span { display: block; width: 36px; height: 4px; border-radius: var(--radius-xs); background: var(--ui-track); }
+  .nss-beacon-grip:focus-visible { outline: 2px solid var(--lifeboat-deep); outline-offset: 2px; }
+  .nss-rows { position: relative; height: 153px; border: 1px solid var(--ui-track); border-radius: var(--radius-card) var(--radius-card) 0 0;
+    background: var(--ui-raised); overflow: hidden; font-family: var(--font-mono); color: var(--ui-ink); }
+  .nss-rows-track { position: absolute; left: 50%; top: 0; height: 153px; will-change: transform; }
+  .nss-rows-track svg { position: absolute; left: 0; top: 0; overflow: visible; }
+  .nss-rows-rule { position: absolute; left: 0; right: 0; top: 74px; height: 1px; background: var(--ui-track); }
+  #panel[data-beacon] .nss-scale { border-top: 0; border-radius: 0 0 var(--radius-card) var(--radius-card); }
+  #panel[data-beacon] .nss-scale > .nss-needle { display: none; }
+  #panel[data-beacon] .nss-timebox > .nss-play { height: 43px; border-radius: 0 0 0 var(--radius-inner); }
+  .nss-needle--box { top: 5px; }
+  .nss-row-label { position: absolute; left: 8px; font-size: 9px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase; color: var(--ui-ink-muted); }
+  .nss-val { position: absolute; height: 28px; display: flex; align-items: center; gap: 5px; white-space: nowrap;
+    font-size: 18px; line-height: 1; font-weight: 500; letter-spacing: -0.3px; font-variant-numeric: tabular-nums; }
+  .nss-val small { font-size: 9px; letter-spacing: 0.4px; color: var(--ui-ink-muted); }
+  .nss-val--l { right: calc(50% + 10px); }
+  .nss-val--r { left: calc(50% + 10px); }
+  .nss-val--r i { flex: 0 0 auto; width: 8px; height: 5px; }
+  .nss-val--dir { right: 8px; gap: 4px; font-size: 16px; letter-spacing: 0; }
+  .nss-val--dir svg { flex: 0 0 auto; width: 16px; height: 16px; }
+  .nss-row-mark { position: absolute; left: calc(50% - 3px); top: 0; width: 6px; height: 6px; background: var(--lifeboat); z-index: 3; }
+  @media (prefers-reduced-motion: reduce) {
+    .nss-beacon[data-ping]::after { animation: none; }
+    .nss-tie, .nss-beacon-notch { transition: none; }
+  }
   /* Nothing animates into its first place. */
   .still .nss-panel, .still .nss-column, .still .keyslot { transition: none; }
   .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -257,10 +309,25 @@
 </head>
 <body>
 <canvas id="chart" data-hint-target="chart" aria-label="Weather chart of the North Sea and the seas round it. Drag to move the map, pinch to zoom, double-tap to zoom in." data-t-label="chartLabel" role="img"></canvas>
+<!-- The beacon on the chart, and its tie down to the sheet (app.js places them). -->
+<div class="nss-beacon" data-beacon-mark hidden aria-hidden="true"><i></i></div>
+<span class="nss-tie" data-tie hidden aria-hidden="true"></span>
 
 <!-- Open: full width along the bottom. Each word on the page carries its key
      in i18n.js: data-t for its text, data-t-label for its aria-label. -->
 <div class="nss-panel" id="panel">
+  <!-- A beacon open: the panel is its sheet (the title row, the readout and
+       the timeline with the beacon's rows), notched up at the beacon. -->
+  <span class="nss-beacon-notch" aria-hidden="true"></span>
+  <div class="nss-beacon-head">
+    <button type="button" class="nss-menu-btn" data-beacon-copy aria-label="Copy link to this beacon" data-t-label="copyBeacon" data-icon="share"></button>
+    <div class="nss-beacon-title">
+      <button type="button" class="nss-beacon-grip" data-beacon-grip aria-label="Collapse beacon" data-t-label="collapseBeacon"><span></span></button>
+      <h2 data-t="beacon">Beacon</h2>
+    </div>
+    <button type="button" class="nss-menu-btn" data-beacon-close aria-label="Close beacon" data-t-label="closeBeacon" data-icon="close"></button>
+    <span class="vh" data-beacon-said aria-live="polite"></span>
+  </div>
   <div class="keyslot" id="keyslot" data-hint-target="key"><div>
     <div class="nss-keyrow">
       <div class="nss-key" data-key></div>
@@ -288,6 +355,21 @@
       <div class="nss-timeline" data-axis="x" role="slider" tabindex="0" aria-label="Forecast timeline" data-t-label="timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
         <span class="nss-timeline-arrow"></span>
         <span class="nss-tip" data-tip hidden></span>
+        <!-- The beacon's wind and swell, on the scale's own track (app.js). -->
+        <div class="nss-rows" aria-hidden="true">
+          <div class="nss-rows-track" data-rows-track></div>
+          <span class="nss-rows-rule"></span>
+          <span class="nss-row-label" style="top: 9px" data-t="wind">Wind</span>
+          <span class="nss-row-label" style="top: 84px" data-t="swell">Swell</span>
+          <span class="nss-val nss-val--l" style="top: 0" data-val="wind"></span>
+          <span class="nss-val nss-val--dir" style="top: 0" data-val="wdir"></span>
+          <span class="nss-val nss-val--l" style="top: 75px" data-val="hs"></span>
+          <span class="nss-val nss-val--r" style="top: 75px" data-val="tp"></span>
+          <span class="nss-val nss-val--dir" style="top: 75px" data-val="sdir"></span>
+          <span class="nss-row-mark" data-mark="wind" hidden></span>
+          <span class="nss-row-mark" data-mark="swell" hidden></span>
+        </div>
+        <span class="nss-needle nss-needle--box"></span>
         <div class="nss-scale">
           <div class="nss-track" data-track></div>
           <span class="nss-needle"></span>
