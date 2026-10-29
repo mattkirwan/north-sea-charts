@@ -53,9 +53,52 @@
 .nss-day--past { opacity: 0.35; }
 .nss-end { position: absolute; top: 0; bottom: 0; right: 0; background: repeating-linear-gradient(135deg, var(--ui-track) 0 1px, transparent 1px 6px); }
 .nss-needle { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--lifeboat-deep); z-index: 2; }
-.nss-tip { position: absolute; left: calc(50% + 12px); top: 4px; height: 22px; display: flex; align-items: center; gap: 6px; padding: 0 var(--space-2); border-radius: var(--radius-card); background: var(--ui-control); color: var(--ui-control-ink); font-family: var(--font-mono); font-size: 11px; line-height: 1; font-weight: 600; white-space: nowrap; z-index: 3; transition: opacity 0.3s; }
+/* Tip: first-use tag beside a control. Lifeboat-deep so it stands off the greys; slides in, then rings three times and settles. */
+.nss-tip { position: absolute; left: calc(50% + 12px); top: 4px; height: 22px; display: flex; align-items: center; gap: 6px; padding: 0 var(--space-2); border-radius: var(--radius-card); background: var(--lifeboat-deep); color: var(--lifeboat-ink); box-shadow: 0 2px 10px rgba(14,18,20,0.35); font-family: var(--font-mono); font-size: 11px; line-height: 1; font-weight: 600; white-space: nowrap; z-index: 3; transition: opacity 0.3s; animation: nss-tip-in 0.35s ease-out both; }
+.nss-tip::after, .nss-new-tag::after { content: ""; position: absolute; inset: 0; border: 2px solid var(--lifeboat); border-radius: var(--radius-card); pointer-events: none; animation: nss-tip-ping 1.6s ease-out 0.35s 3 both; }
 .nss-tip[data-fading] { opacity: 0.35; }
-@media (prefers-reduced-motion: reduce) { .nss-tip { transition: none; } }
+.nss-tip-notch { position: absolute; width: 8px; height: 8px; background: var(--lifeboat-deep); transform: rotate(45deg); }
+@keyframes nss-tip-in { 0% { opacity: 0; transform: translateY(4px) scale(0.94); } 100% { opacity: 1; transform: none; } }
+@keyframes nss-tip-ping { 0% { opacity: 0.9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.25, 1.7); } }
+
+/* New feature: a light on the control, a tag that opens a card */
+.nss-light { position: absolute; top: 5px; right: 5px; width: 5px; height: 5px; background: var(--lifeboat); pointer-events: none; }
+.nss-light--ping::after { content: ""; position: absolute; inset: -1.5px; border: 1.5px solid var(--lifeboat); animation: nss-ping 2.4s ease-out 4; }
+@keyframes nss-ping { 0% { transform: scale(1); opacity: 0.9; } 60% { transform: scale(3.2); opacity: 0; } 100% { transform: scale(3.2); opacity: 0; } }
+.nss-new-tag { position: absolute; height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 10px; border: 0; border-radius: var(--radius-card); background: var(--lifeboat-deep); color: var(--lifeboat-ink); box-shadow: 0 2px 10px rgba(14,18,20,0.35); font-family: var(--font-mono); font-size: 11px; line-height: 1; font-weight: 600; white-space: nowrap; cursor: pointer; z-index: 3; animation: nss-tip-in 0.35s ease-out both; }
+.nss-new-tag-light { width: 5px; height: 5px; background: var(--lifeboat-ink); }
+.nss-hint-card { position: absolute; width: 286px; box-sizing: border-box; padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); background: var(--ui-surface); color: var(--ui-ink); border: 1px solid var(--ui-line); border-radius: var(--radius-card); box-shadow: 0 10px 30px rgba(14,18,20,0.35); z-index: 7; font-family: var(--font-mono); }
+.nss-hint-kicker { display: flex; align-items: center; gap: var(--space-2); font-size: 10px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase; color: var(--ui-ink-muted); }
+.nss-hint-kicker::before { content: ""; width: 5px; height: 5px; background: var(--lifeboat); }
+.nss-hint-title, .nss-guide-title { font-size: 13px; line-height: 1; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; }
+.nss-hint-body, .nss-guide-body { font-size: 12px; line-height: 1.45; font-weight: 400; }
+.nss-hint-actions { display: flex; gap: 6px; padding-top: 2px; }
+.nss-card-notch { position: absolute; bottom: -6px; width: 10px; height: 10px; background: var(--ui-surface); border-right: 1px solid var(--ui-line); border-bottom: 1px solid var(--ui-line); transform: rotate(45deg); }
+
+/* Card buttons: 44 px, ghost and primary */
+.nss-btn { height: 44px; flex: 0 0 auto; padding: 0 16px; border: 1px solid var(--ui-track); border-radius: var(--radius-card); background: var(--ui-raised); color: var(--ui-ink); font-family: var(--font-mono); font-size: 11px; line-height: 1; font-weight: 500; letter-spacing: 0.8px; text-transform: uppercase; cursor: pointer; }
+.nss-btn--primary { flex: 1; border: 0; background: var(--ui-control); color: var(--ui-control-ink); }
+
+/* Guide: scrim, the lit control, the step card above the panel */
+.nss-guide-scrim { position: absolute; inset: 0; z-index: 5; background: rgba(14,18,20,0.62); }
+.nss-spot { position: relative; z-index: 6; background: var(--ui-surface); border-radius: var(--radius-card); box-shadow: 0 0 0 4px var(--ui-surface), 0 0 0 5.5px var(--lifeboat); }
+.nss-guide-card { position: absolute; left: var(--space-3); right: var(--space-3); z-index: 7; box-sizing: border-box; padding: 4px 4px 12px 12px; display: flex; flex-direction: column; gap: var(--space-2); background: var(--ui-surface); color: var(--ui-ink); border: 1px solid var(--ui-line); border-radius: var(--radius-card); box-shadow: 0 10px 30px rgba(14,18,20,0.35); font-family: var(--font-mono); }
+.nss-guide-head { display: flex; align-items: center; gap: 10px; }
+.nss-guide-ticks { display: flex; align-items: flex-end; gap: 5px; height: 14px; }
+.nss-guide-ticks > span { width: 2px; height: 10px; background: var(--ui-track); }
+.nss-guide-ticks > span[data-state="done"] { background: var(--ui-ink-muted); }
+.nss-guide-ticks > span[data-state="current"] { height: 14px; background: var(--lifeboat-deep); }
+.nss-guide-count { flex: 1; font-size: 10px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; color: var(--ui-ink-muted); }
+.nss-guide-close { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--ui-ink); cursor: pointer; }
+.nss-guide-content { display: flex; flex-direction: column; gap: var(--space-2); padding-right: var(--space-2); }
+.nss-tryit { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--ui-track); border-radius: var(--radius-card); background: var(--ui-raised); font-size: 11px; line-height: 1.35; }
+.nss-tryit-tag { flex: 0 0 auto; padding: 4px 5px; border-radius: var(--radius-xs); background: var(--lifeboat-deep); color: var(--lifeboat-ink); font-size: 9px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase; }
+.nss-tryit[data-done] .nss-tryit-tag { background: var(--ui-control); color: var(--ui-control-ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .nss-tip, .nss-new-tag { transition: none; animation: none; }
+  .nss-tip::after, .nss-new-tag::after, .nss-light--ping::after { animation: none; opacity: 0; }
+}
 
 /* Menu button: bottom right in both panel states, the same size and spot. (.nss-dock-btn is the retired name, kept as an alias.) */
 .nss-menu-btn, .nss-dock-btn { flex: 0 0 48px; width: 48px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--ui-track); border-radius: var(--radius-card); background: var(--ui-raised); color: var(--ui-ink); cursor: pointer; }

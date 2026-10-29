@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en-GB" data-theme="light" class="still">
+<html lang="en-GB" data-theme="light" class="still" data-release="dev">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
@@ -177,7 +177,6 @@
   .nss-end { left: auto; right: auto; width: 2000px; }
   .nss-vtrack { position: absolute; top: 50%; left: 0; right: 0; height: 0; will-change: transform; }
   .nss-vtimeline .nss-end { left: 0; right: 0; bottom: auto; width: auto; height: 2000px; }
-  .nss-tip { pointer-events: none; }
   .nss-tip .nss-icon { width: 16px; height: 16px; }
   .nss-vtimeline .nss-tip { left: auto; right: calc(100% + 14px); top: calc(50% - 11px); }
 
@@ -231,7 +230,7 @@
     <span class="nss-readout-status" id="rStatus" hidden></span>
   </div>
   <div class="nss-panel-timerow">
-    <div class="nss-timeline" data-axis="x" role="slider" tabindex="0" aria-label="Forecast timeline" data-t-label="timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+    <div class="nss-timeline" data-axis="x" data-hint-target="timeline" role="slider" tabindex="0" aria-label="Forecast timeline" data-t-label="timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
       <span class="nss-timeline-arrow"></span>
       <div class="nss-scale">
         <div class="nss-track" data-track></div>
@@ -249,7 +248,7 @@
     <b data-day>–</b><strong data-time>–</strong><small data-lead></small>
     <span class="col-status" id="colStatus" hidden></span>
   </div>
-  <div class="nss-vtimeline" data-axis="y" role="slider" tabindex="0" aria-orientation="vertical" aria-label="Forecast timeline" data-t-label="timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+  <div class="nss-vtimeline" data-axis="y" data-hint-target="timeline" role="slider" tabindex="0" aria-orientation="vertical" aria-label="Forecast timeline" data-t-label="timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
     <div class="nss-vtimeline-track">
       <div class="nss-vtrack" data-track></div>
       <span class="nss-needle"></span>
@@ -337,8 +336,10 @@
   </dl>
 </div>
 <!-- ?v= is the deploy's commit (deploy.yml), so a new page never runs
-     the last deploy's scripts kept by the browser. -->
+     the last deploy's scripts kept by the browser. data-release, above, is
+     the deploy's time, for hints.js. -->
 <script src="i18n.js?v=dev"></script>
+<script src="hints.js?v=dev"></script>
 <script src="app.js?v=dev"></script>
 </body>
 </html>

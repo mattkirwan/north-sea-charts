@@ -68,7 +68,13 @@ jobs:
           # ?v=dev), so a phone never pairs this page with the last deploy's.
           sed -i "s/?v=dev\"/?v=$(git rev-parse --short=12 HEAD)\"/g" "$RUNNER_TEMP/site/index.html"
           grep -q '?v=dev"' "$RUNNER_TEMP/site/index.html" && { echo '::error::index.html still has ?v=dev'; exit 1; } || true
+          # And by its time (data-release="dev"), the same as a release's tag:
+          # the hints (hints.js) tell people who came before a feature about it.
+          stamp=$(date -u +%Y-%m-%d-%H%M)
+          sed -i "s/data-release=\"dev\"/data-release=\"$stamp\"/" "$RUNNER_TEMP/site/index.html"
+          grep -q "data-release=\"$stamp\"" "$RUNNER_TEMP/site/index.html" || { echo '::error::index.html has no data-release'; exit 1; }
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "stamp=$stamp" >> "$GITHUB_OUTPUT"
       - name: Make the project the first time
         if: steps.cf.outputs.go
         continue-on-error: true
@@ -90,7 +96,8 @@ jobs:
         if: steps.cf.outputs.go && inputs.branch == 'production'
         env:
           REF: ${{ inputs.ref }}
+          STAMP: ${{ steps.site.outputs.stamp }}
         run: |
-          tag="release-$(date -u +%Y-%m-%d-%H%M)"
+          tag="release-$STAMP"
           git tag "$tag" && git push -q origin "$tag"
           echo "Released $(git log -1 --format='%h %s') ($REF) as $tag" | tee -a "$GITHUB_STEP_SUMMARY"
