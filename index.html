@@ -88,9 +88,11 @@
   #chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
   /* Under the panel, match it: any strip the phone keeps below the page reads as panel. */
   html { background: var(--ui-surface); }
-  /* Less space under the panels than the full home-indicator inset (the menu
-     button keeps the same spot in both, and the menu's close button too). */
-  .nss-panel, .nss-column, .nss-sheet { z-index: 2; padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px) * 0.35); }
+  /* Keep the timeline out of the phone's bottom swipe zone: the full
+     home-indicator inset (34 px on iPhone), and never less than Android's
+     24 px gesture bar, on top of the usual 8 px. The menu button keeps the
+     same spot in both, and the menu's close button too. */
+  .nss-panel, .nss-column, .nss-sheet { z-index: 2; padding-bottom: calc(var(--space-2) + max(env(safe-area-inset-bottom, 0px), 24px)); }
   /* Fixed to the screen edge, with the page behind in the panel colour: iOS 26
      carries the colour of what is fixed at the bottom edge into any space it
      keeps below the page (a gap on the home screen, behind Safari's bar). */
