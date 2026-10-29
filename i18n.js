@@ -36,7 +36,13 @@ const LANGS = {
     tipPeriod: 'Tap for wave period',
     tips: 'Tips', tipsSub: 'Short hints beside the controls', tipsOn: 'On', tipsOff: 'Off',
     tipsAgain: 'Show tips again', tipsAgainSub: 'From the start, one at a time', tipsAgainDone: "They'll show again",
-    newTag: 'New · {name}', gotIt: 'Got it', showMe: 'Show me', somethingNew: ', something new'
+    newTag: 'New · {name}', gotIt: 'Got it', showMe: 'Show me', somethingNew: ', something new',
+    guide: 'Guide', guideSub: 'A minute round the chart, one control at a time', guideSteps: '4 STEPS',
+    guideLabel: 'Guide, step {n} of {total}', closeGuide: 'Close guide', next: 'Next', backStep: 'Back', done: 'Done', tryIt: 'Try it',
+    g1Title: 'The chart', g1Body: 'Drag to move, pinch to zoom, double-tap to centre and zoom.', g1Try: 'Pinch in on your own stretch of coast',
+    g2Title: 'Pressure, wind, swell', g2Body: 'Low and high pressures, wind strength and direction, swell height and period.',
+    g3Title: 'The key', g3Body: 'Each colour on the sea is a value on the key.', g3Try: 'Switch to period',
+    g4Title: 'The timeline', g4Body: 'The needle stays put and the days slide under it, sixteen days ahead. The orange tick is now.', g4Try: 'Slide it, then double-tap to come back to now'
   } },
   nb: { name: 'Norsk', places: 'Norge', tag: 'nb-NO', t: {
     chartLabel: 'Værkart over Nordsjøen og havene rundt. Dra for å flytte kartet, knip for å zoome, dobbelttrykk for å zoome inn.',
@@ -65,7 +71,13 @@ const LANGS = {
     tipPeriod: 'Trykk for bølgeperiode',
     tips: 'Tips', tipsSub: 'Korte hint ved kontrollene', tipsOn: 'På', tipsOff: 'Av',
     tipsAgain: 'Vis tipsene igjen', tipsAgainSub: 'Fra begynnelsen, ett om gangen', tipsAgainDone: 'De vises igjen',
-    newTag: 'Nytt · {name}', gotIt: 'Skjønner', showMe: 'Vis meg', somethingNew: ', noe nytt'
+    newTag: 'Nytt · {name}', gotIt: 'Skjønner', showMe: 'Vis meg', somethingNew: ', noe nytt',
+    guide: 'Omvisning', guideSub: 'Et minutt rundt kartet, én kontroll om gangen', guideSteps: '4 TRINN',
+    guideLabel: 'Omvisning, trinn {n} av {total}', closeGuide: 'Lukk omvisningen', next: 'Neste', backStep: 'Tilbake', done: 'Ferdig', tryIt: 'Prøv',
+    g1Title: 'Kartet', g1Body: 'Dra for å flytte, knip for å zoome, dobbelttrykk for å sentrere og zoome.', g1Try: 'Knip inn på din egen kyststrekning',
+    g2Title: 'Lufttrykk, vind, dønninger', g2Body: 'Lav- og høytrykk, vindstyrke og -retning, dønningshøyde og -periode.',
+    g3Title: 'Fargeskalaen', g3Body: 'Hver farge på havet er en verdi på fargeskalaen.', g3Try: 'Bytt til periode',
+    g4Title: 'Tidslinjen', g4Body: 'Nålen står stille og dagene glir under den, seksten dager fram. Det oransje merket er nå.', g4Try: 'Dra i den, og dobbelttrykk for å komme tilbake til nå'
   } },
   da: { name: 'Dansk', places: 'Danmark', tag: 'da-DK', t: {
     chartLabel: 'Vejrkort over Nordsøen og havene omkring den. Træk for at flytte kortet, knib for at zoome, dobbelttryk for at zoome ind.',
@@ -94,7 +106,13 @@ const LANGS = {
     tipPeriod: 'Tryk for bølgeperiode',
     tips: 'Tips', tipsSub: 'Korte hints ved knapperne', tipsOn: 'Til', tipsOff: 'Fra',
     tipsAgain: 'Vis tips igen', tipsAgainSub: 'Fra begyndelsen, ét ad gangen', tipsAgainDone: 'De vises igen',
-    newTag: 'Nyt · {name}', gotIt: 'Forstået', showMe: 'Vis mig', somethingNew: ', noget nyt'
+    newTag: 'Nyt · {name}', gotIt: 'Forstået', showMe: 'Vis mig', somethingNew: ', noget nyt',
+    guide: 'Rundvisning', guideSub: 'Et minut rundt om kortet, én knap ad gangen', guideSteps: '4 TRIN',
+    guideLabel: 'Rundvisning, trin {n} af {total}', closeGuide: 'Luk rundvisningen', next: 'Næste', backStep: 'Tilbage', done: 'Færdig', tryIt: 'Prøv',
+    g1Title: 'Kortet', g1Body: 'Træk for at flytte, knib for at zoome, dobbelttryk for at centrere og zoome.', g1Try: 'Knib ind på din egen kyststrækning',
+    g2Title: 'Lufttryk, vind, dønning', g2Body: 'Lav- og højtryk, vindstyrke og -retning, dønningshøjde og -periode.',
+    g3Title: 'Farveskalaen', g3Body: 'Hver farve på havet er en værdi på farveskalaen.', g3Try: 'Skift til periode',
+    g4Title: 'Tidslinjen', g4Body: 'Nålen står stille, og dagene glider under den, seksten dage frem. Det orange mærke er nu.', g4Try: 'Træk i den, og dobbelttryk for at komme tilbage til nu'
   } },
   de: { name: 'Deutsch', places: 'Deutschland', tag: 'de-DE', t: {
     chartLabel: 'Wetterkarte der Nordsee und der Meere ringsum. Ziehen verschiebt die Karte, mit zwei Fingern zoomen, doppelt tippen vergrößert.',
@@ -123,7 +141,13 @@ const LANGS = {
     tipPeriod: 'Für Wellenperiode tippen',
     tips: 'Tipps', tipsSub: 'Kurze Hinweise neben den Bedienelementen', tipsOn: 'An', tipsOff: 'Aus',
     tipsAgain: 'Tipps erneut zeigen', tipsAgainSub: 'Von vorn, einer nach dem anderen', tipsAgainDone: 'Sie erscheinen wieder',
-    newTag: 'Neu · {name}', gotIt: 'Verstanden', showMe: 'Zeig mir', somethingNew: ', etwas Neues'
+    newTag: 'Neu · {name}', gotIt: 'Verstanden', showMe: 'Zeig mir', somethingNew: ', etwas Neues',
+    guide: 'Rundgang', guideSub: 'Eine Minute rund um die Karte, ein Element nach dem anderen', guideSteps: '4 SCHRITTE',
+    guideLabel: 'Rundgang, Schritt {n} von {total}', closeGuide: 'Rundgang schließen', next: 'Weiter', backStep: 'Zurück', done: 'Fertig', tryIt: 'Probier’s',
+    g1Title: 'Die Karte', g1Body: 'Ziehen verschiebt, zwei Finger zoomen, doppelt tippen zentriert und vergrößert.', g1Try: 'Zoome auf deinen eigenen Küstenabschnitt',
+    g2Title: 'Luftdruck, Wind, Dünung', g2Body: 'Tief- und Hochdruck, Windstärke und -richtung, Dünungshöhe und -periode.',
+    g3Title: 'Die Farbskala', g3Body: 'Jede Farbe auf dem Meer ist ein Wert auf der Farbskala.', g3Try: 'Wechsle zur Periode',
+    g4Title: 'Die Zeitleiste', g4Body: 'Die Nadel bleibt stehen, die Tage gleiten darunter, sechzehn Tage voraus. Die orange Marke ist jetzt.', g4Try: 'Schieb sie, dann doppelt tippen, um zu jetzt zurückzukehren'
   } },
   nl: { name: 'Nederlands', places: 'Nederland, België', tag: 'nl-NL', t: {
     chartLabel: 'Weerkaart van de Noordzee en de zeeën eromheen. Sleep om de kaart te verschuiven, knijp om te zoomen, tik twee keer om in te zoomen.',
@@ -152,7 +176,13 @@ const LANGS = {
     tipPeriod: 'Tik voor golfperiode',
     tips: 'Tips', tipsSub: 'Korte hints bij de knoppen', tipsOn: 'Aan', tipsOff: 'Uit',
     tipsAgain: 'Tips opnieuw tonen', tipsAgainSub: 'Van voren af aan, één voor één', tipsAgainDone: 'Ze verschijnen weer',
-    newTag: 'Nieuw · {name}', gotIt: 'Begrepen', showMe: 'Laat zien', somethingNew: ', iets nieuws'
+    newTag: 'Nieuw · {name}', gotIt: 'Begrepen', showMe: 'Laat zien', somethingNew: ', iets nieuws',
+    guide: 'Rondleiding', guideSub: 'Een minuut rond de kaart, één knop tegelijk', guideSteps: '4 STAPPEN',
+    guideLabel: 'Rondleiding, stap {n} van {total}', closeGuide: 'Rondleiding sluiten', next: 'Volgende', backStep: 'Terug', done: 'Klaar', tryIt: 'Probeer',
+    g1Title: 'De kaart', g1Body: 'Sleep om te verschuiven, knijp om te zoomen, tik twee keer om te centreren en in te zoomen.', g1Try: 'Zoom in op je eigen stuk kust',
+    g2Title: 'Luchtdruk, wind, deining', g2Body: 'Lage- en hogedrukgebieden, windkracht en -richting, deininghoogte en -periode.',
+    g3Title: 'De kleurschaal', g3Body: 'Elke kleur op zee is een waarde op de kleurschaal.', g3Try: 'Wissel naar periode',
+    g4Title: 'De tijdlijn', g4Body: 'De naald staat stil en de dagen schuiven eronder door, zestien dagen vooruit. Het oranje streepje is nu.', g4Try: 'Schuif hem, en tik twee keer om terug te gaan naar nu'
   } },
   fr: { name: 'Français', places: 'France, Belgique', tag: 'fr-FR', t: {
     chartLabel: 'Carte météo de la mer du Nord et des mers alentour. Faites glisser pour déplacer la carte, pincez pour zoomer, touchez deux fois pour agrandir.',
@@ -181,6 +211,12 @@ const LANGS = {
     tipPeriod: 'Touchez pour la période',
     tips: 'Astuces', tipsSub: 'De courtes aides près des commandes', tipsOn: 'Oui', tipsOff: 'Non',
     tipsAgain: 'Revoir les astuces', tipsAgainSub: 'Depuis le début, une à la fois', tipsAgainDone: 'Elles reviendront',
-    newTag: 'Nouveau · {name}', gotIt: 'Compris', showMe: 'Montrez-moi', somethingNew: ', du nouveau'
+    newTag: 'Nouveau · {name}', gotIt: 'Compris', showMe: 'Montrez-moi', somethingNew: ', du nouveau',
+    guide: 'Visite guidée', guideSub: 'Une minute autour de la carte, une commande à la fois', guideSteps: '4 ÉTAPES',
+    guideLabel: 'Visite guidée, étape {n} sur {total}', closeGuide: 'Fermer la visite', next: 'Suivant', backStep: 'Retour', done: 'Terminé', tryIt: 'Essayez',
+    g1Title: 'La carte', g1Body: 'Faites glisser pour déplacer, pincez pour zoomer, touchez deux fois pour centrer et agrandir.', g1Try: 'Zoomez sur votre bout de côte',
+    g2Title: 'Pression, vent, houle', g2Body: 'Dépressions et anticyclones, force et direction du vent, hauteur et période de la houle.',
+    g3Title: 'La légende', g3Body: 'Chaque couleur sur la mer est une valeur de la légende.', g3Try: 'Passez à la période',
+    g4Title: 'La frise', g4Body: 'L’aiguille reste en place et les jours défilent dessous, seize jours à l’avance. Le repère orange, c’est maintenant.', g4Try: 'Faites-la glisser, puis touchez deux fois pour revenir à maintenant'
   } }
 };

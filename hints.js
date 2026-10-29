@@ -29,3 +29,15 @@ const HINTS = [
   { id: 'tip.timeline.slide', type: 'tip', target: 'timeline', when: 'first-load', label: 'tipSlide', icon: 'slide', doneEvent: 'timeline.drag' },
   { id: 'tip.timeline.reset', type: 'tip', target: 'timeline', when: 'after:tip.timeline.slide', label: 'tipReset', icon: 'reset', doneEvent: 'timeline.reset' }
 ];
+
+/* The Guide (Menu › Guide): a tour of the chart, one control lit at a time.
+   Each step's control is its data-hint-target, in whichever panel is
+   showing ('chart' lights the chart and dims only the panel); `band` is put
+   on the chart for it (and the one before put back after); a Try it names
+   something to do there, ticked when its doneEvent fires. */
+const GUIDE = [
+  { target: 'chart', title: 'g1Title', body: 'g1Body', tryIt: 'g1Try', doneEvent: 'map.zoom' },
+  { target: 'bands', title: 'g2Title', body: 'g2Body' },
+  { target: 'key', band: 'swell', title: 'g3Title', body: 'g3Body', tryIt: 'g3Try', doneEvent: 'swell.measure' },
+  { target: 'timeline', title: 'g4Title', body: 'g4Body', tryIt: 'g4Try', doneEvent: 'timeline.reset' }
+];

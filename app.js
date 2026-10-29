@@ -536,6 +536,7 @@ function resize() {
   if (!view) fitHome();
   clampView();
   requestDraw(); renderHint();
+  if (guideOn()) placeGuide();
 }
 addEventListener('resize', resize);
 
@@ -783,11 +784,14 @@ function renderPanel() {
   flyout.hidden = false;
   renderHint();
 }
-document.querySelectorAll('.nss-band').forEach((b) => b.addEventListener('click', () => {
-  if (band === b.dataset.band) return;
-  band = b.dataset.band; store.set('nss.band', band); firstInteraction('band'); renderPanel(); requestDraw(); warm();
+function setBand(b) {
+  band = b; store.set('nss.band', band); renderPanel(); requestDraw(); warm();
   // The open panel grows or shrinks with the key row: settle the map after.
   if (!docked) setTimeout(easeClamp, reduced.matches ? 0 : 220);
+}
+document.querySelectorAll('.nss-band').forEach((b) => b.addEventListener('click', () => {
+  if (band === b.dataset.band) return;
+  firstInteraction('band'); setBand(b.dataset.band);
 }));
 document.querySelectorAll('[data-swell]').forEach((sw) => sw.addEventListener('click', (e) => {
   const b = e.target.closest('button');
@@ -826,6 +830,7 @@ function reveal(el, on, slide) {
   if (!slide) { void el.offsetHeight; el.style.transition = ''; }
 }
 function openSheet(name, focus) {
+  if (guideOn()) endGuide(false);
   clearTimeout(sheetT);
   const slide = !sheetOn && !reduced.matches, s = sheets[name];
   for (const o of Object.values(sheets)) if (o !== s) { o.hidden = true; o.removeAttribute('data-shown'); }
@@ -1264,7 +1269,7 @@ function hintMet(h) {
   return h.when === 'first-load' && !!man;
 }
 const hintDue = (h) => hs.tipsOn && !hs.seen[h.id] && (!hintSpent || hintSpent === chainOf(h)) && hintMet(h);
-const hintBusy = () => !!(ptrs.size || drag || tl.moving || sheetOn);
+const hintBusy = () => !!(ptrs.size || drag || tl.moving || sheetOn || guideOn());
 const floatTag = $('[data-tip-float]'), newTag = $('[data-new-tag]'), card = $('[data-hint-card]');
 const gotIt = card.querySelector('[data-got-it]'), showMe = card.querySelector('[data-show-me]');
 // What Show me does.
@@ -1438,6 +1443,118 @@ addEventListener('pointerup', (e) => {
   if (d && hintOn && performance.now() - d.t < 300 && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) hintGo();
   hintWait();
 }, { capture: true, passive: true });
+
+// ---- The Guide (Menu › Guide): a tour of the chart, one control lit at a time (hints.js) -------
+// Only ever when asked. The chart dims under the panel and the panel dims in
+// itself, but for the lit control, which stays live; the step card sits just
+// above the open panel (docked, beside the column, level with what's lit, or
+// over the key), notched to it. Next always works, and a Try it is ticked
+// once it's done. Closed (✕, Escape, back) or done, the band it put on is
+// put back, and the tips it's taught go. Tips wait while it's on.
+const guideCard = $('[data-guide-card]'), guideChart = $('[data-guide-scrim]');
+const guideScrims = [panelEl, columnEl].map((p) => {
+  const s = p.appendChild(document.createElement('div'));
+  s.className = 'nss-guide-scrim'; s.hidden = true;
+  return s;
+});
+const gBack = guideCard.querySelector('[data-guide-back]'), gNext = guideCard.querySelector('[data-guide-next]');
+const gTry = guideCard.querySelector('[data-guide-try]'), gNotch = guideCard.lastElementChild;
+let guideStep = -1, guideBand = null, guideTried = new Set();
+function guideOn() { return guideStep >= 0; }
+function startGuide() {
+  if (hintOn) { hintOn = null; hintCard = false; clearTimeout(hintGoT); renderHint(); }
+  guideStep = 0; guideBand = null; guideTried = new Set();
+  try { history.pushState({ guide: true }, ''); } catch {}
+  renderGuide();
+  gNext.focus({ preventScroll: true });
+}
+function endGuide(completed) {
+  if (!guideOn()) return;
+  guideStep = -1;
+  document.querySelectorAll('.nss-spot').forEach((el) => el.classList.remove('nss-spot'));
+  guideCard.hidden = guideChart.hidden = true;
+  guideScrims.forEach((s) => { s.hidden = true; });
+  columnEl.removeAttribute('data-guide');
+  if (guideBand) { setBand(guideBand); guideBand = null; }
+  for (const h of HINTS) if (h.type === 'tip') hs.seen[h.id] = 'retired';
+  if (completed) hs.guideCompleted = true;
+  store.set('nss.hints.v1', hs);
+  if (history.state && history.state.guide) history.back();
+  if (!sheetOn) menuBtn().focus({ preventScroll: true });
+  hintWait();
+}
+function renderGuide() {
+  const st = GUIDE[guideStep], last = guideStep === GUIDE.length - 1, chart = st.target === 'chart';
+  if (st.band && band !== st.band) { guideBand = guideBand || band; setBand(st.band); setTimeout(() => guideOn() && placeGuide(), 260); }
+  document.querySelectorAll('.nss-spot').forEach((el) => el.classList.remove('nss-spot'));
+  const el = hintEl(st);
+  if (el && !chart) el.classList.add('nss-spot');
+  guideChart.hidden = chart;
+  guideScrims.forEach((s) => { s.hidden = false; });
+  columnEl.setAttribute('data-guide', '');
+  guideCard.setAttribute('aria-label', tr('guideLabel', { n: guideStep + 1, total: GUIDE.length }));
+  guideCard.querySelector('.nss-guide-ticks').innerHTML = GUIDE.map((_, i) =>
+    `<span${i < guideStep ? ' data-state="done"' : i === guideStep ? ' data-state="current"' : ''}></span>`).join('');
+  guideCard.querySelector('[data-guide-count]').textContent = `${guideStep + 1} / ${GUIDE.length}`;
+  guideCard.querySelector('[data-guide-title]').textContent = tr(st.title);
+  guideCard.querySelector('[data-guide-body]').textContent = tr(st.body);
+  gTry.hidden = !st.tryIt;
+  if (st.tryIt) {
+    const done = guideTried.has(guideStep);
+    gTry.toggleAttribute('data-done', done);
+    gTry.firstElementChild.textContent = tr(done ? 'done' : 'tryIt');
+    gTry.lastElementChild.textContent = tr(st.tryIt);
+  }
+  gBack.hidden = guideStep === 0;
+  gNext.textContent = tr(last ? 'done' : 'next');
+  guideCard.hidden = false;
+  placeGuide();
+}
+// Above the open panel, notched to what's lit; docked, beside the column:
+// level with what's lit in it, over what's lit beside it (the key), or at
+// the bottom for the chart itself.
+function placeGuide() {
+  const st = GUIDE[guideStep], el = st.target !== 'chart' && hintEl(st), r = el && el.getBoundingClientRect();
+  const c = columnEl.getBoundingClientRect(), right = hand === 'right';
+  const w = docked ? (right ? c.left : innerWidth - c.right) - 24 : innerWidth - 24, x = docked && !right ? c.right + 12 : 12;
+  Object.assign(guideCard.style, { left: `${x}px`, right: 'auto', width: `${w}px` });
+  const h = guideCard.offsetHeight, below = (cx) => Object.assign(gNotch.style, {
+    left: `${Math.max(12, Math.min(w - 22, cx - x - 5))}px`, top: '', bottom: '', transform: '' });
+  let y;
+  gNotch.hidden = !r;
+  if (!docked) { y = panelEl.getBoundingClientRect().top - 12 - h; if (r) below(r.left + r.width / 2); }
+  else if (r && r.left >= c.left - 1 && r.right <= c.right + 1) {
+    const mid = r.top + r.height / 2;
+    y = Math.max(12, Math.min(innerHeight - 12 - h, mid - h / 2));
+    Object.assign(gNotch.style, { left: `${right ? w - 6 : -6}px`, top: `${mid - y - 5}px`, bottom: 'auto', transform: `rotate(${right ? -45 : 135}deg)` });
+  } else if (r) { y = r.top - 12 - h; below(r.left + r.width / 2); }
+  else y = innerHeight - 12 - h;
+  guideCard.style.top = `${Math.max(12, y)}px`;
+}
+$('[data-guide]').addEventListener('click', () => { closeSheet(); startGuide(); });
+gNext.addEventListener('click', () => { if (guideStep === GUIDE.length - 1) endGuide(true); else { guideStep++; renderGuide(); } });
+gBack.addEventListener('click', () => { if (guideStep > 0) { guideStep--; renderGuide(); gNext.focus({ preventScroll: true }); } });
+guideCard.querySelector('[data-guide-close]').addEventListener('click', () => endGuide(false));
+// The system's back gesture closes it.
+addEventListener('popstate', () => endGuide(false));
+// Try it: done on the real thing.
+for (const st of GUIDE) {
+  if (!st.doneEvent) continue;
+  (heard[st.doneEvent] ||= []).push(() => {
+    if (guideOn() && GUIDE[guideStep] === st) { guideTried.add(guideStep); renderGuide(); }
+  });
+}
+// Escape closes it; focus goes round the card and the lit control.
+addEventListener('keydown', (e) => {
+  if (!guideOn() || sheetOn) return;
+  if (e.key === 'Escape') { e.preventDefault(); endGuide(false); return; }
+  if (e.key !== 'Tab') return;
+  const spot = document.querySelector('.nss-spot');
+  const f = [...(spot ? [spot, ...spot.querySelectorAll('button')] : []), ...guideCard.querySelectorAll('button')]
+    .filter((b) => b.tabIndex >= 0 && !b.disabled && !b.closest('[hidden]') && b.getClientRects().length);
+  const i = f.indexOf(document.activeElement);
+  if (i < 0 || (e.shiftKey ? i === 0 : i === f.length - 1)) { e.preventDefault(); f[e.shiftKey ? f.length - 1 : 0].focus(); }
+});
 
 // ---- ?debug=1: where the app thinks it is, and the space the phone keeps -----------------
 if (Q.has('debug')) {

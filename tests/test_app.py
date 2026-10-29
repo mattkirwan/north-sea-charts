@@ -583,6 +583,152 @@ class App(unittest.TestCase):
         self.setting('tips', 'off')
         self.assertEqual(self.page.locator('.nss-light').count(), 0)
 
+    # ---- The Guide (Menu › Guide) ------------------------------------------------------
+    def guide(self):
+        self.page.click('#panel:not([inert]) [data-menu], #column:not([inert]) [data-menu]')
+        self.page.click('[data-guide]')
+        self.page.wait_for_function("!document.querySelector('[data-guide-card]').hidden")
+
+    def step(self):
+        """The step showing, by its card's label, or None once the Guide's gone."""
+        card = self.page.locator('[data-guide-card]')
+        return None if card.is_hidden() else card.get_attribute('aria-label')
+
+    def lit(self):
+        return self.page.evaluate("[...document.querySelectorAll('.nss-spot')].map((e) => e.dataset.hintTarget)")
+
+    def tried(self):
+        return self.page.locator('[data-guide-try]').get_attribute('data-done') is not None
+
+    def guide_card_clear_of(self, panel):
+        """The card on the screen, clear of what's lit (and of the column, docked), and notched to it."""
+        self.page.wait_for_timeout(300)
+        card = self.box('[data-guide-card]')
+        self.assertGreaterEqual(card['x'], 0)
+        self.assertLessEqual(card['x'] + card['width'], 390)
+        self.assertGreaterEqual(card['y'], 0)
+        spot = self.page.locator('.nss-spot')
+        if spot.count():
+            s = spot.bounding_box()
+            self.assertTrue(card['y'] + card['height'] <= s['y'] or card['x'] + card['width'] <= s['x'] or card['x'] >= s['x'] + s['width'])
+        if panel == '#column':
+            col = self.box('#column')
+            self.assertTrue(card['x'] + card['width'] <= col['x'] or card['x'] >= col['x'] + col['width'])
+        else:
+            self.assertLessEqual(card['y'] + card['height'], self.box('#panel')['y'] - 11)
+
+    def test_the_guide_goes_round_the_chart_and_puts_the_band_back(self):
+        self.kept()
+        self.loaded()
+        self.guide()
+        self.closed()                                           # the menu's gone; the Guide's over the chart
+        self.assertEqual(self.step(), 'Guide, step 1 of 4')
+        self.assertEqual(self.page.locator('[data-guide-card]').get_attribute('role'), 'dialog')
+        self.assertEqual(self.focused(), 'Next')
+        # 1: the chart itself, live, the panel dimmed; no Back.
+        self.assertEqual(self.lit(), [])
+        self.assertTrue(self.page.locator('[data-guide-scrim]').is_hidden())
+        self.assertTrue(self.page.locator('#panel > .nss-guide-scrim').is_visible())
+        self.assertTrue(self.page.locator('[data-guide-back]').is_hidden())
+        self.guide_card_clear_of('#panel')
+        self.assertFalse(self.tried())
+        self.page.mouse.move(150, 200)
+        self.page.mouse.wheel(0, -200)
+        self.assertTrue(self.tried())
+        # 2: the bands, the rest dimmed, the chart too.
+        self.page.click('[data-guide-next]')
+        self.assertEqual(self.step(), 'Guide, step 2 of 4')
+        self.assertEqual(self.lit(), ['bands'])
+        self.assertTrue(self.page.locator('[data-guide-scrim]').is_visible())
+        self.guide_card_clear_of('#panel')
+        # 3: the key, on Swell, Period live.
+        self.page.click('[data-guide-next]')
+        self.assertEqual(self.lit(), ['key'])
+        self.assertEqual(self.page.locator('#panel .nss-band[data-band="swell"]').get_attribute('aria-pressed'), 'true')
+        self.guide_card_clear_of('#panel')
+        self.page.click('#panel [data-var="period"]')
+        self.assertTrue(self.tried())
+        self.assertEqual(self.step(), 'Guide, step 3 of 4')    # never moves on by itself
+        # Back, and forward again: still ticked.
+        self.page.click('[data-guide-back]')
+        self.assertEqual(self.step(), 'Guide, step 2 of 4')
+        self.page.click('[data-guide-next]')
+        self.assertTrue(self.tried())
+        # 4: the timeline, slid and brought back to now; Done.
+        self.page.click('[data-guide-next]')
+        self.assertEqual(self.lit(), ['timeline'])
+        self.assertEqual(self.page.locator('[data-guide-next]').text_content(), 'Done')
+        self.guide_card_clear_of('#panel')
+        self.slide()
+        self.assertFalse(self.tried())
+        b = self.box('#panel .nss-timeline')
+        self.page.mouse.dblclick(b['x'] + 20, b['y'] + b['height'] / 2)
+        self.assertTrue(self.tried())
+        self.page.click('[data-guide-next]')
+        self.assertIsNone(self.step())
+        self.assertEqual(self.lit(), [])
+        self.assertEqual(self.page.locator('.nss-guide-scrim:visible').count(), 0)
+        self.assertEqual(self.page.locator('#panel .nss-band[data-band="pressure"]').get_attribute('aria-pressed'), 'true')
+        self.assertEqual(self.page.evaluate("localStorage.getItem('nss.band')"), '"pressure"')
+        self.assertTrue(self.page.evaluate("document.activeElement === document.querySelector('#panel [data-menu]')"))
+        h = self.hints()
+        self.assertTrue(h['guideCompleted'])
+        self.assertEqual(h['seen']['tip.swell.period'], 'retired')
+
+    def test_the_guide_closes_from_any_step(self):
+        for how in ('close', 'escape', 'back'):
+            with self.subTest(how=how):
+                self.new_page(service_workers='block')
+                self.loaded()
+                self.guide()
+                self.page.click('[data-guide-next]')
+                self.page.click('[data-guide-next]')                # on Swell for the key
+                self.assertEqual(self.step(), 'Guide, step 3 of 4')
+                if how == 'close':
+                    self.page.click('[data-guide-close]')
+                elif how == 'escape':
+                    self.page.keyboard.press('Escape')
+                else:
+                    self.page.go_back()                             # the phone's back gesture
+                self.page.wait_for_function("document.querySelector('[data-guide-card]').hidden")
+                self.assertEqual(self.lit(), [])
+                self.assertEqual(self.page.locator('#panel .nss-band[data-band="pressure"]').get_attribute('aria-pressed'), 'true')
+                h = self.hints()
+                self.assertFalse(h['guideCompleted'])
+                # Taught already: the tips it covers don't come after it.
+                self.assertEqual({k for k, v in h['seen'].items() if v == 'retired'}, {'tip.timeline.slide', 'tip.timeline.reset', 'tip.swell.period'})
+                self.page.wait_for_timeout(2000)
+                self.assertIsNone(self.tip())
+                self.assertIn('/index.html', self.page.url)          # back closed the Guide, not the app
+
+    def test_no_tips_while_the_guide_is_on(self):
+        self.loaded()
+        self.guide()                                            # before the first tip's due
+        self.page.wait_for_timeout(2500)
+        self.assertIsNone(self.tip())
+
+    def test_the_guide_in_the_docked_column_with_either_hand(self):
+        for hand in ('right', 'left'):
+            with self.subTest(hand=hand):
+                self.new_page(service_workers='block')
+                self.kept(**{'nss.docked': True, 'nss.hand': hand})
+                self.loaded()
+                self.guide()
+                for target in (None, 'bands', 'key', 'timeline'):
+                    self.assertEqual(self.lit(), [target] if target else [])
+                    self.guide_card_clear_of('#column')
+                    self.page.click('[data-guide-next]')
+                self.assertIsNone(self.step())
+
+    def test_the_guide_fits_in_the_longest_language(self):
+        self.kept(**{'nss.lang': 'de'})
+        self.loaded()
+        self.guide()
+        self.assertEqual(self.step(), 'Rundgang, Schritt 1 von 4')
+        for _ in range(4):
+            self.guide_card_clear_of('#panel')
+            self.page.click('[data-guide-next]')
+
     # ---- The menu ------------------------------------------------------------------
     def box(self, sel):
         return self.page.locator(sel).bounding_box()
@@ -637,7 +783,8 @@ class App(unittest.TestCase):
         self.assertEqual(self.shown(), 'Menu')
         self.assertEqual(self.page.locator('#menu').get_attribute('role'), 'dialog')
         self.assertEqual([n.strip() for n in self.page.locator('#menu .nss-menu-name').all_text_contents()],
-                         ['Chart', '💡 Feedback & ideas', 'Settings', 'About'])
+                         ['Chart', '💡 Feedback & ideas', 'Settings', 'Guide', 'About'])
+        self.assertEqual(self.page.locator('#menu [data-guide] .nss-menu-tag').text_content(), '4 STEPS')
         self.assertEqual(self.page.locator('#menu .nss-soon').count(), 0)
         self.assertEqual(self.page.locator('#menu [aria-disabled]').count(), 0)
         chart = self.page.locator('#menu [data-view="chart"]')
