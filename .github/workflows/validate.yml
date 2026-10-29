@@ -1,0 +1,66 @@
+# Do the published frames say what NOAA's model says? (scripts/validate_frames.py)
+# Reads the newest run's frames as a phone would and compares them, at points
+# and over each whole grid, with the same run's own GRIB files on NOAA's
+# bucket. Fails, and opens an issue titled "Chart numbers differ from NOAA's",
+# when a difference is past its limit; closes it again when they agree.
+#
+# Only NOAA's own files are compared here. Wetterzentrale's charts are for a
+# person to look at by hand (validate_frames.py's picture option, on their own
+# machine): this repository is public, so nothing of theirs is ever fetched,
+# kept or uploaded by a workflow (tests/test_validate.py checks).
+name: Validate the frames
+
+on:
+  schedule:
+    - cron: '47 8,20 * * *'
+  workflow_dispatch:
+    inputs:
+      steps:
+        description: 'Forecast hours to check, comma-separated'
+        type: string
+        default: '0,24,72,120,240,384'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: validate
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libeccodes-dev > /dev/null
+          pip install -q -r requirements/frames.txt
+      - name: Compare with NOAA's files
+        id: check
+        env:
+          STEPS: ${{ inputs.steps || '0,24,72,120,240,384' }}
+        run: |
+          python3 scripts/validate_frames.py --steps "$STEPS" | tee "$RUNNER_TEMP/report.txt"
+          exit "${PIPESTATUS[0]}"
+      - name: Open or close the alert
+        if: always() && (steps.check.outcome == 'success' || steps.check.outcome == 'failure')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ steps.check.outcome }}
+          TITLE: Chart numbers differ from NOAA's
+        run: |
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --json number,title \
+            --jq ".[] | select(.title == \"$TITLE\") | .number" | head -1)
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ "$OUTCOME" = failure ] && [ -z "$open" ]; then
+            { echo '```'; cat "$RUNNER_TEMP/report.txt"; echo '```'; echo; echo "Found by $run_url. Closed by itself when they agree."; } > "$RUNNER_TEMP/body.md"
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file "$RUNNER_TEMP/body.md"
+          elif [ "$OUTCOME" = success ] && [ -n "$open" ]; then
+            gh issue close "$open" --repo "$GITHUB_REPOSITORY" --comment "They agree again ($run_url)."
+          fi
