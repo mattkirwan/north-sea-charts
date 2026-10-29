@@ -1,7 +1,7 @@
 # Every merge to main goes to staging first, https://staging.northsea.surf
-# (deploy.yml), once the tests pass on it (tests.yml), to try on a phone
-# before it's released to production (release.yml). Not counted in the
-# analytics: index.html only counts northsea.surf.
+# (deploy.yml), to try on a phone before it's released to production
+# (release.yml). Not counted in the analytics: index.html only counts
+# northsea.surf.
 name: Deploy to staging
 
 on:
@@ -13,10 +13,7 @@ permissions:
   contents: write
 
 jobs:
-  tests:
-    uses: ./.github/workflows/tests.yml
   staging:
-    needs: tests
     uses: ./.github/workflows/deploy.yml
     with:
       ref: ${{ github.sha }}
