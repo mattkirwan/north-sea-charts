@@ -256,7 +256,7 @@ class App(unittest.TestCase):
         self.assertEqual(self.shown(), 'Menu')
         self.assertEqual(self.page.locator('#menu').get_attribute('role'), 'dialog')
         self.assertEqual([n.strip() for n in self.page.locator('#menu .nss-menu-name').all_text_contents()],
-                         ['Chart', 'Feedback & ideas', 'Settings', 'About'])
+                         ['Chart', '💡 Feedback & ideas', 'Settings', 'About'])
         self.assertEqual(self.page.locator('#menu .nss-soon').count(), 0)
         self.assertEqual(self.page.locator('#menu [aria-disabled]').count(), 0)
         chart = self.page.locator('#menu [data-view="chart"]')
@@ -312,7 +312,7 @@ class App(unittest.TestCase):
         self.page.keyboard.press('Escape')
         self.closed()
         self.page.click('#panel [data-menu]')
-        self.assertEqual(self.page.locator('#feedback .nss-menu-name').text_content(), 'Feedback & Ideen')
+        self.assertEqual(self.page.locator('#feedback .nss-menu-name').text_content(), '💡 Feedback & Ideen')
         self.page.fill('#fbText', 'Danke!')
         self.page.click('#feedback [type="submit"]')
         self.page.wait_for_function("document.querySelector('#fbState').textContent === 'Danke, gesendet.'")
