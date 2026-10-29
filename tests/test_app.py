@@ -325,6 +325,105 @@ class App(unittest.TestCase):
         self.slide()
         self.assertIsNone(self.tip())
 
+    def kept(self, **kept):
+        """Someone who's had the timeline's tips, so this visit's one new tip is free, with anything else kept."""
+        kept = {'nss.tip1': True, 'nss.tip2': True, **kept}
+        self.context.add_init_script(''.join(f'localStorage.setItem({json.dumps(k)}, {json.dumps(json.dumps(v))});' for k, v in kept.items()))
+
+    def swell_tip(self, panel, words='Tap for wave period'):
+        """Swell chosen in the panel showing: the tip floats over Period, on the screen, notched to it, and goes once Period's chosen."""
+        self.page.click(f'{panel} .nss-band[data-band="swell"]')
+        self.tip_due(words)
+        self.page.wait_for_timeout(400)                         # slid in
+        tag, notch = self.box('[data-tip-float]'), self.box('[data-tip-float] .nss-tip-notch')
+        period = self.box(f'{panel} [data-hint-point="period"]')
+        self.assertGreaterEqual(tag['x'], 0)
+        self.assertLessEqual(tag['x'] + tag['width'], 390)
+        self.assertLessEqual(tag['y'] + tag['height'], period['y'])
+        self.assertTrue(period['x'] <= notch['x'] + notch['width'] / 2 <= period['x'] + period['width'])
+        if panel == '#column':                                  # and off the column's buttons
+            col = self.box('#column .nss-bands')
+            self.assertTrue(tag['x'] + tag['width'] <= col['x'] or tag['x'] >= col['x'] + col['width'])
+        self.page.click(f'{panel} [data-hint-point="period"]')
+        self.assertIsNone(self.tip())
+        self.assertEqual(self.hints()['seen']['tip.swell.period'], 'retired')
+
+    def test_the_swell_tip_points_at_period_in_either_panel_with_either_hand(self):
+        for docked in (False, True):
+            for hand in ('right', 'left'):
+                with self.subTest(docked=docked, hand=hand):
+                    self.new_page(service_workers='block')
+                    self.kept(**{'nss.docked': docked, 'nss.hand': hand})
+                    self.loaded()
+                    self.swell_tip('#column' if docked else '#panel')
+
+    def test_the_swell_tip_fits_in_the_longest_language(self):
+        self.kept(**{'nss.lang': 'de', 'nss.hand': 'left'})
+        self.loaded()
+        self.swell_tip('#panel', 'Für Wellenperiode tippen')
+
+    def test_the_swell_tip_waits_while_swell_is_off_and_isnt_needed_on_period(self):
+        self.kept()
+        self.loaded()
+        self.page.click('#panel .nss-band[data-band="swell"]')
+        self.tip_due('Tap for wave period')
+        self.page.click('#panel .nss-band[data-band="wind"]')
+        self.assertIsNone(self.tip())
+        self.assertNotIn('tip.swell.period', self.hints()['seen'])
+        self.page.click('#panel .nss-band[data-band="swell"]')
+        self.tip_due('Tap for wave period')
+        self.new_page(service_workers='block')
+        self.kept(**{'nss.swell': 'period'})
+        self.loaded()
+        self.page.click('#panel .nss-band[data-band="swell"]')
+        self.page.wait_for_timeout(2500)
+        self.assertIsNone(self.tip())
+
+    def test_one_new_tip_a_visit(self):
+        self.loaded()
+        self.tip_due('Slide timeline')
+        self.slide()
+        self.page.click('#panel .nss-band[data-band="swell"]')
+        # The timeline's second tip is the same new one; the swell tip waits for another visit.
+        self.tip_due('Double-tap to reset')
+        b = self.box('#panel .nss-timeline')
+        self.page.mouse.dblclick(b['x'] + 20, b['y'] + b['height'] / 2)
+        self.page.wait_for_timeout(2500)
+        self.assertIsNone(self.tip())
+        self.page.reload()
+        self.page.wait_for_function("document.querySelector('.nss-timeline').getAttribute('aria-valuemax') !== '0'")
+        self.page.wait_for_timeout(2500)
+        self.assertIsNone(self.tip())
+
+    def test_tips_off_stays_off_until_shown_again(self):
+        self.loaded()
+        self.tip_due('Slide timeline')
+        self.setting('tips', 'off')
+        self.assertIsNone(self.tip())
+        self.assertEqual(self.page.locator('[data-set="tips"] [data-value="off"]').get_attribute('aria-pressed'), 'true')
+        h = self.hints()
+        self.assertFalse(h['tipsOn'])
+        self.assertEqual(sorted(h['seen']), ['tip.swell.period', 'tip.timeline.reset', 'tip.timeline.slide'])
+        self.page.reload()
+        self.page.wait_for_function("document.querySelector('.nss-timeline').getAttribute('aria-valuemax') !== '0'")
+        self.page.click('#panel .nss-band[data-band="swell"]')
+        self.page.wait_for_timeout(2500)
+        self.assertIsNone(self.tip())
+        self.page.click('#panel [data-menu]')
+        self.page.click('[data-go="settings"]')
+        self.assertEqual(self.page.locator('[data-set="tips"] [data-value="off"]').get_attribute('aria-pressed'), 'true')
+        self.page.click('[data-tips-again]')
+        self.assertEqual(self.page.locator('[data-tips-again] .nss-menu-sub').text_content(), "They'll show again")
+        self.assertEqual(self.page.locator('[data-set="tips"] [data-value="on"]').get_attribute('aria-pressed'), 'true')
+        self.assertEqual(self.hints()['seen'], {})
+        self.assertTrue(self.hints()['tipsOn'])
+        # Not over the menu: once it's closed, from the start (Swell's on, so its tip first).
+        self.page.wait_for_timeout(2000)
+        self.assertIsNone(self.tip())
+        self.page.keyboard.press('Escape')
+        self.closed()
+        self.tip_due('Tap for wave period')
+
     # ---- The menu ------------------------------------------------------------------
     def box(self, sel):
         return self.page.locator(sel).bounding_box()
