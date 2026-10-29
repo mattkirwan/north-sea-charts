@@ -131,7 +131,7 @@ class WetterzentraleStaysInternal(unittest.TestCase):
         self.assertTrue(vf.git_ignored(os.path.join(ROOT, 'validation', 'f000.png')))
 
     def test_nothing_the_app_serves_mentions_it(self):
-        for name in ('index.html', 'app.js', 'i18n.js', 'sw.js', 'privacy.html', 'legacy.html'):
+        for name in ('index.html', 'app.js', 'i18n.js', 'hints.js', 'sw.js', 'privacy.html', 'legacy.html'):
             with open(os.path.join(ROOT, name), encoding='utf-8') as f:
                 self.assertNotIn('wetterzentrale.de', f.read().lower(), name)
 

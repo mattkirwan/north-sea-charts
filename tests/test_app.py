@@ -4,7 +4,9 @@ one (manifest.json and gzipped frames, encoded by its own encode()), from a
 local server. It opens on the frame nearest now and draws it, the timeline
 moves the forecast on, the bands switch and are remembered, the menu opens
 and closes as a sheet (keyboard, scrim, grip) with feedback, and the panel
-and hand settings, in it, and without a manifest it says it's offline. On first open it
+and hand settings, in it, and without a manifest it says it's offline. The first-use
+tips wait for a quiet moment, go once done, tapped or left, and are kept
+(with the release someone first came on), with storage or without. On first open it
 asks which language, with the phone's own picked; Settings › Language changes
 it, and it's remembered. Nothing leaves the machine: requests to any
 other host (fonts, the usage stats) are dropped.
@@ -206,6 +208,117 @@ class App(unittest.TestCase):
         self.page.reload()
         self.assertEqual(self.page.locator('#panel .nss-band[data-band="swell"]').get_attribute('aria-pressed'), 'true')
         self.assertEqual(self.page.locator('#panel .nss-band[data-band="pressure"]').get_attribute('aria-pressed'), 'false')
+
+    # ---- Hints (hints.js) -----------------------------------------------------------
+    def tip(self):
+        """The tip showing, by its words, or None."""
+        return self.page.evaluate("(() => { const t = [...document.querySelectorAll('[data-tip]')].find((t) => !t.hidden);"
+                                  " return t ? t.textContent : null; })()")
+
+    def tip_due(self, words):
+        self.page.wait_for_function(f"[...document.querySelectorAll('[data-tip]')].some((t) => !t.hidden && t.textContent === {json.dumps(words)})")
+
+    def hints(self):
+        return self.page.evaluate("JSON.parse(localStorage.getItem('nss.hints.v1'))")
+
+    def slide(self):
+        b = self.box('#panel .nss-timeline')
+        x, y = b['x'] + b['width'] / 2, b['y'] + b['height'] / 2
+        self.page.mouse.move(x, y)
+        self.page.mouse.down()
+        self.page.mouse.move(x - 60, y, steps=6)
+        self.page.mouse.up()
+
+    def test_tips_wait_for_quiet_then_go_once_done(self):
+        self.loaded()
+        # Not while someone's busy with the chart: 1.5 s of quiet first.
+        for _ in range(5):
+            self.page.mouse.click(150, 200)
+            self.page.wait_for_timeout(600)
+            self.assertIsNone(self.tip())
+        self.tip_due('Slide timeline')
+        self.assertTrue(self.page.locator('#panel [data-tip]').is_visible())
+        self.slide()
+        self.assertIsNone(self.tip())
+        self.assertEqual(self.hints()['seen'], {'tip.timeline.slide': 'retired'})
+        # Then the next in the chain, once the timeline has settled.
+        self.tip_due('Double-tap to reset')
+        b = self.box('#panel .nss-timeline')
+        self.page.mouse.dblclick(b['x'] + 20, b['y'] + b['height'] / 2)
+        self.assertIsNone(self.tip())
+        self.assertEqual(self.hints()['seen'], {'tip.timeline.slide': 'retired', 'tip.timeline.reset': 'retired'})
+        self.page.reload()
+        self.page.wait_for_function("document.querySelector('.nss-timeline').getAttribute('aria-valuemax') !== '0'")
+        self.page.wait_for_timeout(2500)
+        self.assertIsNone(self.tip())
+
+    def test_a_tip_dims_at_a_touch_goes_untouched_and_goes_when_tapped(self):
+        self.loaded()
+        self.tip_due('Slide timeline')
+        self.page.mouse.click(150, 200)
+        self.assertEqual(self.page.locator('#panel [data-tip]').get_attribute('data-fading'), '')
+        self.page.wait_for_function("document.querySelector('#panel [data-tip]').hidden", timeout=8000)
+        self.assertEqual(self.hints()['seen'], {'tip.timeline.slide': 'retired'})
+        self.tip_due('Double-tap to reset')
+        b = self.box('#panel [data-tip]')
+        self.page.mouse.click(b['x'] + b['width'] / 2, b['y'] + b['height'] / 2)
+        self.assertIsNone(self.tip())
+        self.assertEqual(self.hints()['seen']['tip.timeline.reset'], 'retired')
+
+    def test_the_tip_shows_in_the_docked_column(self):
+        self.context.add_init_script("localStorage.setItem('nss.docked', 'true')")
+        self.loaded()
+        self.tip_due('Slide timeline')
+        self.assertTrue(self.page.locator('#column [data-tip]').is_visible())
+        self.assertTrue(self.page.locator('#panel [data-tip]').is_hidden())
+
+    def test_tips_seen_before_hints_stay_seen(self):
+        self.context.add_init_script("localStorage.setItem('nss.tip1', 'true'); localStorage.setItem('nss.tip2', 'true')")
+        self.loaded()
+        self.page.wait_for_timeout(2500)
+        self.assertIsNone(self.tip())
+        h = self.hints()
+        self.assertEqual(h['seen'], {'tip.timeline.slide': 'retired', 'tip.timeline.reset': 'retired'})
+        self.assertEqual(h['firstSeenRelease'], '0')            # here before: before every release
+        self.assertTrue(h['tipsOn'])
+
+    def stamped(self, release):
+        """index.html as a deploy serves it, stamped with its release (the last one given)."""
+        def serve(route):
+            r = route.fetch()
+            route.fulfill(response=r, body=r.text().replace('data-release="dev"', f'data-release="{self.release}"'))
+        if getattr(self, 'release', None) is None:
+            self.page.route(lambda url: '/index.html' in url, serve)
+        self.release = release
+
+    def test_a_first_visit_keeps_the_release_it_came_on(self):
+        self.new_page(first_open=True, service_workers='block')
+        self.stamped('2026-11-02-1200')
+        self.open()
+        self.page.wait_for_function("localStorage.getItem('nss.hints.v1')")
+        self.assertEqual(self.hints()['firstSeenRelease'], '2026-11-02-1200')
+        self.stamped('2026-11-09-1200')                         # still the first one, on a later release
+        self.page.reload()
+        self.page.wait_for_function("localStorage.getItem('nss.hints.v1')")
+        self.assertEqual(self.hints()['firstSeenRelease'], '2026-11-02-1200')
+
+    def test_the_first_visit_to_a_development_copy_keeps_no_release(self):
+        self.new_page(first_open=True, service_workers='block')
+        self.open()
+        self.page.wait_for_function("localStorage.getItem('nss.hints.v1')")
+        self.assertIsNone(self.hints()['firstSeenRelease'])
+
+    def test_tips_without_storage(self):
+        self.context.add_init_script("""for (const k of ['localStorage', 'sessionStorage'])
+            Object.defineProperty(window, k, { get() { throw new DOMException('denied', 'SecurityError'); } });""")
+        self.open()
+        self.page.wait_for_function("document.querySelector('.nss-timeline').getAttribute('aria-valuemax') !== '0'")
+        # Nothing kept, so it's a first open: the language first, then the tip.
+        self.page.keyboard.press('Escape')
+        self.closed()
+        self.tip_due('Slide timeline')
+        self.slide()
+        self.assertIsNone(self.tip())
 
     # ---- The menu ------------------------------------------------------------------
     def box(self, sel):

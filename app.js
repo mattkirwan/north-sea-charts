@@ -244,7 +244,7 @@ async function refreshManifest() {
     man = m; frames = []; loadIce(m); grid = makeGrid(m);
     idx = nearestIndex(m, Date.now());
     tl.raw = tl.target = idx;
-    buildTicks(); setFrame(idx, true); pump(); showTip();
+    buildTicks(); setFrame(idx, true); pump(); hintWait();
   } else if (m.run > man.run) {
     // Keep the needle on the same valid time: load that frame of the new run first, then swap.
     const t = validAt(man, idx), j = nearestIndex(m, t);
@@ -253,7 +253,7 @@ async function refreshManifest() {
       man = m; frames = []; loadIce(m); grid = makeGrid(m); frames[j] = d; failedAt = {}; idx = j; tl.raw = tl.target = j; geomCache.clear();
       buildTicks(); markTick(j); setFrame(j, true);
       updatedNote = true; setTimeout(fadeUpdated, 3000);
-      pump();
+      pump(); hintWait();
     } catch {}
   }
   renderStatus();
@@ -569,16 +569,17 @@ const endPtr = (e) => {
   if (ptrs.size || !gesture) return;
   const now = performance.now(), tap = !gesture.multi && gesture.moved < 10 && now - gesture.t < 300;
   if (tap && lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) {
-    animateZoom(e.clientX, e.clientY, 2); lastTap = null; firstInteraction('zoom');
+    animateZoom(e.clientX, e.clientY, 2); lastTap = null; firstInteraction('zoom'); emit('map.zoom');
   } else {
     lastTap = tap ? { t: now, x: e.clientX, y: e.clientY } : null;
     if (tap && onTap) onTap(e.clientX, e.clientY);
   }
+  if (gesture.multi) emit('map.zoom');
   gesture = null;
 };
 cv.addEventListener('pointerup', endPtr);
 cv.addEventListener('pointercancel', endPtr);
-cv.addEventListener('wheel', (e) => { e.preventDefault(); firstInteraction('zoom'); zoomAbout(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.002)); clampView(); requestDraw(); saveView(); }, { passive: false });
+cv.addEventListener('wheel', (e) => { e.preventDefault(); firstInteraction('zoom'); emit('map.zoom'); zoomAbout(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.002)); clampView(); requestDraw(); saveView(); }, { passive: false });
 function animateZoom(sx, sy, f) {
   const start = performance.now(), dur = reduced.matches ? 0 : 260;
   let done = 1;
@@ -790,15 +791,15 @@ document.querySelectorAll('.nss-band').forEach((b) => b.addEventListener('click'
 document.querySelectorAll('[data-swell]').forEach((sw) => sw.addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (!b || b.dataset.var === swellVar) return;
-  swellVar = b.dataset.var; store.set('nss.swell', swellVar); renderPanel(); requestDraw(); warm();
+  swellVar = b.dataset.var; store.set('nss.swell', swellVar); renderPanel(); requestDraw(); warm(); emit('swell.measure');
 }));
 // The panel's state and its side are settings (Menu › Settings): applied at
 // once, behind the menu, and kept for next time.
 function setDocked(d, first) {
   docked = d; store.set('nss.docked', d);
   panelEl.toggleAttribute('data-away', d); columnEl.toggleAttribute('data-away', !d);
-  applyInert(); placeTrack(); renderTips(); renderSettings();
-  if (!first) easeClamp();
+  applyInert(); placeTrack(); renderHint(); renderSettings();
+  if (!first) { easeClamp(); emit('panel.changed'); }
 }
 function setHand(h, first) {
   hand = h === 'left' ? 'left' : 'right'; store.set('nss.hand', hand);
@@ -881,7 +882,7 @@ function keepLang() {
 }
 function setLang(c) {
   lang = c;
-  applyLang(); renderLangs(); renderPanel(); renderTips(); buildTicks();
+  applyLang(); renderLangs(); renderPanel(); renderHint(); buildTicks();
   if (man) setFrame(idx, true);
   statusEls[0].dataset.shown = ''; renderStatus();
   requestDraw();
@@ -1019,7 +1020,7 @@ function fadeUpdated() {
 // ---- Timeline: horizontal in the open panel, vertical in the docked column -------------------
 const tl = { raw: 0, target: 0, anim: 0, v: 0, moving: false };
 const TL = [...document.querySelectorAll('[data-axis]')].map((el) => ({
-  el, axis: el.dataset.axis, track: el.querySelector('[data-track]'), tip: el.querySelector('[data-tip]'), ticks: []
+  el, axis: el.dataset.axis, track: el.querySelector('[data-track]'), ticks: []
 }));
 function fracIndex(t) {
   const n = man.steps.length;
@@ -1108,7 +1109,7 @@ function animateTo(target, dur = 220) {
     const q = dur ? Math.min(1, (t - start) / dur) : 1, e = 1 - Math.pow(1 - q, 3);
     moveTo(from + (target - from) * e);
     if (q < 1) { tl.anim = requestAnimationFrame(step); return; }
-    tl.moving = false; requestDraw(); warm(); scanStopped();
+    tl.moving = false; requestDraw(); warm(); hintWait();
   };
   tl.anim = requestAnimationFrame(step);
 }
@@ -1140,7 +1141,6 @@ for (const T of TL) {
     const now = performance.now();
     drag = { c: along(e), c0: along(e), t0: now, samples: [[now, tl.raw]], stamp: e.timeStamp };
     if (tlDbg) tlDbg.cur = { moves: 0, merged: 0, touches: 0, end: '', slowest: 0, builds: 0, raw: e.timeStamp };
-    tipTouched();
   });
   T.el.addEventListener('pointermove', (e) => {
     if (!drag) return;
@@ -1159,9 +1159,10 @@ for (const T of TL) {
     const now = performance.now(), d = drag;
     drag = null;
     if (Math.abs(d.c - d.c0) < 6 && now - d.t0 < 300) {
-      if (now - tlTap < 320) { tlTap = 0; firstInteraction('rail'); animateTo(nearestIndex(man, Date.now()), 360); return; }
+      if (now - tlTap < 320) { tlTap = 0; firstInteraction('rail'); emit('timeline.reset'); animateTo(nearestIndex(man, Date.now()), 360); return; }
       tlTap = now; settle(); return;
     }
+    emit('timeline.drag');
     const v = releaseSpeed(d, now);
     if (tlDbg && tlDbg.cur) {
       const c = tlDbg.cur, s = d.samples;
@@ -1197,33 +1198,105 @@ for (const T of TL) {
     else if (e.key === 'Home') to = 0;
     else if (e.key === 'End') to = n;
     if (to == null) return;
-    e.preventDefault(); firstInteraction('rail');
+    e.preventDefault(); firstInteraction('rail'); emit('timeline.drag');
     to = Math.max(0, Math.min(n, to));
     tl.raw = to; placeTrack(); setFrame(to);
   });
 }
 
-// ---- First-use tips: beside the needle, in whichever panel is showing -------------------------
-const TIPS = { 1: () => icon('slide') + tr('tipSlide'), 2: () => icon('reset') + tr('tipReset') };
-let tipShown = 0, tip2Due = false, tipFading = false;
-function renderTips() {
-  TL.forEach((T, i) => {
-    const on = tipShown && i === (docked ? 1 : 0);
-    T.tip.hidden = !on;
-    if (on) { T.tip.innerHTML = TIPS[tipShown](); T.tip.toggleAttribute('data-fading', tipFading); }
+// ---- Hints: what the app teaches (hints.js), one controller for all of it --------------------
+// The rules in one place: one hint on screen at a time, never mid-gesture
+// (1.5 s of quiet first), one new one a visit (a chain of tips counts as
+// one), each shown once. A tip sits beside its control in whichever panel is
+// showing; the first touch dims it, and it goes for good when its action is
+// done, when it's tapped, or after 6 s with nothing touched. Kept under
+// nss.hints.v1, with the release someone first came on (deploy.yml stamps
+// index.html's data-release), so a feature's news only reaches people who
+// were here before it.
+const HINT_IDLE = 1500, HINT_WAIT = 6000;
+const RELEASE = document.documentElement.dataset.release || 'dev';
+const hs = (() => {
+  let s = store.get('nss.hints.v1', null);
+  if (!s) {
+    // The first time with hints: anyone with something of ours kept came
+    // before every release, and keeps the tips they've already seen.
+    let before = false;
+    try { before = Object.keys(localStorage).some((k) => k.startsWith('nss.')); } catch {}
+    const seen = {};
+    if (store.get('nss.tip1', false)) seen['tip.timeline.slide'] = 'retired';
+    if (store.get('nss.tip2', false)) seen['tip.timeline.reset'] = 'retired';
+    s = { firstSeenRelease: before ? '0' : null, tipsOn: true, seen, guideCompleted: false };
+  }
+  if (s.firstSeenRelease == null && RELEASE !== 'dev') s.firstSeenRelease = RELEASE;
+  store.set('nss.hints.v1', s);
+  return s;
+})();
+// What the app does, for hints to listen for: timeline.drag, timeline.reset,
+// map.zoom, swell.measure, panel.changed.
+const heard = {};
+const emit = (name) => (heard[name] || []).forEach((f) => f());
+// This visit's one new hint (the chain it starts), kept through a reload.
+let hintSpent = null;
+try { hintSpent = sessionStorage.getItem('nss.hints.shown'); } catch {}
+const hintById = Object.fromEntries(HINTS.map((h) => [h.id, h]));
+const chainOf = (h) => (h.when.startsWith('after:') ? chainOf(hintById[h.when.slice(6)]) : h.id);
+let hintOn = null, hintFading = false, hintT = 0, hintGoT = 0, tagDown = null;
+function hintMet(h) {
+  if (h.when.startsWith('after:')) return hs.seen[h.when.slice(6)] === 'retired';
+  return h.when === 'first-load' && !!man;
+}
+const hintDue = (h) => h.type === 'tip' && hs.tipsOn && !hs.seen[h.id] && (!hintSpent || hintSpent === chainOf(h)) && hintMet(h);
+const hintBusy = () => !!(ptrs.size || drag || tl.moving || sheetOn);
+function renderHint() {
+  document.querySelectorAll('[data-hint-target] [data-tip]').forEach((tag) => {
+    const el = tag.closest('[data-hint-target]');
+    const on = !!hintOn && el.dataset.hintTarget === hintOn.target && !el.closest('[data-away]');
+    tag.hidden = !on;
+    if (on) { tag.innerHTML = icon(hintOn.icon) + tr(hintOn.label); tag.toggleAttribute('data-fading', hintFading); }
   });
 }
-function showTip() {
-  if (!store.get('nss.tip1', false)) { tipShown = 1; tipFading = false; renderTips(); }
+// Quiet from now: the next hint, if one's due, once it's lasted.
+function hintWait() { clearTimeout(hintT); hintT = setTimeout(nextHint, HINT_IDLE); }
+function nextHint() {
+  if (hintOn) return;
+  if (hintBusy()) { hintWait(); return; }
+  const h = HINTS.find(hintDue);
+  if (!h) return;
+  if (!hintSpent) { hintSpent = chainOf(h); try { sessionStorage.setItem('nss.hints.shown', hintSpent); } catch {} }
+  hintOn = h; hintFading = false; renderHint();
+  hintGoT = setTimeout(retireHint, HINT_WAIT);
 }
-function tipTouched() {
-  if (tipShown === 1) { tipFading = true; renderTips(); }
-  if (tipShown === 2) { tipShown = 0; store.set('nss.tip2', true); renderTips(); }
+function retireHint() {
+  if (!hintOn) return;
+  hs.seen[hintOn.id] = 'retired'; store.set('nss.hints.v1', hs);
+  hintOn = null; clearTimeout(hintGoT); renderHint(); hintWait();
 }
-function scanStopped() {
-  if (tipShown === 1) { tipShown = 0; store.set('nss.tip1', true); tip2Due = true; renderTips(); return; }
-  if (tip2Due && !store.get('nss.tip2', false)) { tip2Due = false; tipShown = 2; tipFading = false; renderTips(); }
+// A touch anywhere: the tip dims and waits 6 s more, and the quiet starts over.
+function hintTouched() {
+  if (hintOn) {
+    if (!hintFading) { hintFading = true; renderHint(); }
+    clearTimeout(hintGoT); hintGoT = setTimeout(retireHint, HINT_WAIT);
+  }
+  hintWait();
 }
+// Done what a hint says, shown or not yet: it's not needed.
+for (const h of HINTS) {
+  (heard[h.doneEvent] ||= []).push(() => {
+    if (hintOn === h) retireHint();
+    else if (!hs.seen[h.id] && hintMet(h)) { hs.seen[h.id] = 'retired'; store.set('nss.hints.v1', hs); }
+  });
+}
+for (const k of ['pointerdown', 'wheel', 'keydown']) addEventListener(k, hintTouched, { capture: true, passive: true });
+// Tapped (not dragged from): gone.
+document.querySelectorAll('[data-tip]').forEach((tag) => tag.addEventListener('pointerdown', (e) => {
+  tagDown = { x: e.clientX, y: e.clientY, t: performance.now() };
+}));
+addEventListener('pointerup', (e) => {
+  const d = tagDown;
+  tagDown = null;
+  if (d && hintOn && performance.now() - d.t < 300 && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) retireHint();
+  hintWait();
+}, { capture: true, passive: true });
 
 // ---- ?debug=1: where the app thinks it is, and the space the phone keeps -----------------
 if (Q.has('debug')) {
