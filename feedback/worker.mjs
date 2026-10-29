@@ -2,7 +2,8 @@
    northsea.surf and staging.northsea.surf (wrangler.toml's routes), JSON
    { text, website, lang, surface, v }. Sent with Email Routing's send_email
    binding (MAIL), from FROM to FEEDBACK_TO, a verified destination address
-   on the account, set as a secret so it isn't in the repo (feedback.yml).
+   on the account, given at deploy from a GitHub secret so it isn't in the
+   repo (feedback.yml).
 
    Only from the app's own pages, only text up to 2000 characters, and
    anything that fills in the hidden website field (a bot) is thanked and
