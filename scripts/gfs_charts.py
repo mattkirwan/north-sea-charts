@@ -22,11 +22,9 @@ swell_sources.py) come the swell window (window.json), bomb low alerts (in
 the manifest) and our own swell forecast for Saltburn (forecast.json). Checks
 before publishing: every frame present, pressures within physical limits.
 
-  python scripts/gfs_charts.py OUT_DIR [--check]
+  python scripts/gfs_charts.py OUT_DIR
 
---check also writes check/ images placing our chart beside Wetterzentrale's
-for the same run and hour, and prints our pressure at Saltburn beside
-Open-Meteo's GFS value, so the drawing can be verified.
+The numbers are checked against independent sources by validate_frames.py.
 """
 import datetime as dt
 import io
@@ -491,36 +489,6 @@ def sanity(step, p):
     return lo, hi
 
 
-def check(run, step, p, lons, lats, ours, outdir):
-    """Side-by-side with Wetterzentrale's chart for the same run and hour, plus spot values."""
-    os.makedirs(os.path.join(outdir, 'check'), exist_ok=True)
-    yi, xi = np.abs(lats - SALTBURN[0]).argmin(), np.abs(lons - SALTBURN[1]).argmin()
-    valid = run + dt.timedelta(hours=step)
-    line = f'f{step:03d} valid {valid:%Y-%m-%d %H}z: our MSLP at Saltburn {p[yi, xi]:.1f} hPa'
-    try:
-        om = json.loads(get('https://api.open-meteo.com/v1/gfs?latitude=54.583&longitude=-0.973&hourly=pressure_msl'
-                            f'&models=gfs_seamless&timezone=GMT&start_hour={valid:%Y-%m-%dT%H:00}&end_hour={valid:%Y-%m-%dT%H:00}'))
-        line += f' | Open-Meteo GFS {om["hourly"]["pressure_msl"][0]} hPa'
-    except Exception as e:
-        line += f' | Open-Meteo unavailable ({e})'
-    lo = np.unravel_index(np.argmin(p), p.shape)
-    line += f' | deepest low {p[lo]:.0f} hPa at {lats[lo[0]]:.1f}N {lons[lo[1]]:.1f}E'
-    print(line)
-    try:
-        wz = plt.imread(io.BytesIO(get(f'https://wetterzentrale.de/maps/GFSOPEU{run:%H}_{step}_1.png')), format='png')
-        mine = plt.imread(ours)
-        fig, axs = plt.subplots(1, 2, figsize=(16, 9.5), dpi=80)
-        axs[0].imshow(mine); axs[0].set_title('Ours (NOAA GFS)')
-        axs[1].imshow(wz); axs[1].set_title(f'Wetterzentrale GFS {run:%H}z +{step}h')
-        for a in axs:
-            a.axis('off')
-        fig.tight_layout()
-        fig.savefig(os.path.join(outdir, 'check', f'f{step:03d}.png'))
-        plt.close(fig)
-    except Exception as e:
-        print(f'  no Wetterzentrale image for comparison: {e}')
-
-
 def render_step(args):
     """One frame, start to finish, in a worker process: fetch the run's fields
     for the hour, draw the pressure chart, and the wave layer if NOAA has it. Returns the numbers main() needs, and the fields themselves
@@ -566,13 +534,12 @@ def render_all(run, steps, outdir):
 
 def main():
     outdir = sys.argv[1]
-    do_check = '--check' in sys.argv
     os.makedirs(outdir, exist_ok=True)
     steps = [0, 24, 72] if os.environ.get('QUICK') else DRAW_STEPS  # QUICK: a preview of the look
     run = latest_run()
     print(f'GFS run {run:%Y-%m-%d %H}z')
     # The workflow passes the run already published; nothing to do if it's this one.
-    if os.environ.get('PUBLISHED_RUN') == label(run) and not do_check and not os.environ.get('FORCE'):
+    if os.environ.get('PUBLISHED_RUN') == label(run) and not os.environ.get('FORCE'):
         print('Already published; nothing to do.')
         return
     done = render_all(run, steps, outdir)
@@ -585,10 +552,6 @@ def main():
               (f"waves up to {r['waves'][0]:.1f} m, {r['waves'][1]:.0f} s" if r['waves'] else f"no wave layer ({r['wave_error']})"))
         if r['fields'] is not None:
             frames.append(r['fields'])
-            if do_check and step in (0, 24, 72, 120):
-                f = r['fields']
-                check(run, step, f['prmsl'].values / 100.0, f['prmsl'].longitude.values, f['prmsl'].latitude.values,
-                      os.path.join(outdir, f'f{step:03d}.png'), outdir)
     # The data kept, the alerts and our own forecast go every 6 hours, as before.
     steps6 = [s for s in steps if s % 6 == 0]
     save_fields(run, steps6, frames, os.path.join(outdir, 'fields.npz'))

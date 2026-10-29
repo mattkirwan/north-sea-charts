@@ -1,2 +1,4 @@
 __pycache__/
 *.pyc
+# Pictures made by scripts/validate_frames.py --wetterzentrale: to look at, never committed
+validation/

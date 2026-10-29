@@ -17,10 +17,6 @@ on:
     - cron: '50 5,11,17,23 * * *'
   workflow_dispatch:
     inputs:
-      check:
-        description: 'Also make side-by-side checks against Wetterzentrale and print spot values'
-        type: boolean
-        default: false
       quick:
         description: 'Preview the look: draw 3 frames to the charts-preview branch only'
         type: boolean
@@ -67,7 +63,7 @@ jobs:
           PUBLISHED_RUN: ${{ steps.pub.outputs.run }}
           FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
           QUICK: ${{ inputs.quick && '1' || '' }}
-        run: python scripts/gfs_charts.py "$RUNNER_TEMP/charts" ${{ inputs.check && '--check' || '' }}
+        run: python scripts/gfs_charts.py "$RUNNER_TEMP/charts"
       - name: Publish to the charts branch
         if: steps.pub.outputs.go
         env:
