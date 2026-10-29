@@ -13,6 +13,8 @@
 'use strict';
 
 const Q = new URLSearchParams(location.search);
+// This deploy's commit (index.html's ?v=, stamped by deploy.yml), for feedback.
+const VERSION = new URL(document.currentScript.src).searchParams.get('v') || 'dev';
 const FR = Q.get('frames') || 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/frames/';
 const H = 3600e3, MPH = 2.236936, TICK = 8, MAX_KM_ACROSS = 36;
 const $ = (s) => document.querySelector(s);
@@ -796,7 +798,7 @@ const scrim = $('#scrim'), sheets = {};
 document.querySelectorAll('[data-sheet]').forEach((s) => { sheets[s.dataset.sheet] = s; });
 let sheetOn = null, sheetT = 0;
 const menuBtn = () => (docked ? columnEl : panelEl).querySelector('[data-menu]');
-const focusables = (s) => [...s.querySelectorAll('button, a[href]')].filter((b) => !b.closest('[hidden]'));
+const focusables = (s) => [...s.querySelectorAll('button, a[href], textarea')].filter((b) => !b.disabled && !b.closest('[hidden]'));
 // Shown or not, sliding there or (switching sheets, or with Reduce Motion) not.
 function reveal(el, on, slide) {
   if (!slide) el.style.transition = 'none';
@@ -836,7 +838,7 @@ document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click'
 document.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', () => {
   openSheet(b.dataset.back || 'menu', `[data-go="${b.closest('[data-sheet]').dataset.sheet}"]`);
 }));
-// Chart is where we are: back to it. The views still to come do nothing.
+// Chart is where we are: back to it.
 document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
   if (b.getAttribute('aria-current') === 'page') closeSheet();
 }));
@@ -884,6 +886,41 @@ function langMode(first) {
   s.querySelector('[data-lang-foot]').hidden = !first;
 }
 function askLang() { langMode(true); openSheet('language', '[aria-checked="true"]'); }
+
+// Feedback: sent as it is to the Worker that emails it (feedback/), with the
+// language, where the app is open and this deploy, and cleared once it's gone.
+const fb = $('#feedback'), fbText = $('#fbText'), fbSend = fb.querySelector('[type="submit"]'), fbState = $('#fbState');
+let fbSending = false;
+const fbReady = () => { fbSend.disabled = fbSending || !fbText.value.trim(); };
+fbText.addEventListener('input', () => { fbState.textContent = ''; fbReady(); });
+fb.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = fbText.value.trim();
+  if (!text || fbSending) return;
+  fbSending = true; fbReady(); fbState.textContent = tr('sending');
+  try {
+    const r = await fetch('/api/feedback', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, website: fb.elements.website.value, lang, surface: document.documentElement.dataset.surface, v: VERSION })
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    fbText.value = ''; fbState.textContent = tr('sent');
+  } catch {
+    fbState.textContent = tr(navigator.onLine === false ? 'sendOffline' : 'sendFailed');
+  }
+  fbSending = false; fbReady();
+});
+// With the keyboard up, the sheet sits on it rather than behind it, and the
+// box stays in sight.
+if (window.visualViewport) {
+  const kb = () => {
+    const v = visualViewport, h = Math.max(0, Math.round(innerHeight - v.height - v.offsetTop));
+    document.documentElement.style.setProperty('--kb', `${h}px`);
+    if (h && document.activeElement === fbText) fbText.scrollIntoView({ block: 'nearest' });
+  };
+  visualViewport.addEventListener('resize', kb);
+  visualViewport.addEventListener('scroll', kb);
+}
 
 // Focus stays in the sheet; Escape closes it.
 document.addEventListener('keydown', (e) => {

@@ -1,0 +1,16 @@
+# The feedback Worker (worker.mjs), deployed by .github/workflows/feedback.yml.
+# FEEDBACK_TO, the address it sends to, is a secret, set by that workflow.
+name = "northsea-feedback"
+main = "worker.mjs"
+compatibility_date = "2025-10-01"
+routes = [
+  { pattern = "northsea.surf/api/feedback", zone_name = "northsea.surf" },
+  { pattern = "staging.northsea.surf/api/feedback", zone_name = "northsea.surf" },
+]
+
+[vars]
+FROM = "feedback@northsea.surf"
+
+# Can send only to the account's verified destination addresses (Email Routing).
+[[send_email]]
+name = "MAIL"

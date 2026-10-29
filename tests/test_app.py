@@ -3,8 +3,8 @@ as served, reading a made-up run published the way chart_frames.py publishes
 one (manifest.json and gzipped frames, encoded by its own encode()), from a
 local server. It opens on the frame nearest now and draws it, the timeline
 moves the forecast on, the bands switch and are remembered, the menu opens
-and closes as a sheet (keyboard, scrim, grip) with the panel and hand
-settings in it, and without a manifest it says it's offline. On first open it
+and closes as a sheet (keyboard, scrim, grip) with feedback, and the panel
+and hand settings, in it, and without a manifest it says it's offline. On first open it
 asks which language, with the phone's own picked; Settings › Language changes
 it, and it's remembered. Nothing leaves the machine: requests to any
 other host (fonts, the usage stats) are dropped.
@@ -134,8 +134,8 @@ class App(unittest.TestCase):
         self.page.on('console', lambda m: m.type == 'error' and not self.dropped(m) and self.errors.append(m.text))
 
     def dropped(self, m):
-        # The requests aborted above, and the 404s some tests ask for.
-        return 'net::ERR_FAILED' in m.text or '404' in m.text
+        # The requests aborted above, and the 404s and 502s some tests ask for.
+        return 'net::ERR_FAILED' in m.text or '404' in m.text or '502' in m.text
 
     def tearDown(self):
         self.context.close()
@@ -250,32 +250,73 @@ class App(unittest.TestCase):
             close = self.box('#menu [data-close]')
             self.assertEqual((round(close['x']), round(close['y'])), (x, round(side['y'])), hand)
 
-    def test_menu_lists_the_views_then_settings_and_about(self):
+    def test_menu_lists_the_chart_feedback_then_settings_and_about(self):
         self.loaded()
         self.page.click('#panel [data-menu]')
         self.assertEqual(self.shown(), 'Menu')
         self.assertEqual(self.page.locator('#menu').get_attribute('role'), 'dialog')
-        items = self.page.locator('#menu .nss-menu-item')
         self.assertEqual([n.strip() for n in self.page.locator('#menu .nss-menu-name').all_text_contents()],
-                         ['Chart', 'Spots', 'Buoys', 'Reports', 'How far out', 'Settings', 'About'])
-        self.assertEqual(items.nth(0).get_attribute('aria-current'), 'page')
-        self.assertEqual(items.nth(0).get_attribute('aria-disabled'), None)
-        self.assertEqual(self.page.locator('#menu nav[aria-label="Views"] .nss-menu-item').count(), 5)
-        for i in range(1, 5):
-            self.assertEqual(items.nth(i).get_attribute('aria-disabled'), 'true')
-            self.assertEqual(items.nth(i).locator('.nss-soon').text_content(), 'SOON')
-        for i in (5, 6):
-            self.assertEqual(items.nth(i).get_attribute('aria-disabled'), None)
-            self.assertEqual(items.nth(i).locator('.nss-soon').count(), 0)
-        # A view still to come does nothing, and stays where focus can find it.
-        items.nth(1).focus()
-        self.page.keyboard.press('Enter')
-        items.nth(1).click(force=True)
-        self.assertEqual(self.shown(), 'Menu')
-        self.assertEqual(self.focused().startswith('Spots'), True)
+                         ['Chart', 'Feedback & ideas', 'Settings', 'About'])
+        self.assertEqual(self.page.locator('#menu .nss-soon').count(), 0)
+        self.assertEqual(self.page.locator('#menu [aria-disabled]').count(), 0)
+        chart = self.page.locator('#menu [data-view="chart"]')
+        self.assertEqual(chart.get_attribute('aria-current'), 'page')
         # Chart is where we are: choosing it closes the menu.
-        items.nth(0).click()
+        chart.click()
         self.closed()
+
+    # ---- Feedback --------------------------------------------------------------
+    def feedback_server(self, status=204):
+        """The feedback Worker, stood in for: what it was sent, and the answer given."""
+        sent = []
+        def answer(route):
+            sent.append(route.request.post_data_json)
+            route.fulfill(status=status)
+        self.page.route('**/api/feedback', answer)
+        return sent
+
+    def test_feedback_is_sent_and_cleared(self):
+        sent = self.feedback_server()
+        self.loaded()
+        self.page.click('#panel [data-menu]')
+        send = self.page.locator('#feedback [type="submit"]')
+        self.assertEqual(send.is_disabled(), True)                    # nothing to send yet
+        self.page.fill('#fbText', '   ')
+        self.assertEqual(send.is_disabled(), True)
+        self.page.fill('#fbText', 'A spot list for Northumberland, please')
+        send.click()
+        self.page.wait_for_function("document.querySelector('#fbState').textContent === 'Thanks, sent.'")
+        self.assertEqual(self.page.input_value('#fbText'), '')
+        self.assertEqual(send.is_disabled(), True)
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0]['text'], 'A spot list for Northumberland, please')
+        self.assertEqual((sent[0]['lang'], sent[0]['surface'], sent[0]['v'], sent[0]['website']), ('en', 'browser', 'dev', ''))
+        # The menu stays open, to see it went.
+        self.assertEqual(self.shown(), 'Menu')
+
+    def test_feedback_that_fails_stays_to_try_again(self):
+        sent = self.feedback_server(status=502)
+        self.loaded()
+        self.page.click('#panel [data-menu]')
+        self.page.fill('#fbText', 'Wind in knots')
+        self.page.click('#feedback [type="submit"]')
+        self.page.wait_for_function("document.querySelector('#fbState').textContent === \"Couldn't send. Try again.\"")
+        self.assertEqual(self.page.input_value('#fbText'), 'Wind in knots')
+        self.assertEqual(self.page.locator('#feedback [type="submit"]').is_disabled(), False)
+        self.assertEqual(len(sent), 1)
+
+    def test_feedback_in_the_language_chosen(self):
+        self.new_page(service_workers='block', first_open=True, locale='de-DE')
+        sent = self.feedback_server()
+        self.loaded()
+        self.page.keyboard.press('Escape')
+        self.closed()
+        self.page.click('#panel [data-menu]')
+        self.assertEqual(self.page.locator('#feedback .nss-menu-name').text_content(), 'Feedback & Ideen')
+        self.page.fill('#fbText', 'Danke!')
+        self.page.click('#feedback [type="submit"]')
+        self.page.wait_for_function("document.querySelector('#fbState').textContent === 'Danke, gesendet.'")
+        self.assertEqual(sent[0]['lang'], 'de')
 
     def test_timeline_spans_the_panel_but_the_menu_button(self):
         self.loaded()

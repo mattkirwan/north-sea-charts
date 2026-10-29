@@ -62,7 +62,7 @@ jobs:
         env:
           BRANCH: ${{ inputs.branch }}
         run: |
-          rsync -a --exclude .git --exclude .github --exclude CNAME ./ "$RUNNER_TEMP/site/"
+          rsync -a --exclude .git --exclude .github --exclude CNAME --exclude feedback ./ "$RUNNER_TEMP/site/"
           [ "$BRANCH" = production ] || printf '/*\n  X-Robots-Tag: noindex\n' > "$RUNNER_TEMP/site/_headers"
           # The app's scripts and styles by this deploy's commit (index.html's
           # ?v=dev), so a phone never pairs this page with the last deploy's.
