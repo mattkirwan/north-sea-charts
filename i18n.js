@@ -31,7 +31,7 @@ const LANGS = {
     windUnit: 'Wind, mph', heightUnit: 'Swell height, m', periodUnit: 'Swell period, s',
     isobars: 'Isobars, every 4 hPa', roundLows: 'Round lows', roundHighs: 'Round highs', keyOf: '{unit} key',
     low: 'L', high: 'H',
-    loading: 'Loading', offline: 'Offline', offlineRun: 'Offline · {run}', old: 'Run {n} h old', updated: 'Updated to {hh}z', made: 'Updated {when}', run: 'run {day} {hh}z',
+    loading: 'Loading', offline: 'Offline', offlineRun: 'Offline · {run}', old: 'Run {n} h old', updated: 'Updated to {hh}z', made: 'Updated {when}', run: '{day} {hh}z',
     tipSlide: 'Slide timeline', tipReset: 'Double-tap to reset'
   } },
   nb: { name: 'Norsk', places: 'Norge', tag: 'nb-NO', t: {
@@ -55,7 +55,7 @@ const LANGS = {
     ice: 'Havis', iceSub: 'Iskartet fra MET Norway, én gang i døgnet',
     windUnit: 'Vind, mph', heightUnit: 'Dønningshøyde, m', periodUnit: 'Dønningsperiode, s',
     isobars: 'Isobarer, hver 4. hPa', roundLows: 'Rundt lavtrykk', roundHighs: 'Rundt høytrykk', keyOf: 'Tegnforklaring: {unit}',
-    loading: 'Laster', offline: 'Frakoblet', offlineRun: 'Frakoblet · {run}', old: 'Kjøring {n} t gammel', updated: 'Oppdatert til {hh}z', made: 'Oppdatert {when}', run: 'kjøring {day} {hh}z',
+    loading: 'Laster', offline: 'Frakoblet', offlineRun: 'Frakoblet · {run}', old: 'Kjøring {n} t gammel', updated: 'Oppdatert til {hh}z', made: 'Oppdatert {when}', run: '{day} {hh}z',
     tipSlide: 'Dra i tidslinjen', tipReset: 'Dobbelttrykk for å tilbakestille'
   } },
   da: { name: 'Dansk', places: 'Danmark', tag: 'da-DK', t: {
@@ -79,7 +79,7 @@ const LANGS = {
     ice: 'Havis', iceSub: 'MET Norways iskort, én gang om dagen',
     windUnit: 'Vind, mph', heightUnit: 'Dønningshøjde, m', periodUnit: 'Dønningsperiode, s',
     isobars: 'Isobarer, hver 4. hPa', roundLows: 'Om lavtryk', roundHighs: 'Om højtryk', keyOf: 'Signaturforklaring: {unit}',
-    loading: 'Indlæser', offline: 'Offline', offlineRun: 'Offline · {run}', old: 'Kørsel {n} t gammel', updated: 'Opdateret til {hh}z', made: 'Opdateret {when}', run: 'kørsel {day} {hh}z',
+    loading: 'Indlæser', offline: 'Offline', offlineRun: 'Offline · {run}', old: 'Kørsel {n} t gammel', updated: 'Opdateret til {hh}z', made: 'Opdateret {when}', run: '{day} {hh}z',
     tipSlide: 'Træk i tidslinjen', tipReset: 'Dobbelttryk for at nulstille'
   } },
   de: { name: 'Deutsch', places: 'Deutschland', tag: 'de-DE', t: {
@@ -104,7 +104,7 @@ const LANGS = {
     windUnit: 'Wind, mph', heightUnit: 'Dünungshöhe, m', periodUnit: 'Dünungsperiode, s',
     isobars: 'Isobaren, alle 4 hPa', roundLows: 'Um Tiefs', roundHighs: 'Um Hochs', keyOf: 'Legende: {unit}',
     low: 'T', high: 'H',
-    loading: 'Lädt', offline: 'Offline', offlineRun: 'Offline · {run}', old: 'Lauf {n} h alt', updated: 'Aktualisiert auf {hh}z', made: 'Aktualisiert {when}', run: 'Lauf {day} {hh}z',
+    loading: 'Lädt', offline: 'Offline', offlineRun: 'Offline · {run}', old: 'Lauf {n} h alt', updated: 'Aktualisiert auf {hh}z', made: 'Aktualisiert {when}', run: '{day} {hh}z',
     tipSlide: 'Zeitleiste schieben', tipReset: 'Doppelt tippen zum Zurücksetzen'
   } },
   nl: { name: 'Nederlands', places: 'Nederland, België', tag: 'nl-NL', t: {
@@ -128,7 +128,7 @@ const LANGS = {
     ice: 'Zee-ijs', iceSub: 'De ijskaart van MET Norway, eenmaal per dag',
     windUnit: 'Wind, mph', heightUnit: 'Deininghoogte, m', periodUnit: 'Deiningperiode, s',
     isobars: 'Isobaren, om de 4 hPa', roundLows: 'Rond lagedruk', roundHighs: 'Rond hogedruk', keyOf: 'Legenda: {unit}',
-    loading: 'Laden', offline: 'Offline', offlineRun: 'Offline · {run}', old: 'Run {n} u oud', updated: 'Bijgewerkt naar {hh}z', made: 'Bijgewerkt {when}', run: 'run {day} {hh}z',
+    loading: 'Laden', offline: 'Offline', offlineRun: 'Offline · {run}', old: 'Run {n} u oud', updated: 'Bijgewerkt naar {hh}z', made: 'Bijgewerkt {when}', run: '{day} {hh}z',
     tipSlide: 'Schuif de tijdlijn', tipReset: 'Tik twee keer om te resetten'
   } },
   fr: { name: 'Français', places: 'France, Belgique', tag: 'fr-FR', t: {
@@ -153,7 +153,7 @@ const LANGS = {
     windUnit: 'Vent, mph', heightUnit: 'Hauteur de houle, m', periodUnit: 'Période de houle, s',
     isobars: 'Isobares, tous les 4 hPa', roundLows: 'Dépressions', roundHighs: 'Anticyclones', keyOf: 'Légende : {unit}',
     low: 'D', high: 'A',
-    loading: 'Chargement', offline: 'Hors ligne', offlineRun: 'Hors ligne · {run}', old: 'Run vieux de {n} h', updated: 'Mis à jour : {hh}z', made: 'Mis à jour {when}', run: 'run {day} {hh}z',
+    loading: 'Chargement', offline: 'Hors ligne', offlineRun: 'Hors ligne · {run}', old: 'Run vieux de {n} h', updated: 'Mis à jour : {hh}z', made: 'Mis à jour {when}', run: '{day} {hh}z',
     tipSlide: 'Faites glisser la frise', tipReset: 'Touchez deux fois pour revenir'
   } }
 };
