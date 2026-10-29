@@ -185,6 +185,9 @@
   .nss-tip .nss-icon { width: 16px; height: 16px; }
   /* On the open timeline, on top of the needle's arrow, centred over it. */
   .nss-timeline > .nss-tip { left: 50%; top: auto; bottom: calc(100% + 2px); translate: -50% 0; }
+  /* Floating, over the part of a control it points at (app.js places it): over the panel, under the menu. */
+  .nss-tip--float { position: fixed; z-index: 3; }
+  .nss-tip--float .nss-tip-notch { bottom: -4px; }
   .nss-vtimeline .nss-tip { left: auto; right: calc(100% + 14px); top: calc(50% - 11px); }
 
   .nss-flyout { animation: fly-in 180ms cubic-bezier(.2, .8, .2, 1); }
@@ -229,9 +232,9 @@
   <div class="keyslot" id="keyslot"><div>
     <div class="nss-keyrow">
       <div class="nss-key" data-key></div>
-      <div class="nss-switch" data-swell role="group" aria-label="Swell measure" data-t-label="swellMeasure">
+      <div class="nss-switch" data-swell data-hint-target="swell" role="group" aria-label="Swell measure" data-t-label="swellMeasure">
         <button type="button" data-var="height" aria-pressed="true" aria-label="Height" data-t="height" data-t-label="height">Height</button>
-        <button type="button" data-var="period" aria-pressed="false" aria-label="Period" data-t="period" data-t-label="period">Period</button>
+        <button type="button" data-var="period" data-hint-point="period" aria-pressed="false" aria-label="Period" data-t="period" data-t-label="period">Period</button>
       </div>
     </div>
   </div></div>
@@ -260,6 +263,9 @@
   </div>
 </div>
 
+<!-- A tip over part of a control, in either panel (app.js places it). -->
+<span class="nss-tip nss-tip--float" data-tip data-tip-float hidden></span>
+
 <!-- Docked: a narrow column on the right (or the left, for the left hand). -->
 <div class="nss-column" id="column" data-away>
   <div class="nss-column-time" id="colTime">
@@ -282,9 +288,9 @@
   <button type="button" class="nss-menu-btn" data-menu aria-label="Menu" data-t-label="menu" aria-haspopup="dialog" data-icon="menu"></button>
   <div class="nss-flyout" id="flyout" hidden>
     <div class="nss-key" data-key></div>
-    <div class="nss-switch" data-swell role="group" aria-label="Swell measure" data-t-label="swellMeasure">
+    <div class="nss-switch" data-swell data-hint-target="swell" role="group" aria-label="Swell measure" data-t-label="swellMeasure">
       <button type="button" data-var="height" aria-pressed="true" aria-label="Height" data-t-label="height" data-icon="height"></button>
-      <button type="button" data-var="period" aria-pressed="false" aria-label="Period" data-t-label="period" data-icon="period"></button>
+      <button type="button" data-var="period" data-hint-point="period" aria-pressed="false" aria-label="Period" data-t-label="period" data-icon="period"></button>
     </div>
   </div>
 </div>
@@ -328,6 +334,14 @@
       <button type="button" data-value="right" aria-pressed="true" data-t="right">Right</button>
     </div>
   </div>
+  <div class="nss-setting">
+    <span class="nss-menu-text"><span class="nss-menu-name" id="setTips" data-t="tips">Tips</span><span class="nss-menu-sub" data-t="tipsSub">Short hints beside the controls</span></span>
+    <div class="nss-switch" data-set="tips" role="group" aria-labelledby="setTips">
+      <button type="button" data-value="on" aria-pressed="true" data-t="tipsOn">On</button>
+      <button type="button" data-value="off" aria-pressed="false" data-t="tipsOff">Off</button>
+    </div>
+  </div>
+  <button type="button" class="nss-menu-item" data-tips-again><span class="nss-menu-text"><span class="nss-menu-name" data-t="tipsAgain">Show tips again</span><span class="nss-menu-sub" data-t="tipsAgainSub">From the start, one at a time</span></span></button>
   <!-- Language has a sheet of its own: more languages than a switch holds. -->
   <button type="button" class="nss-menu-item" data-go="language"><span class="nss-menu-text"><span class="nss-menu-name" data-t="language">Language</span><span class="nss-menu-sub" data-lang-name>English</span></span><span data-icon="chevron" data-icon-size="sm"></span></button>
 </div>

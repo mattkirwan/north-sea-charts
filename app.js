@@ -535,7 +535,7 @@ function resize() {
   cv.width = Math.round(W * dpr); cv.height = Math.round(Hs * dpr);
   if (!view) fitHome();
   clampView();
-  requestDraw();
+  requestDraw(); renderHint();
 }
 addEventListener('resize', resize);
 
@@ -781,6 +781,7 @@ function renderPanel() {
   const slot = columnEl.querySelector(`.nss-band[data-band="${band}"]`).parentNode;
   if (flyout.parentNode !== slot) slot.appendChild(flyout);
   flyout.hidden = false;
+  renderHint();
 }
 document.querySelectorAll('.nss-band').forEach((b) => b.addEventListener('click', () => {
   if (band === b.dataset.band) return;
@@ -804,7 +805,7 @@ function setDocked(d, first) {
 function setHand(h, first) {
   hand = h === 'left' ? 'left' : 'right'; store.set('nss.hand', hand);
   document.documentElement.dataset.hand = hand;
-  renderSettings();
+  renderSettings(); renderHint();
   if (!first) easeClamp();
 }
 // Only what's showing can be reached: the panel in use, or the menu over it.
@@ -845,7 +846,7 @@ function closeSheet() {
   menuBtn().focus({ preventScroll: true });
 }
 function renderSettings() {
-  const on = { panel: docked ? 'side' : 'bottom', hand };
+  const on = { panel: docked ? 'side' : 'bottom', hand, tips: hs.tipsOn ? 'on' : 'off' };
   document.querySelectorAll('[data-set]').forEach((sw) => sw.querySelectorAll('button').forEach((b) => {
     b.setAttribute('aria-pressed', String(b.dataset.value === on[sw.dataset.set]));
   }));
@@ -866,6 +867,7 @@ document.querySelectorAll('[data-set]').forEach((sw) => sw.addEventListener('cli
   if (!b) return;
   if (sw.dataset.set === 'panel' && docked !== (b.dataset.value === 'side')) setDocked(b.dataset.value === 'side');
   if (sw.dataset.set === 'hand' && hand !== b.dataset.value) setHand(b.dataset.value);
+  if (sw.dataset.set === 'tips' && hs.tipsOn !== (b.dataset.value === 'on')) setTips(b.dataset.value === 'on');
 }));
 // Language: picked at once, everything in the new one. From Settings the
 // sheet stays, to go back from; on first open, picking one is the answer.
@@ -1251,17 +1253,37 @@ const chainOf = (h) => (h.when.startsWith('after:') ? chainOf(hintById[h.when.sl
 let hintOn = null, hintFading = false, hintT = 0, hintGoT = 0, tagDown = null;
 function hintMet(h) {
   if (h.when.startsWith('after:')) return hs.seen[h.when.slice(6)] === 'retired';
+  if (h.when.startsWith('measure:')) return band === 'swell' && swellVar === h.when.slice(8);
   return h.when === 'first-load' && !!man;
 }
 const hintDue = (h) => h.type === 'tip' && hs.tipsOn && !hs.seen[h.id] && (!hintSpent || hintSpent === chainOf(h)) && hintMet(h);
 const hintBusy = () => !!(ptrs.size || drag || tl.moving || sheetOn);
+const floatTag = $('[data-tip-float]');
+// The control a hint is about, in the panel showing.
+const hintEl = (h) => [...document.querySelectorAll(`[data-hint-target="${h.target}"]`)].find((el) => !el.closest('[data-away], [hidden]'));
 function renderHint() {
+  // Gone from under it (another band, say): put back for later, not seen.
+  if (hintOn && !hintMet(hintOn)) { hintOn = null; clearTimeout(hintGoT); }
+  const el = hintOn && hintEl(hintOn);
+  // In its control (the timeline's, on the needle's arrow)...
   document.querySelectorAll('[data-hint-target] [data-tip]').forEach((tag) => {
-    const el = tag.closest('[data-hint-target]');
-    const on = !!hintOn && el.dataset.hintTarget === hintOn.target && !el.closest('[data-away]');
+    const on = !!el && !hintOn.point && tag.closest('[data-hint-target]') === el;
     tag.hidden = !on;
     if (on) { tag.innerHTML = icon(hintOn.icon) + tr(hintOn.label); tag.toggleAttribute('data-fading', hintFading); }
   });
+  // ...or floating over the part it points at, notched to it, kept on the
+  // screen and, docked, off the column.
+  const pt = el && hintOn.point && el.querySelector(`[data-hint-point="${hintOn.point}"]`);
+  floatTag.hidden = !pt;
+  if (!pt) return;
+  floatTag.innerHTML = icon(hintOn.icon) + tr(hintOn.label) + '<span class="nss-tip-notch"></span>';
+  floatTag.toggleAttribute('data-fading', hintFading);
+  const r = pt.getBoundingClientRect(), mid = r.left + r.width / 2, w = floatTag.offsetWidth;
+  let lo = 12, hi = innerWidth - 12;
+  if (docked) { const c = columnEl.getBoundingClientRect(); if (mid < c.left) hi = c.left - 12; else lo = c.right + 12; }
+  const x = Math.max(lo, Math.min(hi - w, mid - w / 2));
+  floatTag.style.left = `${x}px`; floatTag.style.top = `${r.top - floatTag.offsetHeight - 10}px`;
+  floatTag.lastChild.style.left = `${mid - x - 4}px`;
 }
 // Quiet from now: the next hint, if one's due, once it's lasted.
 function hintWait() { clearTimeout(hintT); hintT = setTimeout(nextHint, HINT_IDLE); }
@@ -1291,9 +1313,23 @@ function hintTouched() {
 for (const h of HINTS) {
   (heard[h.doneEvent] ||= []).push(() => {
     if (hintOn === h) retireHint();
-    else if (!hs.seen[h.id] && hintMet(h)) { hs.seen[h.id] = 'retired'; store.set('nss.hints.v1', hs); }
+    else if (!hs.seen[h.id]) { hs.seen[h.id] = 'retired'; store.set('nss.hints.v1', hs); }
   });
 }
+// Menu › Settings: tips off (every one gone, and none new), on, or all of
+// them again from the start, the next one once the menu's closed.
+function setTips(on) {
+  hs.tipsOn = on;
+  if (!on) { for (const h of HINTS) hs.seen[h.id] = 'retired'; hintOn = null; clearTimeout(hintGoT); renderHint(); }
+  store.set('nss.hints.v1', hs); renderSettings();
+}
+const tipsAgain = $('[data-tips-again]');
+tipsAgain.addEventListener('click', () => {
+  hs.seen = {}; hs.tipsOn = true; hintSpent = null;
+  try { sessionStorage.removeItem('nss.hints.shown'); } catch {}
+  store.set('nss.hints.v1', hs); renderSettings();
+  tipsAgain.querySelector('.nss-menu-sub').textContent = tr('tipsAgainDone');
+});
 for (const k of ['pointerdown', 'wheel', 'keydown']) addEventListener(k, hintTouched, { capture: true, passive: true });
 // Tapped (not dragged from): gone.
 document.querySelectorAll('[data-tip]').forEach((tag) => tag.addEventListener('pointerdown', (e) => {

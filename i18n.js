@@ -18,7 +18,7 @@ const LANGS = {
     chart: 'Chart', chartSub: 'Pressure, wind and swell',
     feedback: 'Feedback & ideas', feedbackSub: "We want to build a tool that's tailored for your needs as a North Sea surfer. What's missing? What's wrong? Any ideas you'd love to see? Just drop it below (put a contact if you like to stay updated) and hit send.",
     send: 'Send', sending: 'Sending…', sent: 'Thanks, sent.', sendFailed: "Couldn't send. Try again.", sendOffline: "No signal: try again when you're back online.",
-    settings: 'Settings', settingsSub: 'Panel, hand, language',
+    settings: 'Settings', settingsSub: 'Panel, hand, language, tips',
     about: 'About', aboutSub: 'The app and the data',
     panel: 'Panel', panelSub: 'Along the bottom or a narrow sidebar', bottom: 'Bottom', side: 'Side',
     hand: 'Hand', handSub: 'Which side the menu and sidebar sit', left: 'Left', right: 'Right',
@@ -32,7 +32,10 @@ const LANGS = {
     isobars: 'Isobars, every 4 hPa', roundLows: 'Round lows', roundHighs: 'Round highs', keyOf: '{unit} key',
     low: 'L', high: 'H',
     loading: 'Loading', offline: 'Offline', offlineRun: 'Offline · {run}', old: 'Run {n} h old', updated: 'Updated to {hh}z', made: 'Updated {when}', run: '{day} {hh}z',
-    tipSlide: 'Slide timeline', tipReset: 'Double-tap to reset'
+    tipSlide: 'Slide timeline', tipReset: 'Double-tap to reset',
+    tipPeriod: 'Tap for wave period',
+    tips: 'Tips', tipsSub: 'Short hints beside the controls', tipsOn: 'On', tipsOff: 'Off',
+    tipsAgain: 'Show tips again', tipsAgainSub: 'From the start, one at a time', tipsAgainDone: "They'll show again"
   } },
   nb: { name: 'Norsk', places: 'Norge', tag: 'nb-NO', t: {
     chartLabel: 'Værkart over Nordsjøen og havene rundt. Dra for å flytte kartet, knip for å zoome, dobbelttrykk for å zoome inn.',
@@ -43,7 +46,7 @@ const LANGS = {
     chart: 'Kart', chartSub: 'Lufttrykk, vind og dønninger',
     feedback: 'Tilbakemelding og ideer', feedbackSub: 'Vi vil lage et verktøy som er skreddersydd for deg som surfer i Nordsjøen. Hva mangler? Hva er feil? Har du ideer du gjerne vil se? Skriv det nedenfor (legg gjerne ved en kontakt hvis du vil holde deg oppdatert) og trykk send.',
     send: 'Send', sending: 'Sender …', sent: 'Takk, sendt.', sendFailed: 'Kunne ikke sende. Prøv igjen.', sendOffline: 'Ingen dekning: prøv igjen når du er på nett.',
-    settings: 'Innstillinger', settingsSub: 'Panel, hånd, språk',
+    settings: 'Innstillinger', settingsSub: 'Panel, hånd, språk, tips',
     about: 'Om', aboutSub: 'Appen og dataene',
     panel: 'Panel', panelSub: 'Nederst eller som et smalt sidefelt', bottom: 'Bunn', side: 'Side',
     hand: 'Hånd', handSub: 'Hvilken side menyen og sidefeltet er på', left: 'Venstre', right: 'Høyre',
@@ -57,7 +60,10 @@ const LANGS = {
     isobars: 'Isobarer, hver 4. hPa', roundLows: 'Rundt lavtrykk', roundHighs: 'Rundt høytrykk', keyOf: 'Tegnforklaring: {unit}',
     low: 'L', high: 'H',
     loading: 'Laster', offline: 'Frakoblet', offlineRun: 'Frakoblet · {run}', old: 'Kjøring {n} t gammel', updated: 'Oppdatert til {hh}z', made: 'Oppdatert {when}', run: '{day} {hh}z',
-    tipSlide: 'Dra i tidslinjen', tipReset: 'Dobbelttrykk for å tilbakestille'
+    tipSlide: 'Dra i tidslinjen', tipReset: 'Dobbelttrykk for å tilbakestille',
+    tipPeriod: 'Trykk for bølgeperiode',
+    tips: 'Tips', tipsSub: 'Korte hint ved kontrollene', tipsOn: 'På', tipsOff: 'Av',
+    tipsAgain: 'Vis tipsene igjen', tipsAgainSub: 'Fra begynnelsen, ett om gangen', tipsAgainDone: 'De vises igjen'
   } },
   da: { name: 'Dansk', places: 'Danmark', tag: 'da-DK', t: {
     chartLabel: 'Vejrkort over Nordsøen og havene omkring den. Træk for at flytte kortet, knib for at zoome, dobbelttryk for at zoome ind.',
@@ -68,7 +74,7 @@ const LANGS = {
     chart: 'Kort', chartSub: 'Lufttryk, vind og dønninger',
     feedback: 'Feedback og idéer', feedbackSub: 'Vi vil bygge et værktøj, der er skræddersyet til dig som surfer ved Nordsøen. Hvad mangler? Hvad er galt? Har du idéer, du gerne vil se? Skriv det herunder (tilføj gerne en kontakt, hvis du vil holdes opdateret), og tryk send.',
     send: 'Send', sending: 'Sender …', sent: 'Tak, sendt.', sendFailed: 'Kunne ikke sende. Prøv igen.', sendOffline: 'Ingen forbindelse: prøv igen, når du er online.',
-    settings: 'Indstillinger', settingsSub: 'Panel, hånd, sprog',
+    settings: 'Indstillinger', settingsSub: 'Panel, hånd, sprog, tips',
     about: 'Om', aboutSub: 'Appen og dataene',
     panel: 'Panel', panelSub: 'I bunden eller som en smal sidebjælke', bottom: 'Bund', side: 'Side',
     hand: 'Hånd', handSub: 'Hvilken side menuen og sidebjælken sidder i', left: 'Venstre', right: 'Højre',
@@ -82,7 +88,10 @@ const LANGS = {
     isobars: 'Isobarer, hver 4. hPa', roundLows: 'Om lavtryk', roundHighs: 'Om højtryk', keyOf: 'Signaturforklaring: {unit}',
     low: 'L', high: 'H',
     loading: 'Indlæser', offline: 'Offline', offlineRun: 'Offline · {run}', old: 'Kørsel {n} t gammel', updated: 'Opdateret til {hh}z', made: 'Opdateret {when}', run: '{day} {hh}z',
-    tipSlide: 'Træk i tidslinjen', tipReset: 'Dobbelttryk for at nulstille'
+    tipSlide: 'Træk i tidslinjen', tipReset: 'Dobbelttryk for at nulstille',
+    tipPeriod: 'Tryk for bølgeperiode',
+    tips: 'Tips', tipsSub: 'Korte hints ved knapperne', tipsOn: 'Til', tipsOff: 'Fra',
+    tipsAgain: 'Vis tips igen', tipsAgainSub: 'Fra begyndelsen, ét ad gangen', tipsAgainDone: 'De vises igen'
   } },
   de: { name: 'Deutsch', places: 'Deutschland', tag: 'de-DE', t: {
     chartLabel: 'Wetterkarte der Nordsee und der Meere ringsum. Ziehen verschiebt die Karte, mit zwei Fingern zoomen, doppelt tippen vergrößert.',
@@ -93,7 +102,7 @@ const LANGS = {
     chart: 'Karte', chartSub: 'Luftdruck, Wind und Dünung',
     feedback: 'Feedback & Ideen', feedbackSub: 'Wir wollen ein Werkzeug bauen, das genau auf dich als Nordsee-Surfer zugeschnitten ist. Was fehlt? Was stimmt nicht? Hast du Ideen, die du gern sehen würdest? Schreib es einfach unten hinein (gern mit Kontakt, wenn du auf dem Laufenden bleiben willst) und drück auf Senden.',
     send: 'Senden', sending: 'Wird gesendet …', sent: 'Danke, gesendet.', sendFailed: 'Senden fehlgeschlagen. Versuch es noch einmal.', sendOffline: 'Kein Netz: versuch es noch einmal, wenn du online bist.',
-    settings: 'Einstellungen', settingsSub: 'Leiste, Hand, Sprache',
+    settings: 'Einstellungen', settingsSub: 'Leiste, Hand, Sprache, Tipps',
     about: 'Über', aboutSub: 'Die App und die Daten',
     panel: 'Leiste', panelSub: 'Unten oder als schmale Seitenleiste', bottom: 'Unten', side: 'Seite',
     hand: 'Hand', handSub: 'Auf welcher Seite Menü und Seitenleiste sitzen', left: 'Links', right: 'Rechts',
@@ -107,7 +116,10 @@ const LANGS = {
     isobars: 'Isobaren, alle 4 hPa', roundLows: 'Um Tiefs', roundHighs: 'Um Hochs', keyOf: 'Legende: {unit}',
     low: 'T', high: 'H',
     loading: 'Lädt', offline: 'Offline', offlineRun: 'Offline · {run}', old: 'Lauf {n} h alt', updated: 'Aktualisiert auf {hh}z', made: 'Aktualisiert {when}', run: '{day} {hh}z',
-    tipSlide: 'Zeitleiste schieben', tipReset: 'Doppelt tippen zum Zurücksetzen'
+    tipSlide: 'Zeitleiste schieben', tipReset: 'Doppelt tippen zum Zurücksetzen',
+    tipPeriod: 'Für Wellenperiode tippen',
+    tips: 'Tipps', tipsSub: 'Kurze Hinweise neben den Bedienelementen', tipsOn: 'An', tipsOff: 'Aus',
+    tipsAgain: 'Tipps erneut zeigen', tipsAgainSub: 'Von vorn, einer nach dem anderen', tipsAgainDone: 'Sie erscheinen wieder'
   } },
   nl: { name: 'Nederlands', places: 'Nederland, België', tag: 'nl-NL', t: {
     chartLabel: 'Weerkaart van de Noordzee en de zeeën eromheen. Sleep om de kaart te verschuiven, knijp om te zoomen, tik twee keer om in te zoomen.',
@@ -118,7 +130,7 @@ const LANGS = {
     chart: 'Kaart', chartSub: 'Luchtdruk, wind en deining',
     feedback: 'Feedback & ideeën', feedbackSub: 'We willen een tool bouwen die is afgestemd op jou als Noordzeesurfer. Wat ontbreekt er? Wat klopt er niet? Heb je ideeën die je graag zou zien? Zet het hieronder (met een contactgegeven als je op de hoogte wilt blijven) en druk op versturen.',
     send: 'Versturen', sending: 'Versturen …', sent: 'Bedankt, verstuurd.', sendFailed: 'Versturen mislukt. Probeer het opnieuw.', sendOffline: 'Geen verbinding: probeer het opnieuw als je online bent.',
-    settings: 'Instellingen', settingsSub: 'Paneel, hand, taal',
+    settings: 'Instellingen', settingsSub: 'Paneel, hand, taal, tips',
     about: 'Over', aboutSub: 'De app en de gegevens',
     panel: 'Paneel', panelSub: 'Onderaan of als smalle zijbalk', bottom: 'Onder', side: 'Zijkant',
     hand: 'Hand', handSub: 'Aan welke kant menu en zijbalk staan', left: 'Links', right: 'Rechts',
@@ -132,7 +144,10 @@ const LANGS = {
     isobars: 'Isobaren, om de 4 hPa', roundLows: 'Rond lagedruk', roundHighs: 'Rond hogedruk', keyOf: 'Legenda: {unit}',
     low: 'L', high: 'H',
     loading: 'Laden', offline: 'Offline', offlineRun: 'Offline · {run}', old: 'Run {n} u oud', updated: 'Bijgewerkt naar {hh}z', made: 'Bijgewerkt {when}', run: '{day} {hh}z',
-    tipSlide: 'Schuif de tijdlijn', tipReset: 'Tik twee keer om te resetten'
+    tipSlide: 'Schuif de tijdlijn', tipReset: 'Tik twee keer om te resetten',
+    tipPeriod: 'Tik voor golfperiode',
+    tips: 'Tips', tipsSub: 'Korte hints bij de knoppen', tipsOn: 'Aan', tipsOff: 'Uit',
+    tipsAgain: 'Tips opnieuw tonen', tipsAgainSub: 'Van voren af aan, één voor één', tipsAgainDone: 'Ze verschijnen weer'
   } },
   fr: { name: 'Français', places: 'France, Belgique', tag: 'fr-FR', t: {
     chartLabel: 'Carte météo de la mer du Nord et des mers alentour. Faites glisser pour déplacer la carte, pincez pour zoomer, touchez deux fois pour agrandir.',
@@ -143,7 +158,7 @@ const LANGS = {
     chart: 'Carte', chartSub: 'Pression, vent et houle',
     feedback: 'Avis & idées', feedbackSub: "Nous voulons créer un outil taillé pour vous, surfeur de la mer du Nord. Que manque-t-il ? Qu'est-ce qui ne va pas ? Des idées que vous aimeriez voir ? Écrivez-les ci-dessous (laissez un contact si vous voulez être tenu au courant) et appuyez sur Envoyer.",
     send: 'Envoyer', sending: 'Envoi…', sent: 'Merci, envoyé.', sendFailed: "Échec de l'envoi. Réessayez.", sendOffline: 'Pas de réseau : réessayez une fois en ligne.',
-    settings: 'Réglages', settingsSub: 'Panneau, main, langue',
+    settings: 'Réglages', settingsSub: 'Panneau, main, langue, astuces',
     about: 'À propos', aboutSub: "L'appli et les données",
     panel: 'Panneau', panelSub: 'En bas ou en barre latérale étroite', bottom: 'En bas', side: 'Côté',
     hand: 'Main', handSub: 'De quel côté se trouvent le menu et la barre', left: 'Gauche', right: 'Droite',
@@ -157,6 +172,9 @@ const LANGS = {
     isobars: 'Isobares, tous les 4 hPa', roundLows: 'Dépressions', roundHighs: 'Anticyclones', keyOf: 'Légende : {unit}',
     low: 'D', high: 'A',
     loading: 'Chargement', offline: 'Hors ligne', offlineRun: 'Hors ligne · {run}', old: 'Run vieux de {n} h', updated: 'Mis à jour : {hh}z', made: 'Mis à jour {when}', run: '{day} {hh}z',
-    tipSlide: 'Faites glisser la frise', tipReset: 'Touchez deux fois pour revenir'
+    tipSlide: 'Faites glisser la frise', tipReset: 'Touchez deux fois pour revenir',
+    tipPeriod: 'Touchez pour la période',
+    tips: 'Astuces', tipsSub: 'De courtes aides près des commandes', tipsOn: 'Oui', tipsOff: 'Non',
+    tipsAgain: 'Revoir les astuces', tipsAgainSub: 'Depuis le début, une à la fois', tipsAgainDone: 'Elles reviendront'
   } }
 };
