@@ -55,6 +55,7 @@ const LANGS = {
     ice: 'Havis', iceSub: 'Iskartet fra MET Norway, én gang i døgnet',
     windUnit: 'Vind, mph', heightUnit: 'Dønningshøyde, m', periodUnit: 'Dønningsperiode, s',
     isobars: 'Isobarer, hver 4. hPa', roundLows: 'Rundt lavtrykk', roundHighs: 'Rundt høytrykk', keyOf: 'Tegnforklaring: {unit}',
+    low: 'L', high: 'H',
     loading: 'Laster', offline: 'Frakoblet', offlineRun: 'Frakoblet · {run}', old: 'Kjøring {n} t gammel', updated: 'Oppdatert til {hh}z', made: 'Oppdatert {when}', run: '{day} {hh}z',
     tipSlide: 'Dra i tidslinjen', tipReset: 'Dobbelttrykk for å tilbakestille'
   } },
@@ -79,6 +80,7 @@ const LANGS = {
     ice: 'Havis', iceSub: 'MET Norways iskort, én gang om dagen',
     windUnit: 'Vind, mph', heightUnit: 'Dønningshøjde, m', periodUnit: 'Dønningsperiode, s',
     isobars: 'Isobarer, hver 4. hPa', roundLows: 'Om lavtryk', roundHighs: 'Om højtryk', keyOf: 'Signaturforklaring: {unit}',
+    low: 'L', high: 'H',
     loading: 'Indlæser', offline: 'Offline', offlineRun: 'Offline · {run}', old: 'Kørsel {n} t gammel', updated: 'Opdateret til {hh}z', made: 'Opdateret {when}', run: '{day} {hh}z',
     tipSlide: 'Træk i tidslinjen', tipReset: 'Dobbelttryk for at nulstille'
   } },
@@ -128,6 +130,7 @@ const LANGS = {
     ice: 'Zee-ijs', iceSub: 'De ijskaart van MET Norway, eenmaal per dag',
     windUnit: 'Wind, mph', heightUnit: 'Deininghoogte, m', periodUnit: 'Deiningperiode, s',
     isobars: 'Isobaren, om de 4 hPa', roundLows: 'Rond lagedruk', roundHighs: 'Rond hogedruk', keyOf: 'Legenda: {unit}',
+    low: 'L', high: 'H',
     loading: 'Laden', offline: 'Offline', offlineRun: 'Offline · {run}', old: 'Run {n} u oud', updated: 'Bijgewerkt naar {hh}z', made: 'Bijgewerkt {when}', run: '{day} {hh}z',
     tipSlide: 'Schuif de tijdlijn', tipReset: 'Tik twee keer om te resetten'
   } },
