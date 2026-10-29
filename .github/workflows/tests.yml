@@ -7,13 +7,11 @@
 # beyond installing. Also that every job's pinned requirements still install
 # on the jobs' Python.
 #
-# On every pull request: the check to require before merging to main. Not
+# On pull requests only: the check to require before merging to main. Not
 # run again on the merge: staging (staging.yml) deploys straight away.
 name: Tests
 
 on:
-  push:
-    branches-ignore: [main]
   pull_request:
   workflow_dispatch:
 
