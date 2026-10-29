@@ -193,6 +193,15 @@
   .nss-menu-btn, .nss-menu-item, .nss-setting { position: relative; }
   .nss-new-tag, .nss-hint-card { position: fixed; }
   .nss-hint-actions:has([data-show-me][hidden]) [data-got-it] { flex: 1; }
+  /* The Guide: the chart dimmed under the panel, the panel dimmed in it but
+     for the lit control, and the step card fixed beside it (app.js). */
+  .nss-menu-tag { flex: 0 0 auto; font-family: var(--font-mono); font-size: 9px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; color: var(--ui-ink-muted);
+    border: 1px solid var(--ui-track); border-radius: var(--radius-xs); padding: 3px 4px; }
+  .nss-guide-scrim--chart { position: fixed; z-index: 1; }
+  .nss-guide-card { position: fixed; }
+  .nss-guide-card .nss-tryit > span:last-child { flex: 1; }
+  .nss-column[data-guide] .nss-flyout:not(.nss-spot) { opacity: 0.38; }
+  .nss-flyout.nss-spot { position: absolute; }
   .nss-vtimeline .nss-tip { left: auto; right: calc(100% + 14px); top: calc(50% - 11px); }
 
   .nss-flyout { animation: fly-in 180ms cubic-bezier(.2, .8, .2, 1); }
@@ -229,12 +238,12 @@
 </style>
 </head>
 <body>
-<canvas id="chart" aria-label="Weather chart of the North Sea and the seas round it. Drag to move the map, pinch to zoom, double-tap to zoom in." data-t-label="chartLabel" role="img"></canvas>
+<canvas id="chart" data-hint-target="chart" aria-label="Weather chart of the North Sea and the seas round it. Drag to move the map, pinch to zoom, double-tap to zoom in." data-t-label="chartLabel" role="img"></canvas>
 
 <!-- Open: full width along the bottom. Each word on the page carries its key
      in i18n.js: data-t for its text, data-t-label for its aria-label. -->
 <div class="nss-panel" id="panel">
-  <div class="keyslot" id="keyslot"><div>
+  <div class="keyslot" id="keyslot" data-hint-target="key"><div>
     <div class="nss-keyrow">
       <div class="nss-key" data-key></div>
       <div class="nss-switch" data-swell data-hint-target="swell" role="group" aria-label="Swell measure" data-t-label="swellMeasure">
@@ -243,7 +252,7 @@
       </div>
     </div>
   </div></div>
-  <div class="nss-bands" role="group" aria-label="Chart layer" data-t-label="layer">
+  <div class="nss-bands" data-hint-target="bands" role="group" aria-label="Chart layer" data-t-label="layer">
     <button type="button" class="nss-band" data-band="pressure" aria-pressed="true" aria-label="Pressure" data-t="pressure" data-t-label="pressure">Pressure</button>
     <button type="button" class="nss-band" data-band="wind" aria-pressed="false" aria-label="Wind" data-t="wind" data-t-label="wind">Wind</button>
     <button type="button" class="nss-band" data-band="swell" aria-pressed="false" aria-label="Swell" data-t="swell" data-t-label="swell">Swell</button>
@@ -270,6 +279,18 @@
 
 <!-- A tip over part of a control, in either panel (app.js places it). -->
 <span class="nss-tip nss-tip--float" data-tip data-tip-float hidden></span>
+<!-- The Guide's step card, and the scrim over the chart (app.js adds one to each panel). -->
+<div class="nss-guide-scrim nss-guide-scrim--chart" data-guide-scrim hidden></div>
+<div class="nss-guide-card" data-guide-card role="dialog" hidden>
+  <div class="nss-guide-head"><span class="nss-guide-ticks" aria-hidden="true"></span><span class="nss-guide-count" data-guide-count></span><button type="button" class="nss-guide-close" data-guide-close aria-label="Close guide" data-t-label="closeGuide" data-icon="close"></button></div>
+  <div class="nss-guide-content">
+    <span class="nss-guide-title" data-guide-title></span>
+    <span class="nss-guide-body" data-guide-body></span>
+    <div class="nss-tryit" data-guide-try><span class="nss-tryit-tag"></span><span></span></div>
+    <div class="nss-hint-actions"><button type="button" class="nss-btn" data-guide-back data-t="backStep">Back</button><button type="button" class="nss-btn nss-btn--primary" data-guide-next></button></div>
+  </div>
+  <span class="nss-card-notch" aria-hidden="true"></span>
+</div>
 <!-- A new feature's tag, and the card it opens. -->
 <button type="button" class="nss-new-tag" data-new-tag hidden></button>
 <div class="nss-hint-card" data-hint-card role="dialog" hidden>
@@ -294,13 +315,13 @@
     <span class="nss-vtimeline-arrow"></span>
     <span class="nss-tip" data-tip hidden></span>
   </div>
-  <div class="nss-bands" role="group" aria-label="Chart layer" data-t-label="layer">
+  <div class="nss-bands" data-hint-target="bands" role="group" aria-label="Chart layer" data-t-label="layer">
     <div class="nss-band-slot"><button type="button" class="nss-band" data-band="pressure" aria-pressed="true" aria-label="Pressure" data-t-label="pressure" data-icon="pressure"></button></div>
     <div class="nss-band-slot"><button type="button" class="nss-band" data-band="wind" aria-pressed="false" aria-label="Wind" data-t-label="wind" data-icon="wind"></button></div>
     <div class="nss-band-slot"><button type="button" class="nss-band" data-band="swell" aria-pressed="false" aria-label="Swell" data-t-label="swell" data-icon="swell"></button></div>
   </div>
   <button type="button" class="nss-menu-btn" data-menu data-hint-target="menu-button" aria-label="Menu" data-t-label="menu" aria-haspopup="dialog" data-icon="menu"></button>
-  <div class="nss-flyout" id="flyout" hidden>
+  <div class="nss-flyout" id="flyout" data-hint-target="key" hidden>
     <div class="nss-key" data-key></div>
     <div class="nss-switch" data-swell data-hint-target="swell" role="group" aria-label="Swell measure" data-t-label="swellMeasure">
       <button type="button" data-var="height" aria-pressed="true" aria-label="Height" data-t-label="height" data-icon="height"></button>
@@ -327,6 +348,7 @@
   <hr class="nss-menu-rule">
   <ul class="nss-menu-list">
     <li><button type="button" class="nss-menu-item" data-go="settings" data-hint-target="menu.settings"><span class="nss-menu-text"><span class="nss-menu-name" data-t="settings">Settings</span><span class="nss-menu-sub" data-t="settingsSub">Panel, hand, language</span></span><span data-icon="chevron" data-icon-size="sm"></span></button></li>
+    <li><button type="button" class="nss-menu-item" data-guide><span class="nss-menu-text"><span class="nss-menu-name" data-t="guide">Guide</span><span class="nss-menu-sub" data-t="guideSub">A minute round the chart, one control at a time</span></span><span class="nss-menu-tag" data-t="guideSteps">5 STEPS</span></button></li>
     <li><button type="button" class="nss-menu-item" data-go="about"><span class="nss-menu-text"><span class="nss-menu-name" data-t="about">About</span><span class="nss-menu-sub" data-t="aboutSub">The app and the data</span></span><span data-icon="chevron" data-icon-size="sm"></span></button></li>
   </ul>
   <div class="nss-sheet-foot"><button type="button" class="nss-menu-btn" data-close aria-label="Close menu" data-t-label="closeMenu" data-icon="close"></button></div>
