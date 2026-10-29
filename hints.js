@@ -9,12 +9,23 @@
    and goes for good when its doneEvent fires (app.js emits them), when it's
    tapped, or after a while untouched. With a `point` (a data-hint-point
    inside the control) it floats over that part, notched to it, rather than
-   sitting in the control. Registry order is the order they're offered in:
-   the one for a control just used first, as only using it makes it due. */
+   sitting in the control.
+
+   A new feature (type 'new') lights its control and the way to it through
+   the menu (`path`, data-hint-targets, outermost first), and once shows a
+   tag that opens a card (kicker, title, body; Show me runs `action`, in
+   app.js). Only for people who first came before `since`, the day it was
+   merged to main. Ignored, it stays lit; used, it's gone.
+
+   Registry order is the order they're offered in: the tip for a control
+   just used first, as only using it makes it due; then the others; then new
+   features, oldest first. */
 'use strict';
 
 const HINTS = [
   { id: 'tip.swell.period', type: 'tip', target: 'swell', point: 'period', when: 'measure:height', label: 'tipPeriod', icon: 'period', doneEvent: 'swell.measure' },
   { id: 'tip.timeline.slide', type: 'tip', target: 'timeline', when: 'first-load', label: 'tipSlide', icon: 'slide', doneEvent: 'timeline.drag' },
-  { id: 'tip.timeline.reset', type: 'tip', target: 'timeline', when: 'after:tip.timeline.slide', label: 'tipReset', icon: 'reset', doneEvent: 'timeline.reset' }
+  { id: 'tip.timeline.reset', type: 'tip', target: 'timeline', when: 'after:tip.timeline.slide', label: 'tipReset', icon: 'reset', doneEvent: 'timeline.reset' },
+  { id: 'new.panel.side', type: 'new', target: 'menu-button', path: ['menu-button', 'menu.settings', 'settings.panel'], since: '2026-10-29',
+    name: 'newPanelName', kicker: 'newPanelKicker', title: 'newPanelName', body: 'newPanelBody', action: 'open-settings:panel', doneEvent: 'panel.changed' }
 ];

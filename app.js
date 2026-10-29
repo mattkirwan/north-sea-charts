@@ -834,6 +834,7 @@ function openSheet(name, focus) {
   reveal(s, true, slide); reveal(scrim, true, slide);
   sheetOn = name; applyInert();
   (focus ? s.querySelector(focus) : focusables(s)[0]).focus({ preventScroll: true });
+  hintOpened.add(name); renderHint();
 }
 function closeSheet() {
   if (!sheetOn) return;
@@ -1249,41 +1250,109 @@ const emit = (name) => (heard[name] || []).forEach((f) => f());
 let hintSpent = null;
 try { hintSpent = sessionStorage.getItem('nss.hints.shown'); } catch {}
 const hintById = Object.fromEntries(HINTS.map((h) => [h.id, h]));
-const chainOf = (h) => (h.when.startsWith('after:') ? chainOf(hintById[h.when.slice(6)]) : h.id);
-let hintOn = null, hintFading = false, hintT = 0, hintGoT = 0, tagDown = null;
+const chainOf = (h) => ((h.when || '').startsWith('after:') ? chainOf(hintById[h.when.slice(6)]) : h.id);
+let hintOn = null, hintCard = false, hintFading = false, hintT = 0, hintGoT = 0, tagDown = null;
+// The sheets opened this visit: a light on the way into one stops pinging.
+const hintOpened = new Set();
+// A new feature, for someone who came before it (not someone new to a
+// development copy, who came on no release), until it's used or tips go off.
+const hintNew = (h) => hs.tipsOn && hs.seen[h.id] !== 'retired' && hs.firstSeenRelease != null && hs.firstSeenRelease < h.since;
 function hintMet(h) {
+  if (h.type === 'new') return hintNew(h);
   if (h.when.startsWith('after:')) return hs.seen[h.when.slice(6)] === 'retired';
   if (h.when.startsWith('measure:')) return band === 'swell' && swellVar === h.when.slice(8);
   return h.when === 'first-load' && !!man;
 }
-const hintDue = (h) => h.type === 'tip' && hs.tipsOn && !hs.seen[h.id] && (!hintSpent || hintSpent === chainOf(h)) && hintMet(h);
+const hintDue = (h) => hs.tipsOn && !hs.seen[h.id] && (!hintSpent || hintSpent === chainOf(h)) && hintMet(h);
 const hintBusy = () => !!(ptrs.size || drag || tl.moving || sheetOn);
-const floatTag = $('[data-tip-float]');
+const floatTag = $('[data-tip-float]'), newTag = $('[data-new-tag]'), card = $('[data-hint-card]');
+const gotIt = card.querySelector('[data-got-it]'), showMe = card.querySelector('[data-show-me]');
+// What Show me does.
+const HINT_ACTIONS = { 'open-settings:panel': () => openSheet('settings', '[data-set="panel"] [aria-pressed="true"]') };
 // The control a hint is about, in the panel showing.
 const hintEl = (h) => [...document.querySelectorAll(`[data-hint-target="${h.target}"]`)].find((el) => !el.closest('[data-away], [hidden]'));
+// Beside what it's about, notched to it and kept on the screen: over it, off
+// the docked column; or, for something in the column, beside the column,
+// level with it.
+function placeBy(box, pt, notch) {
+  const r = pt.getBoundingClientRect(), c = columnEl.getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight;
+  const cardNotch = notch.classList.contains('nss-card-notch'), half = cardNotch ? 5 : 4;
+  let x, y;
+  if (docked && r.left >= c.left && r.right <= c.right) {
+    const mid = r.top + r.height / 2, right = hand === 'right';
+    x = right ? c.left - 12 - w : c.right + 12;
+    y = Math.max(12, Math.min(innerHeight - 12 - h, mid - h / 2));
+    Object.assign(notch.style, { left: `${right ? w - half : -half}px`, top: `${mid - y - half}px`, bottom: 'auto', transform: cardNotch ? `rotate(${right ? -45 : 135}deg)` : '' });
+  } else {
+    const mid = r.left + r.width / 2;
+    let lo = 12, hi = innerWidth - 12;
+    if (docked) { if (mid < c.left) hi = c.left - 12; else lo = c.right + 12; }
+    x = Math.max(lo, Math.min(hi - w, mid - w / 2));
+    y = r.top - h - 10;
+    Object.assign(notch.style, { left: `${mid - x - half}px`, top: '', bottom: '', transform: '' });
+  }
+  box.style.left = `${x}px`; box.style.top = `${y}px`;
+}
+// A new feature's lights, on every control on the way to it: pinging while
+// it's announced, until the sheet past each one's been opened; steady
+// otherwise. Changed only where they change, so a ping isn't restarted.
+function renderLights() {
+  const want = new Map();
+  for (const h of HINTS) {
+    if (h.type !== 'new' || !hintNew(h)) continue;
+    const announcing = hintOn === h && !hintCard;
+    h.path.forEach((id, i) => {
+      const next = h.path[i + 1] && document.querySelector(`[data-hint-target="${h.path[i + 1]}"]`);
+      const past = next && next.closest('[data-sheet]');
+      const ping = announcing && !(past && hintOpened.has(past.dataset.sheet));
+      document.querySelectorAll(`[data-hint-target="${id}"]`).forEach((el) => want.set(el, want.get(el) || ping));
+    });
+  }
+  document.querySelectorAll('[data-hint-target]').forEach((el) => {
+    let light = el.querySelector(':scope > .nss-light');
+    if (!want.has(el) && !light) return;
+    if (!want.has(el)) light.remove();
+    else {
+      if (!light) {
+        light = el.appendChild(document.createElement('span'));
+        light.className = 'nss-light';
+        // Said with the control's name, or in words of its own.
+        if (el.dataset.tLabel) light.setAttribute('aria-hidden', 'true'); else light.innerHTML = '<span class="vh"></span>';
+      }
+      light.classList.toggle('nss-light--ping', want.get(el));
+      if (!el.dataset.tLabel) light.firstChild.textContent = tr('somethingNew');
+    }
+    if (el.dataset.tLabel) el.setAttribute('aria-label', tr(el.dataset.tLabel) + (want.has(el) ? tr('somethingNew') : ''));
+  });
+}
 function renderHint() {
   // Gone from under it (another band, say): put back for later, not seen.
-  if (hintOn && !hintMet(hintOn)) { hintOn = null; clearTimeout(hintGoT); }
-  const el = hintOn && hintEl(hintOn);
-  // In its control (the timeline's, on the needle's arrow)...
+  if (hintOn && !hintMet(hintOn)) { hintOn = null; hintCard = false; clearTimeout(hintGoT); }
+  renderLights();
+  const el = hintOn && hintEl(hintOn), tip = !!el && hintOn.type === 'tip', news = !!el && hintOn.type === 'new';
+  // A tip in its control (the timeline's, on the needle's arrow)...
   document.querySelectorAll('[data-hint-target] [data-tip]').forEach((tag) => {
-    const on = !!el && !hintOn.point && tag.closest('[data-hint-target]') === el;
+    const on = tip && !hintOn.point && tag.closest('[data-hint-target]') === el;
     tag.hidden = !on;
     if (on) { tag.innerHTML = icon(hintOn.icon) + tr(hintOn.label); tag.toggleAttribute('data-fading', hintFading); }
   });
-  // ...or floating over the part it points at, notched to it, kept on the
-  // screen and, docked, off the column.
-  const pt = el && hintOn.point && el.querySelector(`[data-hint-point="${hintOn.point}"]`);
+  // ...or floating over the part it points at.
+  const pt = tip && hintOn.point && el.querySelector(`[data-hint-point="${hintOn.point}"]`);
   floatTag.hidden = !pt;
-  if (!pt) return;
-  floatTag.innerHTML = icon(hintOn.icon) + tr(hintOn.label) + '<span class="nss-tip-notch"></span>';
-  floatTag.toggleAttribute('data-fading', hintFading);
-  const r = pt.getBoundingClientRect(), mid = r.left + r.width / 2, w = floatTag.offsetWidth;
-  let lo = 12, hi = innerWidth - 12;
-  if (docked) { const c = columnEl.getBoundingClientRect(); if (mid < c.left) hi = c.left - 12; else lo = c.right + 12; }
-  const x = Math.max(lo, Math.min(hi - w, mid - w / 2));
-  floatTag.style.left = `${x}px`; floatTag.style.top = `${r.top - floatTag.offsetHeight - 10}px`;
-  floatTag.lastChild.style.left = `${mid - x - 4}px`;
+  if (pt) {
+    floatTag.innerHTML = icon(hintOn.icon) + tr(hintOn.label) + '<span class="nss-tip-notch"></span>';
+    floatTag.toggleAttribute('data-fading', hintFading);
+    placeBy(floatTag, pt, floatTag.lastChild);
+  }
+  // A new feature's tag, or the card it opened.
+  newTag.hidden = !news || hintCard;
+  if (news && !hintCard) {
+    newTag.innerHTML = '<span class="nss-new-tag-light" aria-hidden="true"></span>' + tr('newTag', { name: tr(hintOn.name) }) +
+      icon('chevron', ' nss-icon--sm') + '<span class="nss-tip-notch" aria-hidden="true"></span>';
+    placeBy(newTag, el, newTag.lastChild);
+  }
+  card.hidden = !news || !hintCard;
+  if (news && hintCard) placeBy(card, el, card.lastElementChild);
 }
 // Quiet from now: the next hint, if one's due, once it's lasted.
 function hintWait() { clearTimeout(hintT); hintT = setTimeout(nextHint, HINT_IDLE); }
@@ -1293,52 +1362,80 @@ function nextHint() {
   const h = HINTS.find(hintDue);
   if (!h) return;
   if (!hintSpent) { hintSpent = chainOf(h); try { sessionStorage.setItem('nss.hints.shown', hintSpent); } catch {} }
-  hintOn = h; hintFading = false; renderHint();
-  hintGoT = setTimeout(retireHint, HINT_WAIT);
+  hintOn = h; hintCard = false; hintFading = false; renderHint();
+  hintGoT = setTimeout(hintLapsed, HINT_WAIT);
 }
-function retireHint() {
+// Gone: for good, or (a new feature not taken up) just its light left on.
+function hintGo(state = 'retired') {
   if (!hintOn) return;
-  hs.seen[hintOn.id] = 'retired'; store.set('nss.hints.v1', hs);
-  hintOn = null; clearTimeout(hintGoT); renderHint(); hintWait();
+  const h = hintOn, focused = card.contains(document.activeElement);
+  hs.seen[h.id] = state; store.set('nss.hints.v1', hs);
+  hintOn = null; hintCard = false; clearTimeout(hintGoT); renderHint(); hintWait();
+  if (focused) { const el = hintEl(h); if (el) el.focus({ preventScroll: true }); }
 }
-// A touch anywhere: the tip dims and waits 6 s more, and the quiet starts over.
-function hintTouched() {
-  if (hintOn) {
-    if (!hintFading) { hintFading = true; renderHint(); }
-    clearTimeout(hintGoT); hintGoT = setTimeout(retireHint, HINT_WAIT);
+const hintLapsed = () => hintGo(hintOn && hintOn.type === 'new' ? 'quiet' : 'retired');
+// A touch anywhere: a tip dims, a tag waits 6 s more, a card tapped away
+// from closes to its light, and the quiet starts over.
+function hintTouched(e) {
+  if (hintCard && e.type === 'pointerdown' && !card.contains(e.target)) hintGo('quiet');
+  if (hintOn && !hintCard) {
+    if (hintOn.type === 'tip' && !hintFading) { hintFading = true; renderHint(); }
+    clearTimeout(hintGoT); hintGoT = setTimeout(hintLapsed, HINT_WAIT);
   }
   hintWait();
 }
 // Done what a hint says, shown or not yet: it's not needed.
 for (const h of HINTS) {
   (heard[h.doneEvent] ||= []).push(() => {
-    if (hintOn === h) retireHint();
-    else if (!hs.seen[h.id]) { hs.seen[h.id] = 'retired'; store.set('nss.hints.v1', hs); }
+    if (hintOn === h) hintGo();
+    else if (hs.seen[h.id] !== 'retired') { hs.seen[h.id] = 'retired'; store.set('nss.hints.v1', hs); renderHint(); }
   });
 }
+// The tag opens its card: focus in it, kept there; Escape closes it to its light.
+newTag.addEventListener('click', () => {
+  if (!hintOn || hintOn.type !== 'new') return;
+  const h = hintOn;
+  clearTimeout(hintGoT); hintCard = true;
+  card.setAttribute('aria-label', tr('newTag', { name: tr(h.name) }));
+  card.querySelector('[data-card-kicker]').textContent = tr(h.kicker);
+  card.querySelector('[data-card-title]').textContent = tr(h.title);
+  card.querySelector('[data-card-body]').textContent = tr(h.body);
+  showMe.hidden = !h.action;
+  renderHint();
+  (h.action ? showMe : gotIt).focus({ preventScroll: true });
+});
+gotIt.addEventListener('click', () => hintGo());
+showMe.addEventListener('click', () => { const h = hintOn; hintGo(); HINT_ACTIONS[h.action](); });
+addEventListener('keydown', (e) => {
+  if (!hintCard) return;
+  if (e.key === 'Escape') { e.preventDefault(); hintGo('quiet'); return; }
+  if (e.key !== 'Tab') return;
+  const f = [gotIt, showMe].filter((b) => !b.hidden), i = f.indexOf(document.activeElement);
+  if (i < 0 || (e.shiftKey ? i === 0 : i === f.length - 1)) { e.preventDefault(); f[e.shiftKey ? f.length - 1 : 0].focus(); }
+});
 // Menu › Settings: tips off (every one gone, and none new), on, or all of
 // them again from the start, the next one once the menu's closed.
 function setTips(on) {
   hs.tipsOn = on;
-  if (!on) { for (const h of HINTS) hs.seen[h.id] = 'retired'; hintOn = null; clearTimeout(hintGoT); renderHint(); }
-  store.set('nss.hints.v1', hs); renderSettings();
+  if (!on) { for (const h of HINTS) hs.seen[h.id] = 'retired'; hintOn = null; hintCard = false; clearTimeout(hintGoT); }
+  store.set('nss.hints.v1', hs); renderSettings(); renderHint();
 }
 const tipsAgain = $('[data-tips-again]');
 tipsAgain.addEventListener('click', () => {
   hs.seen = {}; hs.tipsOn = true; hintSpent = null;
   try { sessionStorage.removeItem('nss.hints.shown'); } catch {}
-  store.set('nss.hints.v1', hs); renderSettings();
+  store.set('nss.hints.v1', hs); renderSettings(); renderHint();
   tipsAgain.querySelector('.nss-menu-sub').textContent = tr('tipsAgainDone');
 });
 for (const k of ['pointerdown', 'wheel', 'keydown']) addEventListener(k, hintTouched, { capture: true, passive: true });
-// Tapped (not dragged from): gone.
+// A tip tapped (not dragged from): gone.
 document.querySelectorAll('[data-tip]').forEach((tag) => tag.addEventListener('pointerdown', (e) => {
   tagDown = { x: e.clientX, y: e.clientY, t: performance.now() };
 }));
 addEventListener('pointerup', (e) => {
   const d = tagDown;
   tagDown = null;
-  if (d && hintOn && performance.now() - d.t < 300 && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) retireHint();
+  if (d && hintOn && performance.now() - d.t < 300 && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) hintGo();
   hintWait();
 }, { capture: true, passive: true });
 

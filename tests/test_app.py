@@ -325,10 +325,16 @@ class App(unittest.TestCase):
         self.slide()
         self.assertIsNone(self.tip())
 
-    def kept(self, **kept):
-        """Someone who's had the timeline's tips, so this visit's one new tip is free, with anything else kept."""
-        kept = {'nss.tip1': True, 'nss.tip2': True, **kept}
-        self.context.add_init_script(''.join(f'localStorage.setItem({json.dumps(k)}, {json.dumps(json.dumps(v))});' for k, v in kept.items()))
+    def kept(self, news=False, **kept):
+        """Someone who's had the timeline's tips, so this visit's one new hint is free, with anything else
+        kept; and the side panel's news, unless news."""
+        seen = {'tip.timeline.slide': 'retired', 'tip.timeline.reset': 'retired'}
+        if not news:
+            seen['new.panel.side'] = 'retired'
+        kept = {'nss.hints.v1': dict(firstSeenRelease='0', tipsOn=True, seen=seen, guideCompleted=False), **kept}
+        # The hints' own state once, so what a test does to it survives a reload.
+        self.context.add_init_script(''.join((f'if (localStorage.getItem({json.dumps(k)}) == null) ' if k == 'nss.hints.v1' else '') +
+                                             f'localStorage.setItem({json.dumps(k)}, {json.dumps(json.dumps(v))});' for k, v in kept.items()))
 
     def swell_tip(self, panel, words='Tap for wave period'):
         """Swell chosen in the panel showing: the tip floats over Period, on the screen, notched to it, and goes once Period's chosen."""
@@ -403,7 +409,7 @@ class App(unittest.TestCase):
         self.assertEqual(self.page.locator('[data-set="tips"] [data-value="off"]').get_attribute('aria-pressed'), 'true')
         h = self.hints()
         self.assertFalse(h['tipsOn'])
-        self.assertEqual(sorted(h['seen']), ['tip.swell.period', 'tip.timeline.reset', 'tip.timeline.slide'])
+        self.assertEqual(sorted(h['seen']), ['new.panel.side', 'tip.swell.period', 'tip.timeline.reset', 'tip.timeline.slide'])
         self.page.reload()
         self.page.wait_for_function("document.querySelector('.nss-timeline').getAttribute('aria-valuemax') !== '0'")
         self.page.click('#panel .nss-band[data-band="swell"]')
@@ -423,6 +429,140 @@ class App(unittest.TestCase):
         self.page.keyboard.press('Escape')
         self.closed()
         self.tip_due('Tap for wave period')
+
+    # ---- New features (hints.js, type 'new') ------------------------------------------
+    def light(self, sel):
+        """The light on a control: None, 'steady' or 'ping'."""
+        return self.page.evaluate(f"""(() => {{ const l = document.querySelector({json.dumps(sel)} + ' > .nss-light');
+            return l ? (l.classList.contains('nss-light--ping') ? 'ping' : 'steady') : null; }})()""")
+
+    def tag_due(self):
+        self.page.wait_for_function("!document.querySelector('[data-new-tag]').hidden")
+        self.page.wait_for_timeout(400)                         # slid in
+
+    def on_screen(self, sel):
+        b = self.box(sel)
+        self.assertGreaterEqual(b['x'], 0)
+        self.assertLessEqual(b['x'] + b['width'], 390)
+        self.assertGreaterEqual(b['y'], 0)
+        return b
+
+    def test_the_side_panel_news_runs_through_every_state(self):
+        self.kept(news=True)
+        self.loaded()
+        self.tag_due()
+        menu = '#panel [data-menu]'
+        self.assertEqual(self.light(menu), 'ping')
+        self.assertEqual(self.page.locator('[data-new-tag]').text_content(), 'New · Side panel')
+        self.assertEqual(self.page.locator(menu).get_attribute('aria-label'), 'Menu, something new')
+        tag, btn = self.on_screen('[data-new-tag]'), self.box(menu)
+        self.assertLessEqual(tag['y'] + tag['height'], btn['y'])
+        # The card: focus in it, the light steady, the chart still there to touch.
+        self.page.click('[data-new-tag]')
+        self.assertTrue(self.page.locator('[data-hint-card]').is_visible())
+        self.assertEqual(self.page.locator('[data-hint-card]').get_attribute('role'), 'dialog')
+        self.assertEqual(self.focused(), 'Show me')
+        self.assertEqual(self.light(menu), 'steady')
+        self.on_screen('[data-hint-card]')
+        self.page.mouse.click(150, 200)                         # tapped away from: its light left on
+        self.assertTrue(self.page.locator('[data-hint-card]').is_hidden())
+        self.assertEqual(self.light(menu), 'steady')
+        self.assertEqual(self.hints()['seen']['new.panel.side'], 'quiet')
+        self.page.reload()
+        self.page.wait_for_function("document.querySelector('.nss-timeline').getAttribute('aria-valuemax') !== '0'")
+        self.page.wait_for_timeout(2500)
+        self.assertTrue(self.page.locator('[data-new-tag]').is_hidden())
+        self.assertEqual(self.light(menu), 'steady')
+        # The way to it: Settings in the menu, then the Panel row.
+        self.page.click(menu)
+        self.assertEqual(self.light('[data-go="settings"]'), 'steady')
+        self.page.click('[data-go="settings"]')
+        self.assertEqual(self.light('[data-hint-target="settings.panel"]'), 'steady')
+        # Used: gone, every light with it.
+        self.page.click('[data-set="panel"] [data-value="side"]')
+        self.assertEqual(self.hints()['seen']['new.panel.side'], 'retired')
+        self.assertEqual(self.page.locator('.nss-light').count(), 0)
+        self.assertEqual(self.page.locator('#column [data-menu]').get_attribute('aria-label'), 'Menu')
+
+    def test_the_news_ignored_leaves_its_light(self):
+        self.kept(news=True)
+        self.loaded()
+        self.tag_due()
+        self.page.wait_for_function("document.querySelector('[data-new-tag]').hidden", timeout=8000)
+        self.assertEqual(self.hints()['seen']['new.panel.side'], 'quiet')
+        self.assertEqual(self.light('#panel [data-menu]'), 'steady')
+
+    def test_the_cards_buttons(self):
+        for button in ('got-it', 'show-me', 'escape'):
+            with self.subTest(button=button):
+                self.new_page(service_workers='block')
+                self.kept(news=True)
+                self.loaded()
+                self.tag_due()
+                self.page.click('[data-new-tag]')
+                if button == 'escape':
+                    self.page.keyboard.press('Escape')
+                    self.assertEqual(self.hints()['seen']['new.panel.side'], 'quiet')
+                    self.assertTrue(self.page.evaluate("document.activeElement === document.querySelector('#panel [data-menu]')"))
+                    continue
+                self.page.click(f'[data-{button}]')
+                self.assertEqual(self.hints()['seen']['new.panel.side'], 'retired')
+                self.assertEqual(self.page.locator('.nss-light').count(), 0)
+                if button == 'show-me':                         # Settings, at the Panel switch
+                    self.assertEqual(self.shown(), 'Settings')
+                    self.assertTrue(self.page.evaluate("!!document.activeElement.closest('[data-set=\"panel\"]')"))
+
+    def test_docked_the_news_sits_beside_the_column(self):
+        for hand in ('right', 'left'):
+            with self.subTest(hand=hand):
+                self.new_page(service_workers='block')
+                self.kept(news=True, **{'nss.docked': True, 'nss.hand': hand})
+                self.loaded()
+                self.tag_due()
+                col, btn = self.box('#column'), self.box('#column [data-menu]')
+                for sel in ('[data-new-tag]', '[data-hint-card]'):
+                    if sel == '[data-hint-card]':
+                        self.page.click('[data-new-tag]')
+                    b = self.on_screen(sel)
+                    if hand == 'right':
+                        self.assertLessEqual(b['x'] + b['width'], col['x'])
+                    else:
+                        self.assertGreaterEqual(b['x'], col['x'] + col['width'])
+                    self.assertTrue(b['y'] <= btn['y'] + btn['height'] / 2 <= b['y'] + b['height'])   # level with it
+
+    def test_the_news_fits_in_the_longest_language(self):
+        self.kept(news=True, **{'nss.lang': 'fr'})
+        self.loaded()
+        self.tag_due()
+        self.assertEqual(self.page.locator('[data-new-tag]').text_content(), 'Nouveau · Panneau latéral')
+        self.on_screen('[data-new-tag]')
+        self.page.click('[data-new-tag]')
+        self.on_screen('[data-hint-card]')
+        for b in ('[data-got-it]', '[data-show-me]'):           # each word on its button
+            self.assertLessEqual(self.page.evaluate(f"(() => {{ const b = document.querySelector('{b}'); return b.scrollWidth - b.clientWidth; }})()"), 0)
+
+    def test_only_people_who_came_before_it_get_the_news(self):
+        for first, lit in (('2026-10-01-1200', True), ('2026-11-02-1200', False)):
+            with self.subTest(first=first):
+                self.new_page(first_open=True, service_workers='block')
+                self.release = None
+                self.stamped(first)
+                self.open()
+                self.page.wait_for_function("document.querySelector('.nss-timeline').getAttribute('aria-valuemax') !== '0'")
+                self.page.keyboard.press('Escape')              # the language, asked on first open
+                self.closed()
+                self.assertEqual(self.light('#panel [data-menu]'), 'steady' if lit else None)
+                if lit:                                         # this visit's one new hint is the timeline's tip
+                    self.tip_due('Slide timeline')
+                    self.slide()
+                    self.page.wait_for_timeout(2500)
+                    self.assertTrue(self.page.locator('[data-new-tag]').is_hidden())
+
+    def test_no_lights_with_tips_off(self):
+        self.kept(news=True)
+        self.loaded()
+        self.setting('tips', 'off')
+        self.assertEqual(self.page.locator('.nss-light').count(), 0)
 
     # ---- The menu ------------------------------------------------------------------
     def box(self, sel):
@@ -451,7 +591,7 @@ class App(unittest.TestCase):
         self.loaded()
         self.assertEqual(self.page.locator('.nss-dock-btn').count(), 0)
         for b in ('#panel [data-menu]', '#column [data-menu]'):
-            self.assertEqual(self.page.locator(b).get_attribute('aria-label'), 'Menu')
+            self.assertRegex(self.page.locator(b).get_attribute('aria-label'), r'^Menu(, something new)?$')
             self.assertEqual(self.page.locator(b).get_attribute('aria-haspopup'), 'dialog')
         for hand, x in (('right', 390 - 12 - 48), ('left', 12)):
             if hand == 'left':
