@@ -39,6 +39,5 @@ const GUIDE = [
   { target: 'chart', title: 'g1Title', body: 'g1Body', tryIt: 'g1Try', doneEvent: 'map.zoom' },
   { target: 'bands', title: 'g2Title', body: 'g2Body' },
   { target: 'key', band: 'swell', title: 'g3Title', body: 'g3Body', tryIt: 'g3Try', doneEvent: 'swell.measure' },
-  { target: 'timeline', title: 'g4Title', body: 'g4Body', tryIt: 'g4Try', doneEvent: 'timeline.reset' },
-  { target: 'menu-button', title: 'g5Title', body: 'g5Body' }
+  { target: 'timeline', title: 'g4Title', body: 'g4Body', tryIt: 'g4Try', doneEvent: 'timeline.reset' }
 ];

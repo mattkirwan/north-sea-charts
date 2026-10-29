@@ -622,7 +622,7 @@ class App(unittest.TestCase):
         self.loaded()
         self.guide()
         self.closed()                                           # the menu's gone; the Guide's over the chart
-        self.assertEqual(self.step(), 'Guide, step 1 of 5')
+        self.assertEqual(self.step(), 'Guide, step 1 of 4')
         self.assertEqual(self.page.locator('[data-guide-card]').get_attribute('role'), 'dialog')
         self.assertEqual(self.focused(), 'Next')
         # 1: the chart itself, live, the panel dimmed; no Back.
@@ -637,7 +637,7 @@ class App(unittest.TestCase):
         self.assertTrue(self.tried())
         # 2: the bands, the rest dimmed, the chart too.
         self.page.click('[data-guide-next]')
-        self.assertEqual(self.step(), 'Guide, step 2 of 5')
+        self.assertEqual(self.step(), 'Guide, step 2 of 4')
         self.assertEqual(self.lit(), ['bands'])
         self.assertTrue(self.page.locator('[data-guide-scrim]').is_visible())
         self.guide_card_clear_of('#panel')
@@ -648,26 +648,22 @@ class App(unittest.TestCase):
         self.guide_card_clear_of('#panel')
         self.page.click('#panel [data-var="period"]')
         self.assertTrue(self.tried())
-        self.assertEqual(self.step(), 'Guide, step 3 of 5')    # never moves on by itself
+        self.assertEqual(self.step(), 'Guide, step 3 of 4')    # never moves on by itself
         # Back, and forward again: still ticked.
         self.page.click('[data-guide-back]')
-        self.assertEqual(self.step(), 'Guide, step 2 of 5')
+        self.assertEqual(self.step(), 'Guide, step 2 of 4')
         self.page.click('[data-guide-next]')
         self.assertTrue(self.tried())
-        # 4: the timeline, slid and brought back to now.
+        # 4: the timeline, slid and brought back to now; Done.
         self.page.click('[data-guide-next]')
         self.assertEqual(self.lit(), ['timeline'])
+        self.assertEqual(self.page.locator('[data-guide-next]').text_content(), 'Done')
         self.guide_card_clear_of('#panel')
         self.slide()
         self.assertFalse(self.tried())
         b = self.box('#panel .nss-timeline')
         self.page.mouse.dblclick(b['x'] + 20, b['y'] + b['height'] / 2)
         self.assertTrue(self.tried())
-        # 5: the menu button; Done.
-        self.page.click('[data-guide-next]')
-        self.assertEqual(self.lit(), ['menu-button'])
-        self.assertEqual(self.page.locator('[data-guide-next]').text_content(), 'Done')
-        self.assertTrue(self.page.locator('[data-guide-try]').is_hidden())
         self.page.click('[data-guide-next]')
         self.assertIsNone(self.step())
         self.assertEqual(self.lit(), [])
@@ -687,7 +683,7 @@ class App(unittest.TestCase):
                 self.guide()
                 self.page.click('[data-guide-next]')
                 self.page.click('[data-guide-next]')                # on Swell for the key
-                self.assertEqual(self.step(), 'Guide, step 3 of 5')
+                self.assertEqual(self.step(), 'Guide, step 3 of 4')
                 if how == 'close':
                     self.page.click('[data-guide-close]')
                 elif how == 'escape':
@@ -718,7 +714,7 @@ class App(unittest.TestCase):
                 self.kept(**{'nss.docked': True, 'nss.hand': hand})
                 self.loaded()
                 self.guide()
-                for target in (None, 'bands', 'key', 'timeline', 'menu-button'):
+                for target in (None, 'bands', 'key', 'timeline'):
                     self.assertEqual(self.lit(), [target] if target else [])
                     self.guide_card_clear_of('#column')
                     self.page.click('[data-guide-next]')
@@ -728,8 +724,8 @@ class App(unittest.TestCase):
         self.kept(**{'nss.lang': 'de'})
         self.loaded()
         self.guide()
-        self.assertEqual(self.step(), 'Rundgang, Schritt 1 von 5')
-        for _ in range(5):
+        self.assertEqual(self.step(), 'Rundgang, Schritt 1 von 4')
+        for _ in range(4):
             self.guide_card_clear_of('#panel')
             self.page.click('[data-guide-next]')
 
@@ -788,7 +784,7 @@ class App(unittest.TestCase):
         self.assertEqual(self.page.locator('#menu').get_attribute('role'), 'dialog')
         self.assertEqual([n.strip() for n in self.page.locator('#menu .nss-menu-name').all_text_contents()],
                          ['Chart', '💡 Feedback & ideas', 'Settings', 'Guide', 'About'])
-        self.assertEqual(self.page.locator('#menu [data-guide] .nss-menu-tag').text_content(), '5 STEPS')
+        self.assertEqual(self.page.locator('#menu [data-guide] .nss-menu-tag').text_content(), '4 STEPS')
         self.assertEqual(self.page.locator('#menu .nss-soon').count(), 0)
         self.assertEqual(self.page.locator('#menu [aria-disabled]').count(), 0)
         chart = self.page.locator('#menu [data-view="chart"]')
