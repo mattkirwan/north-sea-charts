@@ -178,6 +178,8 @@
   .nss-vtrack { position: absolute; top: 50%; left: 0; right: 0; height: 0; will-change: transform; }
   .nss-vtimeline .nss-end { left: 0; right: 0; bottom: auto; width: auto; height: 2000px; }
   .nss-tip .nss-icon { width: 16px; height: 16px; }
+  /* On the open timeline, on top of the needle's arrow, centred over it. */
+  .nss-timeline > .nss-tip { left: 50%; top: auto; bottom: calc(100% + 2px); translate: -50% 0; }
   .nss-vtimeline .nss-tip { left: auto; right: calc(100% + 14px); top: calc(50% - 11px); }
 
   .nss-flyout { animation: fly-in 180ms cubic-bezier(.2, .8, .2, 1); }
@@ -232,10 +234,10 @@
   <div class="nss-panel-timerow">
     <div class="nss-timeline" data-axis="x" data-hint-target="timeline" role="slider" tabindex="0" aria-label="Forecast timeline" data-t-label="timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
       <span class="nss-timeline-arrow"></span>
+      <span class="nss-tip" data-tip hidden></span>
       <div class="nss-scale">
         <div class="nss-track" data-track></div>
         <span class="nss-needle"></span>
-        <span class="nss-tip" data-tip hidden></span>
       </div>
     </div>
     <button type="button" class="nss-menu-btn" data-menu aria-label="Menu" data-t-label="menu" aria-haspopup="dialog" data-icon="menu"></button>
