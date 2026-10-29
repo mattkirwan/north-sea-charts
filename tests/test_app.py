@@ -701,6 +701,13 @@ class App(unittest.TestCase):
         self.assertRegex(text, r'peak \d+\.\d s from \d+°, longest \d+\.\d s from \d+°')
         self.assertIn("frame's 25 km node", text)
 
+    def test_says_when_the_run_was_published(self):
+        # With nothing else to say, a quiet line says when the run was published.
+        self.loaded()
+        made = self.page.locator('#rMade')
+        self.page.wait_for_function("!document.querySelector('#rMade').hidden")
+        self.assertRegex(made.text_content(), r'^Updated (\w+ )?\d\d:\d\d$')
+
     def test_no_manifest_says_offline(self):
         self.open('empty')
         self.page.wait_for_function("document.querySelector('#rStatus').textContent === 'Offline'")

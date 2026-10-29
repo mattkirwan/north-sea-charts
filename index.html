@@ -193,6 +193,7 @@
   .nss-readout-status { display: flex; align-items: center; justify-content: center; gap: 5px; transition: opacity 400ms; }
   .nss-readout-status .nss-icon { width: 12px; height: 12px; }
   .nss-readout-status[data-fading] { opacity: 0; }
+  .nss-readout-made { opacity: .7; }
   .col-status { display: flex; justify-content: center; color: var(--ui-display-muted); }
   .col-status .nss-icon { width: 14px; height: 14px; }
   .col-status[data-tone="warn"] { color: var(--lifeboat); }
@@ -235,6 +236,7 @@
     <span class="nss-readout-lead" data-lead></span>
     <span class="nss-readout-time" data-time>–</span>
     <span class="nss-readout-status" id="rStatus" hidden></span>
+    <span class="nss-readout-status nss-readout-made" id="rMade" hidden></span>
   </div>
   <div class="nss-panel-timerow">
     <div class="nss-timeline" data-axis="x" data-hint-target="timeline" role="slider" tabindex="0" aria-label="Forecast timeline" data-t-label="timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
