@@ -112,11 +112,11 @@
   [data-hand="left"] .nss-sheet-foot { justify-content: flex-start; }
   [data-hand="left"] .nss-column { left: 0; right: auto; border-left: 0; border-right: 1px solid var(--ui-line); border-radius: 0 var(--radius-card) 0 0;
     padding-left: var(--space-3); padding-right: calc(var(--space-1) - 1px); }
-  [data-hand="left"] .nss-vtimeline { margin: 0 calc(-1 * var(--space-1)) 0 calc(-1 * var(--space-3)); }
   [data-hand="left"] .nss-vtimeline-arrow { left: auto; right: -9px; border-left: 0; border-right: 9px solid var(--lifeboat-deep); }
   [data-hand="left"] .nss-vtimeline .nss-tick { left: 0; right: auto; }
   [data-hand="left"] .nss-vtimeline .nss-day { left: auto; right: 6px; }
   [data-hand="left"] .nss-vtimeline .nss-tip { left: calc(100% + 14px); right: auto; }
+  [data-hand="left"] .nss-vtimeline .nss-progress { left: auto; right: 0; }
   [data-hand="left"] .nss-flyout { left: calc(100% + var(--space-3)); right: auto; padding: 0 10px 0 var(--space-1); }
 
   /* Open and docked: one shows at a time. The one leaving slips out a little
@@ -178,6 +178,24 @@
   .nss-band:active, .nss-switch button:active, .nss-menu-btn:active { transform: scale(0.97); }
 
   .nss-timeline, .nss-vtimeline { touch-action: none; cursor: grab; }
+  /* Play: over the scale's left end, or the column timeline's foot, flush
+     inside its border, but beside the slider rather than in it, so a screen
+     reader finds it and a drag on it never scrubs. Lit with it in the Guide. */
+  .nss-timebox, .nss-vtimebox { position: relative; }
+  .nss-panel-timerow .nss-timebox { flex: 1; min-width: 0; }
+  .nss-timebox > .nss-play { left: 1px; bottom: 1px; width: 44px; height: 42px; border-radius: var(--radius-inner) 0 0 var(--radius-inner); }
+  /* Docked, the timeline runs to the column's inner edge, where the progress
+     line is its border with the chart, and is inset only from the screen's
+     edge, with a border and rounded corners on that side. */
+  .nss-vtimebox { flex: 1; min-height: 80px; display: flex; margin-left: calc(-1 * var(--space-1)); }
+  .nss-vtimebox > .nss-vtimeline { border-left: 0; border-radius: 0 var(--radius-card) var(--radius-card) 0; }
+  .nss-vtimebox .nss-vtimeline-track { border-radius: 0 var(--radius-card) var(--radius-card) 0; }
+  .nss-vtimebox > .nss-play { left: 0; right: 1px; bottom: 1px; height: 44px; border-radius: 0 0 var(--radius-inner) 0; }
+  [data-hand="left"] .nss-vtimebox { margin: 0 calc(-1 * var(--space-1)) 0 0; }
+  [data-hand="left"] .nss-vtimebox > .nss-vtimeline { border-left: 1px solid var(--ui-track); border-right: 0; border-radius: var(--radius-card) 0 0 var(--radius-card); }
+  [data-hand="left"] .nss-vtimebox .nss-vtimeline-track { border-radius: var(--radius-card) 0 0 var(--radius-card); }
+  [data-hand="left"] .nss-vtimebox > .nss-play { left: 1px; right: 0; border-radius: 0 0 0 var(--radius-inner); }
+  .nss-play { touch-action: manipulation; }
   .nss-track { position: absolute; left: 50%; top: 0; bottom: 0; will-change: transform; }
   .nss-end { left: auto; right: auto; width: 2000px; }
   .nss-vtrack { position: absolute; top: 50%; left: 0; right: 0; height: 0; will-change: transform; }
@@ -265,12 +283,16 @@
     <span class="nss-readout-status nss-readout-made" id="rMade" hidden></span>
   </div>
   <div class="nss-panel-timerow">
-    <div class="nss-timeline" data-axis="x" data-hint-target="timeline" role="slider" tabindex="0" aria-label="Forecast timeline" data-t-label="timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
-      <span class="nss-timeline-arrow"></span>
-      <span class="nss-tip" data-tip hidden></span>
-      <div class="nss-scale">
-        <div class="nss-track" data-track></div>
-        <span class="nss-needle"></span>
+    <div class="nss-timebox" data-hint-target="timeline">
+      <button type="button" class="nss-play" data-play aria-pressed="false" aria-label="Play through time"></button>
+      <div class="nss-timeline" data-axis="x" role="slider" tabindex="0" aria-label="Forecast timeline" data-t-label="timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+        <span class="nss-timeline-arrow"></span>
+        <span class="nss-tip" data-tip hidden></span>
+        <div class="nss-scale">
+          <div class="nss-track" data-track></div>
+          <span class="nss-needle"></span>
+          <span class="nss-progress" data-progress aria-hidden="true"><i></i></span>
+        </div>
       </div>
     </div>
     <button type="button" class="nss-menu-btn" data-menu data-hint-target="menu-button" aria-label="Menu" data-t-label="menu" aria-haspopup="dialog" data-icon="menu"></button>
@@ -307,13 +329,17 @@
     <b data-day>–</b><strong data-time>–</strong><small data-lead></small>
     <span class="col-status" id="colStatus" hidden></span>
   </div>
-  <div class="nss-vtimeline" data-axis="y" data-hint-target="timeline" role="slider" tabindex="0" aria-orientation="vertical" aria-label="Forecast timeline" data-t-label="timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
-    <div class="nss-vtimeline-track">
-      <div class="nss-vtrack" data-track></div>
-      <span class="nss-needle"></span>
+  <div class="nss-vtimebox" data-hint-target="timeline">
+    <div class="nss-vtimeline" data-axis="y" role="slider" tabindex="0" aria-orientation="vertical" aria-label="Forecast timeline" data-t-label="timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+      <div class="nss-vtimeline-track">
+        <div class="nss-vtrack" data-track></div>
+        <span class="nss-needle"></span>
+      </div>
+      <span class="nss-progress" data-progress aria-hidden="true"><i></i></span>
+      <span class="nss-vtimeline-arrow"></span>
+      <span class="nss-tip" data-tip hidden></span>
     </div>
-    <span class="nss-vtimeline-arrow"></span>
-    <span class="nss-tip" data-tip hidden></span>
+    <button type="button" class="nss-play" data-play aria-pressed="false" aria-label="Play through time"></button>
   </div>
   <div class="nss-bands" data-hint-target="bands" role="group" aria-label="Chart layer" data-t-label="layer">
     <div class="nss-band-slot"><button type="button" class="nss-band" data-band="pressure" aria-pressed="true" aria-label="Pressure" data-t-label="pressure" data-icon="pressure"></button></div>

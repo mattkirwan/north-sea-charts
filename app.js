@@ -24,7 +24,7 @@ const store = {
 };
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 // Usage stats (Umami, loaded by index.html): the first thing someone does
-// beyond looking, once a visit: pan, zoom, rail (the timeline) or band.
+// beyond looking, once a visit: pan, zoom, rail (the timeline), play or band.
 let interacted = false;
 try { interacted = !!sessionStorage.getItem('nss_fi'); } catch {}
 function firstInteraction(type) {
@@ -98,7 +98,9 @@ const ICONS = {
   chevron: '<path d="M9.5 6 L15.5 12 L9.5 18"></path>',
   'panel-bottom': '<rect x="3" y="4.5" width="18" height="15"></rect><path d="M3 14.5 H21"></path>',
   'panel-side': '<rect x="3" y="4.5" width="18" height="15"></rect><path d="M15.5 4.5 V19.5"></path>',
-  check: '<path d="M5 12.5 L10 17.5 L19 7"></path>'
+  check: '<path d="M5 12.5 L10 17.5 L19 7"></path>',
+  play: '<path class="nss-play-icon" d="M8 5.5 L18.5 12 L8 18.5 Z"></path>',
+  pause: '<path d="M8.5 5.5 V18.5 M15.5 5.5 V18.5" stroke-width="2.2"></path>'
 };
 const icon = (n, cls = '') => `<svg class="nss-icon${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
 document.querySelectorAll('[data-icon]').forEach((el) => { el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon, el.dataset.iconSize ? ` nss-icon--${el.dataset.iconSize}` : '')); });
@@ -250,7 +252,7 @@ async function refreshManifest() {
     const t = validAt(man, idx), j = nearestIndex(m, t);
     try {
       const d = await fetchFrame(m, j);
-      man = m; frames = []; loadIce(m); grid = makeGrid(m); frames[j] = d; failedAt = {}; idx = j; tl.raw = tl.target = j; geomCache.clear();
+      man = m; frames = []; loadIce(m); grid = makeGrid(m); frames[j] = d; failedAt = {}; idx = j; tl.raw = tl.target = play.pos = j; geomCache.clear();
       buildTicks(); markTick(j); setFrame(j, true);
       updatedNote = true; setTimeout(fadeUpdated, 3000);
       pump(); hintWait();
@@ -890,7 +892,7 @@ function keepLang() {
 }
 function setLang(c) {
   lang = c;
-  applyLang(); renderLangs(); renderPanel(); renderHint(); buildTicks();
+  applyLang(); renderLangs(); renderPanel(); renderPlay(); renderHint(); buildTicks();
   if (man) setFrame(idx, true);
   statusEls[0].dataset.shown = ''; renderStatus();
   requestDraw();
@@ -1036,7 +1038,7 @@ function fadeUpdated() {
 // ---- Timeline: horizontal in the open panel, vertical in the docked column -------------------
 const tl = { raw: 0, target: 0, anim: 0, v: 0, moving: false };
 const TL = [...document.querySelectorAll('[data-axis]')].map((el) => ({
-  el, axis: el.dataset.axis, track: el.querySelector('[data-track]'), ticks: []
+  el, axis: el.dataset.axis, track: el.querySelector('[data-track]'), progress: el.querySelector('[data-progress]'), ticks: []
 }));
 function fracIndex(t) {
   const n = man.steps.length;
@@ -1106,9 +1108,12 @@ function setFrame(i, force) {
   if (i === idx && !force) return;
   idx = i;
   const t = validAt(man, i);
+  // The progress line: where the needle is in the whole run.
+  const pc = `${maxPos() ? (100 * i / maxPos()).toFixed(2) : 0}%`;
   for (const T of TL) {
     T.el.setAttribute('aria-valuenow', String(i));
     T.el.setAttribute('aria-valuetext', `${fLong.format(t)}, ${fHour.format(t)}`);
+    T.progress.style.setProperty('--progress', pc);
   }
   renderReadout(); renderStatus(); requestDraw(); pump(); warm();
 }
@@ -1151,6 +1156,7 @@ for (const T of TL) {
   const along = (e) => (T.axis === 'x' ? e.clientX : e.clientY);
   T.el.addEventListener('pointerdown', (e) => {
     if (!man) return;
+    stopPlay();
     T.el.setPointerCapture(e.pointerId);
     cancelAnimationFrame(tl.anim);
     tl.moving = true;
@@ -1214,11 +1220,55 @@ for (const T of TL) {
     else if (e.key === 'Home') to = 0;
     else if (e.key === 'End') to = n;
     if (to == null) return;
-    e.preventDefault(); firstInteraction('rail'); emit('timeline.drag');
+    e.preventDefault(); firstInteraction('rail'); emit('timeline.drag'); stopPlay();
     to = Math.max(0, Math.min(n, to));
     tl.raw = to; placeTrack(); setFrame(to);
   });
 }
+
+// ---- Play: on through the run from the needle --------------------------------------------
+// About four frames a second, the scale sliding under the needle as if
+// dragged (frame by frame with Reduce Motion), waiting on a frame still to
+// load, and stopping on the last. Touching the timeline pauses it, for good;
+// nothing else that doesn't move time (the map, the bands) does.
+const PLAY_RATE = 4 / 1000;   // frames a ms
+const play = { on: false, pos: 0, last: 0 };
+const playBtns = [...document.querySelectorAll('[data-play]')];
+function renderPlay() {
+  for (const b of playBtns) {
+    b.setAttribute('aria-pressed', String(play.on));
+    b.setAttribute('aria-label', tr(play.on ? 'pause' : 'play'));
+    b.innerHTML = icon(play.on ? 'pause' : 'play');
+  }
+}
+renderPlay();
+function playStep(t) {
+  const dt = Math.max(0, Math.min(250, t - play.last)), m = maxPos(), next = Math.floor(play.pos) + 1;
+  play.last = t;
+  if (next > m || frames[next]) play.pos = Math.min(m, play.pos + dt * PLAY_RATE);
+  moveTo(reduced.matches ? Math.floor(play.pos) : play.pos);
+  if (play.pos >= m) { stopPlay(); settle(); return; }
+  tl.anim = requestAnimationFrame(playStep);
+}
+function startPlay() {
+  if (!man || idx >= maxPos()) return;
+  cancelAnimationFrame(tl.anim);
+  play.on = true; play.pos = idx; play.last = performance.now();
+  tl.moving = true;
+  renderPlay();
+  tl.anim = requestAnimationFrame(playStep);
+}
+function stopPlay() {
+  if (!play.on) return;
+  play.on = false;
+  cancelAnimationFrame(tl.anim);
+  tl.moving = false;
+  renderPlay(); requestDraw(); warm(); hintWait();
+}
+for (const b of playBtns) b.addEventListener('click', () => {
+  if (play.on) { stopPlay(); settle(); return; }
+  firstInteraction('play'); startPlay();
+});
 
 // ---- Hints: what the app teaches (hints.js), one controller for all of it --------------------
 // The rules in one place: one hint on screen at a time, never mid-gesture
@@ -1550,7 +1600,7 @@ addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { e.preventDefault(); endGuide(false); return; }
   if (e.key !== 'Tab') return;
   const spot = document.querySelector('.nss-spot');
-  const f = [...(spot ? [spot, ...spot.querySelectorAll('button')] : []), ...guideCard.querySelectorAll('button')]
+  const f = [...(spot ? [spot, ...spot.querySelectorAll('button, [tabindex]')] : []), ...guideCard.querySelectorAll('button')]
     .filter((b) => b.tabIndex >= 0 && !b.disabled && !b.closest('[hidden]') && b.getClientRects().length);
   const i = f.indexOf(document.activeElement);
   if (i < 0 || (e.shiftKey ? i === 0 : i === f.length - 1)) { e.preventDefault(); f[e.shiftKey ? f.length - 1 : 0].focus(); }

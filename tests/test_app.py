@@ -2,7 +2,8 @@
 as served, reading a made-up run published the way chart_frames.py publishes
 one (manifest.json and gzipped frames, encoded by its own encode()), from a
 local server. It opens on the frame nearest now and draws it, the timeline
-moves the forecast on, the bands switch and are remembered, the menu opens
+moves the forecast on, play runs it on to the last frame (and a touch on
+the timeline pauses it), the bands switch and are remembered, the menu opens
 and closes as a sheet (keyboard, scrim, grip) with feedback, and the panel
 and hand settings, in it, and without a manifest it says it's offline. The first-use
 tips wait for a quiet moment, go once done, tapped or left, and are kept
@@ -21,10 +22,12 @@ import gzip
 import http.server
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
 import threading
+import time
 import unittest
 
 import numpy as np
@@ -249,7 +252,7 @@ class App(unittest.TestCase):
         # Then the next in the chain, once the timeline has settled.
         self.tip_due('Double-tap to reset')
         b = self.box('#panel .nss-timeline')
-        self.page.mouse.dblclick(b['x'] + 20, b['y'] + b['height'] / 2)
+        self.page.mouse.dblclick(b['x'] + 80, b['y'] + b['height'] / 2)
         self.assertIsNone(self.tip())
         self.assertEqual(self.hints()['seen'], {'tip.timeline.slide': 'retired', 'tip.timeline.reset': 'retired'})
         self.page.reload()
@@ -403,7 +406,7 @@ class App(unittest.TestCase):
         # The timeline's second tip is the same new one; the swell tip waits for another visit.
         self.tip_due('Double-tap to reset')
         b = self.box('#panel .nss-timeline')
-        self.page.mouse.dblclick(b['x'] + 20, b['y'] + b['height'] / 2)
+        self.page.mouse.dblclick(b['x'] + 80, b['y'] + b['height'] / 2)
         self.page.wait_for_timeout(2500)
         self.assertIsNone(self.tip())
         self.page.reload()
@@ -662,7 +665,7 @@ class App(unittest.TestCase):
         self.slide()
         self.assertFalse(self.tried())
         b = self.box('#panel .nss-timeline')
-        self.page.mouse.dblclick(b['x'] + 20, b['y'] + b['height'] / 2)
+        self.page.mouse.dblclick(b['x'] + 80, b['y'] + b['height'] / 2)
         self.assertTrue(self.tried())
         self.page.click('[data-guide-next]')
         self.assertIsNone(self.step())
@@ -1105,6 +1108,137 @@ class App(unittest.TestCase):
         self.assertIn('cell d4:219:-4 (54.75N 1.00W)', text)
         self.assertRegex(text, r'peak \d+\.\d s from \d+°, longest \d+\.\d s from \d+°')
         self.assertIn("frame's 25 km node", text)
+
+    # ---- Play ---------------------------------------------------------------------
+    def playing(self, panel='#panel'):
+        return self.page.locator(f'{panel} [data-play]').get_attribute('aria-pressed') == 'true'
+
+    def progress(self, panel='#panel'):
+        return self.page.evaluate(f"document.querySelector('{panel} [data-progress]').style.getPropertyValue('--progress')")
+
+    def at(self):
+        return int(self.page.locator('.nss-timeline').get_attribute('aria-valuenow'))
+
+    def from_the_start(self):
+        slider = self.loaded()
+        self.page.wait_for_function(ALL_IN)
+        now = self.at()
+        slider.focus()
+        self.page.keyboard.press('Home')
+        return now
+
+    def test_play_runs_on_to_the_last_frame_and_stops(self):
+        self.from_the_start()
+        self.assertEqual(self.progress(), '0.00%')
+        play = self.page.locator('#panel [data-play]')
+        # Beside the slider, not in it, so a screen reader finds it.
+        self.assertTrue(self.page.evaluate("[...document.querySelectorAll('[data-play]')].every((b) => !b.closest('[role=slider]'))"))
+        self.assertEqual(play.get_attribute('aria-label'), 'Play through time')
+        self.assertFalse(self.playing())
+        start = time.monotonic()
+        play.click()
+        self.assertTrue(self.playing())
+        self.assertEqual(play.get_attribute('aria-label'), 'Pause')
+        self.page.wait_for_function("document.querySelector('#panel [data-play]').getAttribute('aria-pressed') === 'false'", timeout=10000)
+        # About four frames a second.
+        self.assertGreater(time.monotonic() - start, (len(STEPS) - 1) / 4 * 0.8)
+        self.assertLess(time.monotonic() - start, (len(STEPS) - 1) / 4 * 1.6)
+        self.assertEqual(self.at(), len(STEPS) - 1)
+        self.assertEqual(self.page.locator('#panel [data-lead]').text_content(), f'+{STEPS[-1]}H')
+        self.assertEqual(self.progress(), '100.00%')
+        self.assertEqual(play.get_attribute('aria-label'), 'Play through time')
+        # From the last frame, play does nothing.
+        play.click()
+        self.assertFalse(self.playing())
+
+    def test_touching_the_timeline_pauses_play_for_good(self):
+        now = self.from_the_start()
+        self.page.click('#panel [data-play]')
+        self.page.wait_for_function("+document.querySelector('.nss-timeline').getAttribute('aria-valuenow') >= 2")
+        b = self.box('#panel .nss-timeline')
+        self.page.mouse.click(b['x'] + b['width'] - 40, b['y'] + b['height'] / 2)
+        self.assertFalse(self.playing())
+        self.page.wait_for_timeout(300)
+        at = self.at()
+        self.assertEqual(self.progress(), f'{100 * at / (len(STEPS) - 1):.2f}%')
+        self.page.wait_for_timeout(800)
+        self.assertEqual(self.at(), at)
+        # Play goes on from there.
+        self.page.click('#panel [data-play]')
+        self.page.wait_for_function(f"+document.querySelector('.nss-timeline').getAttribute('aria-valuenow') > {at}")
+        self.assertTrue(self.playing())
+        # A double-tap stops it and goes back to now.
+        self.page.mouse.dblclick(b['x'] + 80, b['y'] + b['height'] / 2)
+        self.assertFalse(self.playing())
+        self.page.wait_for_function(f"document.querySelector('.nss-timeline').getAttribute('aria-valuenow') === '{now}'")
+        self.page.wait_for_timeout(600)
+        self.assertEqual(self.at(), now)
+
+    def test_the_map_and_the_bands_dont_pause_play(self):
+        self.from_the_start()
+        self.page.click('#panel [data-play]')
+        self.page.mouse.move(150, 200)
+        self.page.mouse.down()
+        self.page.mouse.move(100, 260, steps=4)
+        self.page.mouse.up()
+        self.page.mouse.wheel(0, -200)
+        self.page.click('#panel .nss-band[data-band="swell"]')
+        self.page.click('#panel [data-var="period"]')
+        self.assertTrue(self.playing())
+        self.page.click('#panel [data-play]')                      # the button pauses it
+        self.assertFalse(self.playing())
+        self.assertLess(self.at(), len(STEPS) - 1)
+
+    def test_play_steps_frame_by_frame_with_reduce_motion(self):
+        self.new_page(service_workers='block', reduced_motion='reduce')
+        self.from_the_start()
+        self.page.click('#panel [data-play]')
+        seen = self.page.evaluate("""() => new Promise((r) => { const out = [], t0 = performance.now();
+            (function f() { out.push(document.querySelector('#panel [data-track]').style.transform);
+              if (performance.now() - t0 < 1500) requestAnimationFrame(f); else r(out); })(); })""")
+        at = [float(re.search(r'-?[\d.]+', t).group()) for t in seen]
+        self.assertGreater(len(set(at)), 3)
+        self.assertTrue(all(a % 8 == 0 for a in at), sorted(set(at)))
+
+    def test_docked_play_at_the_foot_and_progress_up_the_chart_side(self):
+        for hand in ('right', 'left'):
+            with self.subTest(hand=hand):
+                self.new_page(service_workers='block')
+                self.kept(**{'nss.docked': True, 'nss.hand': hand})
+                self.loaded()
+                self.page.wait_for_function("getComputedStyle(document.querySelector('#column')).opacity === '1'")
+                col, tl, play = self.box('#column'), self.box('.nss-vtimebox'), self.box('#column [data-play]')
+                line = self.box('#column [data-progress]')
+                # To the column's edge on the chart's side, inset from the screen's.
+                if hand == 'right':
+                    self.assertEqual(round(tl['x']), round(col['x']))
+                    self.assertEqual(round(tl['x'] + tl['width']), 390 - 12)
+                    self.assertEqual(round(line['x']), round(tl['x']))
+                else:
+                    self.assertEqual(round(tl['x']), 12)
+                    self.assertEqual(round(tl['x'] + tl['width']), round(col['x'] + col['width']))
+                    self.assertEqual(round(line['x'] + line['width']), round(tl['x'] + tl['width']))
+                self.assertEqual(round(line['width']), 2)
+                # Play: the full width at the foot; the line runs from it upward.
+                self.assertEqual(round(play['width']), round(tl['width']) - 1)
+                self.assertEqual(round(play['height']), 44)
+                self.assertEqual(round(play['y'] + play['height']), round(tl['y'] + tl['height']) - 1)
+                self.assertEqual(round(line['y'] + line['height']), round(play['y']))
+                vt = self.page.locator('.nss-vtimeline')
+                vt.focus()
+                self.page.keyboard.press('Home')
+                fill = "document.querySelector('#column [data-progress] i').getBoundingClientRect()"
+                self.assertEqual(self.page.evaluate(fill + '.height'), 0)
+                self.page.keyboard.press('End')
+                self.assertEqual(round(self.page.evaluate(fill + '.height')), round(line['height']))
+                self.assertEqual(round(self.page.evaluate(fill + '.bottom')), round(play['y']))      # filled upward from the button
+                self.page.click('#column [data-play]')                  # from the last frame: nothing
+                self.assertFalse(self.playing('#column'))
+                vt.focus()
+                self.page.keyboard.press('Home')
+                self.page.click('#column [data-play]')
+                self.assertTrue(self.playing('#column'))
+                self.page.wait_for_function("+document.querySelector('.nss-vtimeline').getAttribute('aria-valuenow') >= 1")
 
     def test_says_when_the_run_was_published(self):
         # With nothing else to say, a quiet line says when the run was published.
