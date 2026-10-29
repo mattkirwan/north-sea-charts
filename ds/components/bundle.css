@@ -113,8 +113,8 @@
 .nss-column-time b { font-size: 11px; line-height: 1; font-weight: 500; letter-spacing: 0.4px; }
 .nss-column-time strong { font-size: 15px; line-height: 1; font-weight: 500; letter-spacing: -0.4px; }
 .nss-column-time small { font-size: 8px; line-height: 1; font-weight: 500; color: var(--ui-display-muted); }
-.nss-vtimeline { position: relative; flex: 1; min-height: 80px; margin: 0 calc(-1 * var(--space-3)) 0 calc(-1 * var(--space-1)); background: var(--ui-raised); border-top: 1px solid var(--ui-track); border-bottom: 1px solid var(--ui-track); }
-.nss-vtimeline-track { position: absolute; inset: 0; overflow: hidden; }
+.nss-vtimeline { position: relative; flex: 1; min-height: 80px; margin: 0; box-sizing: border-box; background: var(--ui-raised); border: 1px solid var(--ui-track); border-radius: var(--radius-card); }
+.nss-vtimeline-track { position: absolute; inset: 0; overflow: hidden; border-radius: var(--radius-card); }
 .nss-vtimeline .nss-needle { left: 0; right: 0; top: 50%; bottom: auto; width: auto; height: 2px; margin: -1px 0 0; }
 .nss-vtimeline-arrow { position: absolute; left: -9px; top: calc(50% - 6px); width: 0; height: 0; border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 9px solid var(--lifeboat-deep); }
 .nss-vtimeline .nss-tick { left: auto; right: 0; bottom: auto; height: 1px; width: 6px; margin: -0.5px 0 0; }
@@ -149,3 +149,19 @@
 .nss-setting { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: var(--space-1) var(--space-3); }
 .nss-setting .nss-switch { width: 176px; }
 .nss-setting .nss-switch button { flex: 1; width: auto; gap: 8px; font-family: var(--font-mono); font-size: 10px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; }
+
+/* Play: a solid lifeboat button inside the timeline, white icon, the same in both states */
+.nss-play { position: absolute; z-index: 4; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; background: var(--lifeboat); color: var(--lifeboat-ink); cursor: pointer; }
+.nss-play:focus-visible { outline: 2px solid var(--ui-ink); outline-offset: -4px; }
+/* Flush inside the frame: fills the scale's full height (or the column's full width) and takes its corners */
+.nss-scale .nss-play { left: 0; top: 0; bottom: 0; width: 44px; border-radius: var(--radius-inner) 0 0 var(--radius-inner); }
+.nss-vtimeline .nss-play { left: 0; right: 0; bottom: 0; height: 44px; border-radius: 0 0 var(--radius-inner) var(--radius-inner); }
+.nss-play svg { width: 18px; height: 18px; }
+.nss-play .nss-play-icon { fill: currentColor; stroke: none; }
+/* Progress: where the needle sits in the whole run, always in step with it */
+.nss-progress { position: absolute; z-index: 2; background: rgba(31, 38, 42, 0.12); pointer-events: none; }
+.nss-progress i { position: absolute; display: block; background: var(--ui-control); opacity: 0.8; }
+.nss-scale .nss-progress { left: 44px; right: 0; bottom: 0; height: 2px; }
+.nss-scale .nss-progress i { left: 0; top: 0; bottom: 0; width: var(--progress, 0%); }
+.nss-vtimeline .nss-progress { left: 0; top: 0; bottom: 44px; width: 2px; }
+.nss-vtimeline .nss-progress i { left: 0; right: 0; bottom: 0; height: var(--progress, 0%); }
