@@ -325,12 +325,22 @@ class App(unittest.TestCase):
         self.slide()
         self.assertIsNone(self.tip())
 
+    def news(self):
+        """hints.js with a new feature of the tests' own (none ships): the side panel, in words already there."""
+        entry = ("{ id: 'new.panel.side', type: 'new', target: 'menu-button', path: ['menu-button', 'menu.settings', 'settings.panel'], "
+                 "since: '2026-10-29', name: 'side', kicker: 'settings', title: 'panel', body: 'panelSub', action: 'open-settings:panel', "
+                 "doneEvent: 'panel.changed' }")
+        def serve(route):
+            r = route.fetch()
+            route.fulfill(response=r, body=r.text().replace('\n];', f',\n  {entry}\n];'))
+        self.page.route(lambda url: '/hints.js' in url, serve)
+
     def kept(self, news=False, **kept):
         """Someone who's had the timeline's tips, so this visit's one new hint is free, with anything else
-        kept; and the side panel's news, unless news."""
+        kept; and a new feature to hear about, with news."""
         seen = {'tip.timeline.slide': 'retired', 'tip.timeline.reset': 'retired'}
-        if not news:
-            seen['new.panel.side'] = 'retired'
+        if news:
+            self.news()
         kept = {'nss.hints.v1': dict(firstSeenRelease='0', tipsOn=True, seen=seen, guideCompleted=False), **kept}
         # The hints' own state once, so what a test does to it survives a reload.
         self.context.add_init_script(''.join((f'if (localStorage.getItem({json.dumps(k)}) == null) ' if k == 'nss.hints.v1' else '') +
@@ -409,7 +419,7 @@ class App(unittest.TestCase):
         self.assertEqual(self.page.locator('[data-set="tips"] [data-value="off"]').get_attribute('aria-pressed'), 'true')
         h = self.hints()
         self.assertFalse(h['tipsOn'])
-        self.assertEqual(sorted(h['seen']), ['new.panel.side', 'tip.swell.period', 'tip.timeline.reset', 'tip.timeline.slide'])
+        self.assertEqual(sorted(h['seen']), ['tip.swell.period', 'tip.timeline.reset', 'tip.timeline.slide'])
         self.page.reload()
         self.page.wait_for_function("document.querySelector('.nss-timeline').getAttribute('aria-valuemax') !== '0'")
         self.page.click('#panel .nss-band[data-band="swell"]')
@@ -453,7 +463,7 @@ class App(unittest.TestCase):
         self.tag_due()
         menu = '#panel [data-menu]'
         self.assertEqual(self.light(menu), 'ping')
-        self.assertEqual(self.page.locator('[data-new-tag]').text_content(), 'New · Side panel')
+        self.assertEqual(self.page.locator('[data-new-tag]').text_content(), 'New · Side')
         self.assertEqual(self.page.locator(menu).get_attribute('aria-label'), 'Menu, something new')
         tag, btn = self.on_screen('[data-new-tag]'), self.box(menu)
         self.assertLessEqual(tag['y'] + tag['height'], btn['y'])
@@ -534,7 +544,7 @@ class App(unittest.TestCase):
         self.kept(news=True, **{'nss.lang': 'fr'})
         self.loaded()
         self.tag_due()
-        self.assertEqual(self.page.locator('[data-new-tag]').text_content(), 'Nouveau · Panneau latéral')
+        self.assertEqual(self.page.locator('[data-new-tag]').text_content(), 'Nouveau · Côté')
         self.on_screen('[data-new-tag]')
         self.page.click('[data-new-tag]')
         self.on_screen('[data-hint-card]')
@@ -546,6 +556,7 @@ class App(unittest.TestCase):
             with self.subTest(first=first):
                 self.new_page(first_open=True, service_workers='block')
                 self.release = None
+                self.news()
                 self.stamped(first)
                 self.open()
                 self.page.wait_for_function("document.querySelector('.nss-timeline').getAttribute('aria-valuemax') !== '0'")
@@ -557,6 +568,14 @@ class App(unittest.TestCase):
                     self.slide()
                     self.page.wait_for_timeout(2500)
                     self.assertTrue(self.page.locator('[data-new-tag]').is_hidden())
+
+    def test_nothing_new_is_announced_for_now(self):
+        self.kept()
+        self.loaded()
+        self.page.wait_for_timeout(2500)
+        self.assertEqual(self.page.locator('.nss-light').count(), 0)
+        self.assertTrue(self.page.locator('[data-new-tag]').is_hidden())
+        self.assertEqual(self.page.locator('#panel [data-menu]').get_attribute('aria-label'), 'Menu')
 
     def test_no_lights_with_tips_off(self):
         self.kept(news=True)
@@ -591,7 +610,7 @@ class App(unittest.TestCase):
         self.loaded()
         self.assertEqual(self.page.locator('.nss-dock-btn').count(), 0)
         for b in ('#panel [data-menu]', '#column [data-menu]'):
-            self.assertRegex(self.page.locator(b).get_attribute('aria-label'), r'^Menu(, something new)?$')
+            self.assertEqual(self.page.locator(b).get_attribute('aria-label'), 'Menu')
             self.assertEqual(self.page.locator(b).get_attribute('aria-haspopup'), 'dialog')
         for hand, x in (('right', 390 - 12 - 48), ('left', 12)):
             if hand == 'left':

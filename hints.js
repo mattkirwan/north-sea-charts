@@ -15,7 +15,9 @@
    the menu (`path`, data-hint-targets, outermost first), and once shows a
    tag that opens a card (kicker, title, body; Show me runs `action`, in
    app.js). Only for people who first came before `since`, the day it was
-   merged to main. Ignored, it stays lit; used, it's gone.
+   merged to main. Ignored, it stays lit; used, it's gone. Kept for key
+   features only, each added on purpose when Matt asks for it: none at
+   present (tests/test_app.py tries the layer with one of its own).
 
    Registry order is the order they're offered in: the tip for a control
    just used first, as only using it makes it due; then the others; then new
@@ -25,7 +27,5 @@
 const HINTS = [
   { id: 'tip.swell.period', type: 'tip', target: 'swell', point: 'period', when: 'measure:height', label: 'tipPeriod', icon: 'period', doneEvent: 'swell.measure' },
   { id: 'tip.timeline.slide', type: 'tip', target: 'timeline', when: 'first-load', label: 'tipSlide', icon: 'slide', doneEvent: 'timeline.drag' },
-  { id: 'tip.timeline.reset', type: 'tip', target: 'timeline', when: 'after:tip.timeline.slide', label: 'tipReset', icon: 'reset', doneEvent: 'timeline.reset' },
-  { id: 'new.panel.side', type: 'new', target: 'menu-button', path: ['menu-button', 'menu.settings', 'settings.panel'], since: '2026-10-29',
-    name: 'newPanelName', kicker: 'newPanelKicker', title: 'newPanelName', body: 'newPanelBody', action: 'open-settings:panel', doneEvent: 'panel.changed' }
+  { id: 'tip.timeline.reset', type: 'tip', target: 'timeline', when: 'after:tip.timeline.slide', label: 'tipReset', icon: 'reset', doneEvent: 'timeline.reset' }
 ];
