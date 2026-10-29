@@ -17,11 +17,18 @@ P, S = 4, 5
 FRAME = gzip.compress(bytes(4 * P * P + 2 * S * S))
 
 
-def branch(made_h_ago=3, run_h_ago=8, steps=(0, 1, 384), dir='2026-10-27-10z', frames=None, manifest=True, base=None):
+TILE_VARS = ['hs', 'tp', 'tl', 'dl', 'dp', 'u', 'v', 'p']
+
+
+def branch(made_h_ago=3, run_h_ago=8, steps=(0, 1, 384), dir='2026-10-27-10z', frames=None, manifest=True, base=None, cells=False):
     m = dict(run=NOW - run_h_ago * H, runLabel='2026-10-27 10z', made=NOW - made_h_ago * H, steps=list(steps),
              pad=3, grids=dict(p=P, s=S))
     if dir:
         m['dir'] = dir
+    if cells:
+        cdir = f'cells/{dir}/{len(steps)}'
+        m['cells'] = dict(tile=2, dir=cdir, file='{dir}/{tile}.bin.gz', tiles=['52_-4', '52_0'], vars=TILE_VARS)
+        frames = {f'{cdir}/52_-4.bin.gz': gzip.compress(bytes(4 * len(steps) * 9)), **(frames or {})}
     if base:
         m['base'] = base
     files = {f"{dir + '/' if dir else ''}f{s:03d}.bin.gz": FRAME for s in steps}
@@ -74,6 +81,21 @@ class Fresh(unittest.TestCase):
     def test_corrupt_frame(self):
         [p] = self.found(frames={'2026-10-27-10z/f000.bin.gz': b'not gzip'})
         self.assertIn('+0 h unreadable', p)
+
+    def test_cell_tiles(self):
+        self.assertEqual(self.found(cells=True), [])
+
+    def test_cell_tiles_on_r2(self):
+        self.assertEqual(self.found(cells=True, base=R2), [])
+
+    def test_missing_cell_tile(self):
+        found = self.found(cells=True, frames={'cells/2026-10-27-10z/3/52_-4.bin.gz': None})
+        self.assertEqual(len(found), 1)
+        self.assertIn('Cell tile 52_-4 unreadable', found[0])
+
+    def test_short_cell_tile(self):
+        found = self.found(cells=True, frames={'cells/2026-10-27-10z/3/52_-4.bin.gz': gzip.compress(bytes(10))})
+        self.assertEqual(found, ['Cell tile 52_-4 is 10 bytes; 3 steps make 108'])
 
     def test_whole_run_in_the_past(self):
         found = self.found(made_h_ago=1, steps=(0, 1, 2))

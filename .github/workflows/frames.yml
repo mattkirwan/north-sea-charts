@@ -1,10 +1,12 @@
 # The chart app's frames (scripts/chart_frames.py): NOAA's GFS and GFS-Wave
 # on the app's square of sea, every frame of a run out to +384 h (209), as
-# small binary grids the app draws itself. Copied to Cloudflare R2, which
-# phones download them from (scripts/publish-r2.sh), and published with the
-# manifest on the `frames` branch as a single commit replaced each time, so
-# the repo doesn't grow. The manifest names R2 only once the frames are on
-# it; without R2 (not set up, or failing) phones take them from the branch.
+# small binary grids the app draws itself, and over the North Sea each of
+# NOAA's own cells for the whole run, in tiles (scripts/grid.py; kept on R2
+# run after run). Copied to Cloudflare R2, which phones download them from
+# (scripts/publish-r2.sh), and published with the manifest on the `frames`
+# branch as a single commit replaced each time, so the repo doesn't grow.
+# The manifest names R2 only once the frames are on it; without R2 (not set
+# up, or failing) phones take them from the branch.
 # A run published short (scripts/published.py says "partial") is tried again.
 #
 # A run reaches +384 h on NOAA's bucket, waves included, about 5 h after it

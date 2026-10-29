@@ -58,8 +58,9 @@ def fake_frame(P, S, k):
     return p, u, v, h, t
 
 
-def publish(out, run):
-    """A run's manifest and frames, as run_frames() writes them."""
+def publish(out, run, cells=False):
+    """A run's manifest and frames, as run_frames() writes them; and its
+    cell tiles if cells (made up as in test_grid.py)."""
     d = cf.run_dir(run)
     os.makedirs(os.path.join(out, d))
     for k, s in enumerate(STEPS):
@@ -69,6 +70,9 @@ def publish(out, run):
     manifest = dict(ice=None, run=ms, runLabel=f'{run:%Y-%m-%d %H}z', made=ms, steps=STEPS, complete=True, dir=d,
                     file='{dir}/f{step}.bin.gz', pad=3, square=dict(x0=cf.X0, x1=cf.X1, y0=cf.Y0, y1=cf.Y1, proj=cf.PROJ4),
                     grids=dict(p=cf.P_N, s=cf.S_N), scale=cf.SCALE, encoding='row-delta-v1', source='made up')
+    if cells:
+        from test_grid import fake_boxes
+        manifest['cells'] = cf.cell_tiles(out, run, STEPS, fake_boxes(STEPS))
     with open(os.path.join(out, 'manifest.json'), 'w') as f:
         json.dump(manifest, f)
 
@@ -100,6 +104,7 @@ class App(unittest.TestCase):
         # The run before last, so now is a few hours into it, as on the phone.
         cls.run_at = now.replace(minute=0, second=0, microsecond=0, hour=now.hour // 6 * 6) - dt.timedelta(hours=6)
         publish(os.path.join(cls.tmp, 'good'), cls.run_at)
+        publish(os.path.join(cls.tmp, 'cells'), cls.run_at, cells=True)
         os.makedirs(os.path.join(cls.tmp, 'empty'))
         Handler.frames = cls.tmp
         cls.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(Handler, directory=ROOT))
@@ -676,6 +681,20 @@ class App(unittest.TestCase):
         self.page.wait_for_function("""(() => { const s = document.querySelector('.nss-timeline'),
             ticks = s.querySelectorAll('.nss-tick:not(.nss-tick--day):not(.nss-tick--now)');
             return !ticks[+s.getAttribute('aria-valuenow')].classList.contains('nss-tick--pending'); })()""")
+
+    def test_debug_names_the_cell_tapped(self):
+        # ?debug=1: a tap on the chart shows the cell under it (grid.js), its
+        # own numbers from the run's cell tile, and the frame's node beside them.
+        self.page.goto(f'{self.origin}/index.html?debug=1&frames={self.origin}/_frames/cells/')
+        self.page.wait_for_function("document.querySelector('#rStatus').hidden")
+        x, y = self.page.evaluate("""() => { const [x, y] = grid.lonLatToKm(-0.95, 54.8); view.x = x + 30; view.y = y; requestDraw();
+            return [W / 2 + (x - view.x) * view.k, Hs / 2 - (y - view.y) * view.k]; }""")
+        self.page.mouse.click(x, y)
+        self.page.wait_for_function("[...document.querySelectorAll('pre')].some((p) => p.textContent.includes(' sea: Hs '))")
+        text = self.page.locator('pre').last.text_content()
+        self.assertIn('cell d4:219:-4 (54.75N 1.00W)', text)
+        self.assertRegex(text, r'peak \d+\.\d s from \d+°, longest \d+\.\d s from \d+°')
+        self.assertIn("frame's 25 km node", text)
 
     def test_no_manifest_says_offline(self):
         self.open('empty')
