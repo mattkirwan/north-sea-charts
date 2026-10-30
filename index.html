@@ -268,6 +268,15 @@
     border-right: 6px solid transparent; border-bottom: 7px solid var(--lifeboat-deep); opacity: 0; transition: opacity 0.3s; pointer-events: none; }
   [data-tied] .nss-tie { opacity: 0.6; }
   [data-tied] .nss-beacon-notch { opacity: 1; }
+  /* The cross a first-use tip points at: a lifeboat ripple, as the beacon's ping, while the tip shows. */
+  .nss-cross-spot { position: fixed; left: 0; top: 0; z-index: 1; width: 14px; height: 14px; margin: -7px 0 0 -7px; pointer-events: none; will-change: transform; }
+  .nss-cross-spot > span { position: absolute; inset: 0; }
+  .nss-cross-spot::after { content: ""; position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; box-sizing: border-box;
+    transform: translate(-50%, -50%); border: 2px solid var(--lifeboat); opacity: 0; }
+  .nss-cross-spot[data-on]::after { animation: nss-beacon-ping 2.4s linear infinite; }
+  @media (prefers-reduced-motion: reduce) { .nss-cross-spot[data-on]::after { animation: none; opacity: 0.9; } }
+  /* Four buttons in the open panel's row: tighter letters before smaller type. */
+  @media (max-width: 360px) { .nss-panel .nss-band { letter-spacing: 0.3px; } }
   /* The sheet: the open panel with the key, the bands and the menu button
      put away, a title row on top and the beacon's rows over the scale. */
   #panel[data-beacon] { padding-top: 4px; box-shadow: 0 -8px 24px rgba(14,18,20,0.25); }
@@ -330,6 +339,8 @@
 <!-- The beacon on the chart, and its tie down to the sheet (app.js places them). -->
 <div class="nss-beacon" data-beacon-mark hidden aria-hidden="true"><i></i></div>
 <span class="nss-tie" data-tie hidden aria-hidden="true"></span>
+<!-- The cross the "Tap a cross" tip points at, pulsing while it shows (app.js places it). -->
+<div class="nss-cross-spot" data-hint-target="cross" aria-hidden="true"><span data-hint-point="cross"></span></div>
 
 <!-- Open: full width along the bottom. Each word on the page carries its key
      in i18n.js: data-t for its text, data-t-label for its aria-label. -->
@@ -359,6 +370,8 @@
     <button type="button" class="nss-band" data-band="pressure" aria-pressed="true" aria-label="Pressure" data-t="pressure" data-t-label="pressure">Pressure</button>
     <button type="button" class="nss-band" data-band="wind" aria-pressed="false" aria-label="Wind" data-t="wind" data-t-label="wind">Wind</button>
     <button type="button" class="nss-band" data-band="swell" aria-pressed="false" aria-label="Swell" data-t="swell" data-t-label="swell">Swell</button>
+    <!-- Beacons: the grid points on and the layers off, beside the band, not a fourth band. -->
+    <button type="button" class="nss-band" data-beacons data-hint-target="beacons" aria-pressed="false" aria-label="Beacons" data-t="beacons" data-t-label="beacons">Beacons</button>
   </div>
   <div class="nss-readout" id="readout" role="group" aria-label="Forecast time" data-t-label="forecastTime">
     <span class="nss-readout-day" data-day>–</span>
@@ -460,6 +473,7 @@
     <div class="nss-band-slot"><button type="button" class="nss-band" data-band="pressure" aria-pressed="true" aria-label="Pressure" data-t-label="pressure" data-icon="pressure"></button></div>
     <div class="nss-band-slot"><button type="button" class="nss-band" data-band="wind" aria-pressed="false" aria-label="Wind" data-t-label="wind" data-icon="wind"></button></div>
     <div class="nss-band-slot"><button type="button" class="nss-band" data-band="swell" aria-pressed="false" aria-label="Swell" data-t-label="swell" data-icon="swell"></button></div>
+    <div class="nss-band-slot"><button type="button" class="nss-band" data-beacons data-hint-target="beacons" aria-pressed="false" aria-label="Beacons" data-t-label="beacons" data-icon="target"></button></div>
   </div>
   <button type="button" class="nss-menu-btn" data-menu data-hint-target="menu-button" aria-label="Menu" data-t-label="menu" aria-haspopup="dialog" data-icon="menu"></button>
   <div class="nss-flyout" id="flyout" data-hint-target="key" hidden>
@@ -489,7 +503,7 @@
   <hr class="nss-menu-rule">
   <ul class="nss-menu-list">
     <li><button type="button" class="nss-menu-item" data-go="settings" data-hint-target="menu.settings"><span class="nss-menu-text"><span class="nss-menu-name" data-t="settings">Settings</span><span class="nss-menu-sub" data-t="settingsSub">Panel, hand, language</span></span><span data-icon="chevron" data-icon-size="sm"></span></button></li>
-    <li><button type="button" class="nss-menu-item" data-guide><span class="nss-menu-text"><span class="nss-menu-name" data-t="guide">Guide</span><span class="nss-menu-sub" data-t="guideSub">A minute round the chart, one control at a time</span></span><span class="nss-menu-tag" data-t="guideSteps">4 STEPS</span></button></li>
+    <li><button type="button" class="nss-menu-item" data-guide><span class="nss-menu-text"><span class="nss-menu-name" data-t="guide">Guide</span><span class="nss-menu-sub" data-t="guideSub">A minute round the chart, one control at a time</span></span><span class="nss-menu-tag" data-t="guideSteps">5 STEPS</span></button></li>
     <li><button type="button" class="nss-menu-item" data-go="about"><span class="nss-menu-text"><span class="nss-menu-name" data-t="about">About</span><span class="nss-menu-sub" data-t="aboutSub">The app and the data</span></span><span data-icon="chevron" data-icon-size="sm"></span></button></li>
   </ul>
   <div class="nss-sheet-foot"><button type="button" class="nss-menu-btn" data-close aria-label="Close menu" data-t-label="closeMenu" data-icon="close"></button></div>

@@ -102,7 +102,8 @@ const ICONS = {
   check: '<path d="M5 12.5 L10 17.5 L19 7"></path>',
   play: '<path class="nss-play-icon" d="M8 5.5 L18.5 12 L8 18.5 Z"></path>',
   pause: '<path d="M8.5 5.5 V18.5 M15.5 5.5 V18.5" stroke-width="2.2"></path>',
-  share: '<path d="M12 3.5 V14"></path><path d="M8 7.5 L12 3.5 L16 7.5"></path><path d="M5.5 11 V20 H18.5 V11"></path>'
+  share: '<path d="M12 3.5 V14"></path><path d="M8 7.5 L12 3.5 L16 7.5"></path><path d="M5.5 11 V20 H18.5 V11"></path>',
+  target: '<path d="M12 3 V8.5 M12 15.5 V21 M3 12 H8.5 M15.5 12 H21"></path><rect x="8.5" y="8.5" width="7" height="7"></rect>'
 };
 const icon = (n, cls = '') => `<svg class="nss-icon${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
 document.querySelectorAll('[data-icon]').forEach((el) => { el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon, el.dataset.iconSize ? ` nss-icon--${el.dataset.iconSize}` : '')); });
@@ -131,6 +132,9 @@ const binColour = (K, v) => C[K.tok][Math.max(0, bin(K, v))];
 let man = null, frames = [], idx = 0, shown = -1;
 let band = store.get('nss.band', 'pressure'), swellVar = store.get('nss.swell', 'height');
 let docked = store.get('nss.docked', false), hand = store.get('nss.hand', 'right');
+// Beacons: the grid points on the chart, and every layer off, beside the
+// band (which comes back when it goes off). Kept between visits.
+let beaconsOn = store.get('nss.beacons', false);
 let offline = false, updatedNote = false, failedAt = {};
 // The bins found in the run's frames loaded so far (the keys' steps).
 let present = { wind: [], height: [], period: [] };
@@ -645,6 +649,7 @@ const halo = (text, x, y, fill, haloCol) => {
 // with its slate field only when there's no swell fill.
 function layersOn() {
   if (beacon) return { ...beacon.layers, swellVar: 'height', field: beacon.layers.wind && !beacon.layers.swell, points: beacon.layers.wind };
+  if (beaconsOn) return { pressure: false, wind: false, swell: false, swellVar, field: false, points: false };
   return { pressure: band === 'pressure', wind: band === 'wind', swell: band === 'swell', swellVar, field: band === 'wind', points: false };
 }
 // The geometry the chart needs for a frame, as [cache key, build].
@@ -731,7 +736,7 @@ function draw() {
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(baseLayer.canvas, 0, 0);
   }
-  if (fi < 0) { screen(); drawCrosses(sx, sy, pb, L, -1); placeBeacon(); return; }
+  if (fi < 0) { screen(); drawCrosses(sx, sy, pb, L, -1); placeCrossSpot(); placeBeacon(); return; }
   if (L.wind && !L.points) drawWind(fi, sx, sy, screen);
   // Isobars, centres and their figures: on the Pressure band, or with a beacon's pressure on.
   const g = L.pressure ? pressureGeom(fi) : { centres: [], labelled: [] };
@@ -744,7 +749,7 @@ function draw() {
   }
   // The grid points a beacon can go on, over the weather, under the figures.
   screen();
-  drawCrosses(sx, sy, pb, L, fi);
+  drawCrosses(sx, sy, pb, L, fi); placeCrossSpot();
   // Figures: centres first, then every third isobar, then swell band edges.
   const boxes = [], free = (bx, by, bw, bh) => {
     if (bx < 2 || by < 2 || bx + bw > W - 2 || by + bh > Hs - 2) return false;
@@ -825,7 +830,10 @@ function drawWind(fi, sx, sy, screen) {
 // ---- Panel: bands, key, swell switch, open or docked, right or left -------------------------
 const panelEl = $('#panel'), columnEl = $('#column'), flyout = $('#flyout');
 function renderPanel() {
-  document.querySelectorAll('.nss-band').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.band === band)));
+  document.querySelectorAll('.nss-band[data-band]').forEach((b) => b.setAttribute('aria-pressed', String(!beaconsOn && b.dataset.band === band)));
+  document.querySelectorAll('[data-beacons]').forEach((b) => b.setAttribute('aria-pressed', String(beaconsOn)));
+  // No layers on, so no key.
+  $('#keyslot').toggleAttribute('data-off', beaconsOn);
   document.querySelectorAll('[data-swell]').forEach((sw) => {
     sw.hidden = band !== 'swell';
     sw.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.var === swellVar)));
@@ -853,7 +861,7 @@ function renderPanel() {
   // the column each time it moves).
   const slot = columnEl.querySelector(`.nss-band[data-band="${band}"]`).parentNode;
   if (flyout.parentNode !== slot) slot.appendChild(flyout);
-  flyout.hidden = false;
+  flyout.hidden = beaconsOn;
   renderHint();
 }
 // A key too narrow for all its figures (13 steps beside the swell switch)
@@ -872,14 +880,26 @@ function fitKeys() {
   });
 }
 function setBand(b) {
-  band = b; store.set('nss.band', band); renderPanel(); requestDraw(); warm();
+  band = b; store.set('nss.band', band);
+  if (beaconsOn) { beaconsOn = false; store.set('nss.beacons', false); }
+  renderPanel(); requestDraw(); warm();
   // The open panel grows or shrinks with the key row: settle the map after.
   if (!sideOn()) setTimeout(easeClamp, reduced.matches ? 0 : 220);
 }
-document.querySelectorAll('.nss-band').forEach((b) => b.addEventListener('click', () => {
-  if (band === b.dataset.band) return;
+document.querySelectorAll('.nss-band[data-band]').forEach((b) => b.addEventListener('click', () => {
+  if (band === b.dataset.band && !beaconsOn) return;
   firstInteraction('band'); setBand(b.dataset.band);
 }));
+// Beacons on: the layers off, the grid points on, zoomed in to where they
+// can be used; off: the band from before, the map left where it is.
+function setBeacons(on) {
+  beaconsOn = on; store.set('nss.beacons', on);
+  renderPanel(); requestDraw(); warm();
+  if (!sideOn()) setTimeout(easeClamp, reduced.matches ? 0 : 220);
+  if (on) { zoomToBeacons(); emit('beacons.on'); }
+  hintWait();
+}
+document.querySelectorAll('[data-beacons]').forEach((b) => b.addEventListener('click', () => { firstInteraction('band'); setBeacons(!beaconsOn); }));
 document.querySelectorAll('[data-swell]').forEach((sw) => sw.addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (!b || b.dataset.var === swellVar) return;
@@ -1403,8 +1423,12 @@ function crossStride() {
 // still the place to tap.
 function drawCrosses(sx, sy, pb, L, fi) {
   crossPts = [];
-  if (!grid || !grid.seaPoints) return;
-  const st = crossStride(), path = new Path2D(), arrows = new Path2D(), d = L.points && fi >= 0 && frames[fi];
+  // With Beacons on only, and only zoomed in to where they're 16 px apart
+  // east to west (beacons' minimum zoom).
+  if (!grid || !grid.seaPoints || !beaconsOn) return;
+  const st = crossStride();
+  if (st.col > 1) return;
+  const path = new Path2D(), arrows = new Path2D(), d = L.points && fi >= 0 && frames[fi];
   const P = man.grids.p, sq = man.square, ws = man.scale.wind || 2;
   const add = (c) => {
     const px = sx(c.x), py = sy(c.y);
@@ -1420,7 +1444,7 @@ function drawCrosses(sx, sy, pb, L, fi) {
   const pts = grid.seaPoints();
   if (pts) {
     for (const c of pts) if (!(c.row % st.row) && !(c.col % st.col)) add(c);
-  } else if (st.row === 1 && st.col === 1) {
+  } else {
     let s = 90, n = -90, w = 180, e = -180;
     for (const fx of [-0.5, 0, 0.5]) for (const fy of [-0.5, 0, 0.5]) {
       const [lon, lat] = grid.kmToLonLat(view.x + fx * W / view.k, view.y + fy * Hs / view.k);
@@ -1445,6 +1469,21 @@ function drawCrosses(sx, sy, pb, L, fi) {
   ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = C.arrow;
   ctx.stroke(arrows);
 }
+// The cross for the first-use tip ("Tap a cross") to point at, pulsing: the
+// one nearest the middle of the visible chart, kept while the tip shows.
+let crossSpot = null;
+const crossSpotEl = $('[data-hint-target="cross"]');
+function placeCrossSpot() {
+  const tipOn = !!hintOn && hintOn.target === 'cross';
+  let p = tipOn && crossSpot && crossPts.find((q) => q.c.id === crossSpot.c.id);
+  if (!p && !tipOn && crossPts.length) {
+    const v = vis(), cx = v.x + v.w / 2, cy = (sideOn() ? Hs : v.h) / 2;
+    p = crossPts.reduce((a, q) => (Math.hypot(q.px - cx, q.py - cy) < Math.hypot(a.px - cx, a.py - cy) ? q : a));
+  }
+  crossSpot = p || null;
+  if (p) crossSpotEl.style.transform = `translate(${p.px.toFixed(1)}px, ${p.py.toFixed(1)}px)`;
+  if (tipOn) renderHint();
+}
 // A tap: the nearest cross within reach, or nothing.
 onTap = (cx, cy) => {
   let best = null, bd = CROSS_HIT;
@@ -1455,9 +1494,10 @@ onTap = (cx, cy) => {
 // Where the beacon sits once recentred: across the middle of the screen, a
 // quarter of the way down (and always clear above the sheet).
 const beaconY = () => Math.min(Hs * BEACON_AT, Hs - panelH() - 40);
-function dropBeacon(c) {
+function dropBeacon(c, layers) {
   const opening = !beacon;
-  beacon = { id: c.id, lat: c.lat, lon: c.lon, x: c.x, y: c.y, s: null, w: null, tieOk: false, layers: layersFor(c.id) };
+  beacon = { id: c.id, lat: c.lat, lon: c.lon, x: c.x, y: c.y, s: null, w: null, tieOk: false, layers: layers || layersFor(c.id) };
+  emit('beacon.drop');
   if (opening) {
     if (hintOn) { hintOn = null; hintCard = false; clearTimeout(hintGoT); renderHint(); }
     panelEl.setAttribute('data-beacon', '');
@@ -1505,7 +1545,7 @@ function closeBeacon() {
   applyPanels(); setFrame(idx, true);
   if (Q.has('at')) {
     const u = new URL(location.href);
-    u.searchParams.delete('at');
+    u.searchParams.delete('at'); u.searchParams.delete('layers');
     try { history.replaceState(history.state, '', u); } catch {}
   }
   easeClamp(); menuBtn().focus({ preventScroll: true }); hintWait();
@@ -1549,6 +1589,28 @@ function recentre() {
     view = { x: b.x - (px - W / 2) / k, y: b.y + (py - Hs / 2) / k, k };
     requestDraw();
     if (q < 1) glideAnim = requestAnimationFrame(step); else done();
+  };
+  glideAnim = requestAnimationFrame(step);
+}
+
+// Beacons turned on zoomed out: one glide in, about the middle of the
+// visible chart, to the zoom where the grid points sit 16 px apart east to
+// west (a jump with Reduce Motion); already there, nothing moves.
+function zoomToBeacons() {
+  if (!grid) return;
+  const v = vis(), cx = v.x + v.w / 2, cy = (sideOn() ? Hs : v.h) / 2;
+  const lat = grid.kmToLonLat(view.x + (cx - W / 2) / view.k, view.y - (cy - Hs / 2) / view.k)[1];
+  const k1 = Math.min(kMax(), CROSS_GAP / cellKm(lat).col * 1.001), k0 = view.k;
+  if (k0 >= k1) return;
+  cancelAnimationFrame(glideAnim);
+  if (reduced.matches) { zoomAbout(cx, cy, k1 / k0); clampView(); requestDraw(); saveView(); return; }
+  const start = performance.now();
+  let done = 1;
+  const step = (t) => {
+    const q = Math.min(1, (t - start) / 600), f = Math.pow(k1 / k0, glideEase(q));
+    zoomAbout(cx, cy, f / done); done = f;
+    clampView(); requestDraw();
+    if (q < 1) glideAnim = requestAnimationFrame(step); else { saveView(); hintWait(); }
   };
   glideAnim = requestAnimationFrame(step);
 }
@@ -1738,7 +1800,7 @@ for (const b of layerBtns) b.addEventListener('click', () => {
 // ---- The sheet's title row: Copy link, the grip, Close ----
 copyBtn.addEventListener('click', async () => {
   if (!beacon) return;
-  const link = `${location.origin}${location.pathname}?at=${beacon.lat.toFixed(2)},${beacon.lon.toFixed(2)}`;
+  const link = `${location.origin}${location.pathname}?at=${beacon.lat.toFixed(2)},${beacon.lon.toFixed(2)}&layers=${LAYERS.filter((l) => beacon.layers[l]).map((l) => l[0]).join('') || '-'}`;
   try { await navigator.clipboard.writeText(link); } catch { return; }
   copyBtn.innerHTML = icon('check'); saidEl.textContent = tr('linkCopied');
   setTimeout(() => { copyBtn.innerHTML = icon('share'); saidEl.textContent = ''; }, 1500);
@@ -1771,14 +1833,17 @@ grip.addEventListener('click', (e) => { if (e.detail === 0) closeBeacon(); });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && beacon && !sheetOn && !guideOn()) { e.preventDefault(); closeBeacon(); }
 });
-// The link: ?at=<lat>,<lon> drops the beacon on the nearest sea grid point.
-const atQ = (Q.get('at') || '').split(',').map(Number);
+// The link: ?at=<lat>,<lon> drops the beacon on the nearest sea grid point,
+// with Beacons on, and the sender's layers (&layers=, the first letters of
+// those on) if it carries them, else the cell's own.
+const atQ = (Q.get('at') || '').split(',').map(Number), layersQ = Q.get('layers');
 async function openAt() {
   if (atQ.length !== 2 || atQ.some(Number.isNaN) || !grid) return;
   const r = await grid.resolve(atQ[0], atQ[1], 'waves', 30).catch(() => null);
   if (!r || beacon) return;
   const c = grid.cellOf(r.id), [x, y] = grid.lonLatToKm(c.lon, c.lat);
-  dropBeacon({ id: r.id, ...c, x, y });
+  if (!beaconsOn) { beaconsOn = true; store.set('nss.beacons', true); renderPanel(); }
+  dropBeacon({ id: r.id, ...c, x, y }, layersQ == null ? null : Object.fromEntries(LAYERS.map((l) => [l, layersQ.includes(l[0])])));
 }
 
 // ---- Hints: what the app teaches (hints.js), one controller for all of it --------------------
@@ -1827,6 +1892,7 @@ function hintMet(h) {
   if (h.type === 'new') return hintNew(h);
   if (h.when.startsWith('after:')) return hs.seen[h.when.slice(6)] === 'retired';
   if (h.when.startsWith('measure:')) return band === 'swell' && swellVar === h.when.slice(8);
+  if (h.when === 'beacons-on') return beaconsOn && !beacon && !!crossSpot;
   return h.when === 'first-load' && !!man;
 }
 const hintDue = (h) => hs.tipsOn && !hs.seen[h.id] && (!hintSpent || hintSpent === chainOf(h)) && hintMet(h);
@@ -1834,7 +1900,7 @@ const hintBusy = () => !!(ptrs.size || drag || tl.moving || sheetOn || guideOn()
 const floatTag = $('[data-tip-float]'), newTag = $('[data-new-tag]'), card = $('[data-hint-card]');
 const gotIt = card.querySelector('[data-got-it]'), showMe = card.querySelector('[data-show-me]');
 // What Show me does.
-const HINT_ACTIONS = { 'open-settings:panel': () => openSheet('settings', '[data-set="panel"] [aria-pressed="true"]') };
+const HINT_ACTIONS = { 'open-settings:panel': () => openSheet('settings', '[data-set="panel"] [aria-pressed="true"]'), 'beacons-on': () => setBeacons(true) };
 // The control a hint is about, in the panel showing.
 const hintEl = (h) => [...document.querySelectorAll(`[data-hint-target="${h.target}"]`)].find((el) => !el.closest('[data-away], [hidden]'));
 // Beside what it's about, notched to it and kept on the screen: over it, off
@@ -1904,6 +1970,7 @@ function renderHint() {
   });
   // ...or floating over the part it points at.
   const pt = tip && hintOn.point && el.querySelector(`[data-hint-point="${hintOn.point}"]`);
+  crossSpotEl.toggleAttribute('data-on', !!pt && hintOn.target === 'cross');
   floatTag.hidden = !pt;
   if (pt) {
     floatTag.innerHTML = icon(hintOn.icon) + tr(hintOn.label) + '<span class="nss-tip-notch"></span>';
@@ -1911,8 +1978,10 @@ function renderHint() {
     placeBy(floatTag, pt, floatTag.lastChild);
   }
   // A new feature's tag, or the card it opened.
-  newTag.hidden = !news || hintCard;
-  if (news && !hintCard) {
+  // (Docked, a feature that asks for it has its light alone.)
+  const tagged = news && !(hintOn.tagOpenOnly && sideOn());
+  newTag.hidden = !tagged || hintCard;
+  if (tagged && !hintCard) {
     newTag.innerHTML = '<span class="nss-new-tag-light" aria-hidden="true"></span>' + tr('newTag', { name: tr(hintOn.name) }) +
       icon('chevron', ' nss-icon--sm') + '<span class="nss-tip-notch" aria-hidden="true"></span>';
     placeBy(newTag, el, newTag.lastChild);

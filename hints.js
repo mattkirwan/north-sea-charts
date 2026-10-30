@@ -6,6 +6,7 @@
      first-load              the first run is on the chart
      after:<id>              that hint has gone (a chain: one hint a visit)
      measure:<var>           Swell is on the chart, showing height or period
+     beacons-on              Beacons is on, its grid points showing, no beacon open
    and goes for good when its doneEvent fires (app.js emits them), when it's
    tapped, or after a while untouched. With a `point` (a data-hint-point
    inside the control) it floats over that part, notched to it, rather than
@@ -14,10 +15,11 @@
    A new feature (type 'new') lights its control and the way to it through
    the menu (`path`, data-hint-targets, outermost first), and once shows a
    tag that opens a card (kicker, title, body; Show me runs `action`, in
-   app.js). Only for people who first came before `since`, the day it was
-   merged to main. Ignored, it stays lit; used, it's gone. Kept for key
-   features only, each added on purpose when Matt asks for it: none at
-   present (tests/test_app.py tries the layer with one of its own).
+   app.js). Only for people who first came before `since`, the release it
+   was merged in (deploy.yml's stamp). With tagOpenOnly, the docked column
+   shows the light alone, without the tag. Ignored, it stays lit; used, it's gone. Kept for key
+   features only, each added on purpose when Matt asks for it: Beacons
+   (tests/test_app.py also tries the layer with one of its own).
 
    Registry order is the order they're offered in: the tip for a control
    just used first, as only using it makes it due; then the others; then new
@@ -27,7 +29,11 @@
 const HINTS = [
   { id: 'tip.swell.period', type: 'tip', target: 'swell', point: 'period', when: 'measure:height', label: 'tipPeriod', icon: 'period', doneEvent: 'swell.measure' },
   { id: 'tip.timeline.slide', type: 'tip', target: 'timeline', when: 'first-load', label: 'tipSlide', icon: 'slide', doneEvent: 'timeline.drag' },
-  { id: 'tip.timeline.reset', type: 'tip', target: 'timeline', when: 'after:tip.timeline.slide', label: 'tipReset', icon: 'reset', doneEvent: 'timeline.reset' }
+  { id: 'tip.timeline.reset', type: 'tip', target: 'timeline', when: 'after:tip.timeline.slide', label: 'tipReset', icon: 'reset', doneEvent: 'timeline.reset' },
+  { id: 'tip.beacons.cross', type: 'tip', target: 'cross', point: 'cross', when: 'beacons-on', label: 'tipCross', icon: 'target', doneEvent: 'beacon.drop' },
+  // Beacons, asked for by Matt: the light (and, in the open panel, the tag) on its button.
+  { id: 'new.beacons', type: 'new', target: 'beacons', path: ['beacons'], since: '2026-10-30-1205', name: 'beacons', kicker: 'chart',
+    title: 'g5Title', body: 'g5Body', action: 'beacons-on', doneEvent: 'beacons.on', tagOpenOnly: true }
 ];
 
 /* The Guide (Menu › Guide): a tour of the chart, one control lit at a time.
@@ -39,5 +45,6 @@ const GUIDE = [
   { target: 'chart', title: 'g1Title', body: 'g1Body', tryIt: 'g1Try', doneEvent: 'map.zoom' },
   { target: 'bands', title: 'g2Title', body: 'g2Body' },
   { target: 'key', band: 'swell', title: 'g3Title', body: 'g3Body', tryIt: 'g3Try', doneEvent: 'swell.measure' },
-  { target: 'timeline', title: 'g4Title', body: 'g4Body', tryIt: 'g4Try', doneEvent: 'timeline.reset' }
+  { target: 'timeline', title: 'g4Title', body: 'g4Body', tryIt: 'g4Try', doneEvent: 'timeline.reset' },
+  { target: 'beacons', title: 'g5Title', body: 'g5Body', tryIt: 'g5Try', doneEvent: 'beacon.drop' }
 ];
