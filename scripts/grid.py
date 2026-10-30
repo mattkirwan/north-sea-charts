@@ -20,12 +20,18 @@ onto for the app to draw: 185 nodes across for the swell (25 km), 116 for
 pressure and wind (40 km). It's a picture of the model, so nothing keeps
 its node numbers.
 
-Over the North Sea and its approaches (CELL_BOX), the frames job also writes
-each cell's values over the whole run, in tiles of TILE x TILE cells (4°
-square, on whole multiples of 4°), one gzipped file a tile, named for its
-south-west cell (52_-4: 52.00 to 55.75N, 4.00 to 0.25W). The app takes a
-tile when it wants a place's forecast (grid.js); a run's tiles are kept, so
-the cells' history builds up. Each tile, cell-series-v1, is in VARS order:
+Over Saltburn's swell window on the chart (CELL_BOX holds it), the frames
+job also writes the beacons' cells' values over the whole run. The beacon
+points (beacon_points()) are the sea cells in the window: every one within
+COAST_KM of land, and out at sea only NOAA's whole-degree points, as cells of
+their own lattice (COARSE: d1:<lat>:<lon>), so the open sea isn't crowded
+and its data stays small. Each lattice is kept in tiles, TILE x TILE cells
+for d4 (4° square, on whole multiples of 4°) and COARSE_TILE x COARSE_TILE
+for d1 (8°), one gzipped file a tile, named for its south-west cell (52_-4:
+52.00 to 55.75N, 4.00 to 0.25W), the d1 ones in a folder of their own; only
+the tiles holding beacon points are written. The app takes a tile when it
+wants a place's forecast (grid.js); a run's tiles are kept, so the cells'
+history builds up. Each tile, cell-series-v1, is in VARS order:
 for each variable, the cells row by row (north to south, west to east), and
 each cell's values step by step, stored as the differences from one step to
 the next (modulo 256, or 65536 for pressure, low bytes then high), which gzip
@@ -48,7 +54,9 @@ wind and pressure, and no sea.
 numpy only, so the app's tests can import it.
 """
 import base64
+import json
 import math
+import os
 
 import numpy as np
 
@@ -60,7 +68,11 @@ R = 6371.229
 
 LATTICE = 4                                        # NOAA's cells to the degree
 TILE = 16                                          # a tile's cells a side: 4°
-CELL_BOX = dict(s=48, n=64, w=-12, e=16)           # degrees, on whole tiles
+COARSE = 1                                         # the open sea's beacon points: NOAA's whole-degree ones
+COARSE_TILE = 8                                    # a d1 tile's cells a side: 8°
+CELL_BOX = dict(s=48, n=88, w=-56, e=40)           # degrees, on whole tiles of both: the swell window on the chart
+COAST_KM = 50                                      # every d4 cell this close to land is a beacon point
+WINDOW = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets', 'window.json')
 VARS = [('hs', 'u1'), ('tp', 'u1'), ('tl', 'u1'), ('dl', 'u1'), ('dp', 'u1'), ('u', 'i1'), ('v', 'i1'), ('p', 'u2')]
 CELL_SCALE = dict(hs=10, tp=10, tl=10, dir=2, wind=2, p=[20, 850])   # the manifest's cells.scale
 ENCODING = 'cell-series-v1'
@@ -134,28 +146,47 @@ def cell_bounds(cid):
 
 # ---- Tiles -------------------------------------------------------------------------------
 
+def tile_side(n):
+    """A tile's cells a side on lattice n, or None for a lattice without tiles."""
+    return {LATTICE: TILE, COARSE: COARSE_TILE}.get(n)
+
+
 def tile_of(cid):
     """The name of the tile a cell is in (52_-4), or None outside CELL_BOX."""
     n, row, col = parse(cid)
-    if n != LATTICE:
+    side = tile_side(n)
+    if side is None:
         return None
-    tr, tc = row // TILE, col // TILE
-    lat0, lon0 = tr * TILE // n, tc * TILE // n
+    lat0, lon0 = row // side * side // n, col // side * side // n
     if not (CELL_BOX['s'] <= lat0 < CELL_BOX['n'] and CELL_BOX['w'] <= lon0 < CELL_BOX['e']):
         return None
     return f'{lat0}_{lon0}'
 
 
-def tile_names():
-    """Every tile in CELL_BOX, north to south, west to east."""
-    deg = TILE // LATTICE
+def tile_names(n=LATTICE):
+    """Every tile of lattice n in CELL_BOX, north to south, west to east."""
+    deg = tile_side(n) // n
     return [f'{lat}_{lon}' for lat in range(CELL_BOX['n'] - deg, CELL_BOX['s'] - 1, -deg)
             for lon in range(CELL_BOX['w'], CELL_BOX['e'], deg)]
 
 
-def box_shape():
-    """The box's cells: (rows, cols)."""
-    return (CELL_BOX['n'] - CELL_BOX['s']) * LATTICE, (CELL_BOX['e'] - CELL_BOX['w']) * LATTICE
+def box_shape(n=LATTICE):
+    """The box's cells on lattice n: (rows, cols)."""
+    return (CELL_BOX['n'] - CELL_BOX['s']) * n, (CELL_BOX['e'] - CELL_BOX['w']) * n
+
+
+def box_latlon():
+    """The grid points of the box's (d4) cells: (lat, lon), (rows, cols) each."""
+    rows, cols = box_shape()
+    lat = CELL_BOX['n'] - (np.arange(rows) + 1) / LATTICE
+    lon = CELL_BOX['w'] + np.arange(cols) / LATTICE
+    return np.repeat(lat[:, None], cols, axis=1), np.repeat(lon[None, :], rows, axis=0)
+
+
+def coarse(a):
+    """The d1 cells of a box array (..., rows, cols): its whole-degree points."""
+    f = LATTICE // COARSE
+    return a[..., f - 1::f, ::f]
 
 
 def cut(field, lat0, lon0, step=0.25):
@@ -175,17 +206,21 @@ def cut(field, lat0, lon0, step=0.25):
     return out
 
 
-def tiles(box):
+def tiles(box, n=LATTICE):
     """Split the box's series ({var: (steps, rows, cols)}, as cut()) into
-    {tile name: {var: (steps, TILE, TILE)}}."""
-    rows, _ = box_shape()
-    deg = TILE // LATTICE
+    {tile name: {var: (steps, side, side)}}, on lattice n (d1: the box's
+    whole-degree points)."""
+    side = tile_side(n)
+    if n != LATTICE:
+        box = {k: coarse(a) for k, a in box.items()}
+    rows, _ = box_shape(n)
+    deg = side // n
     out = {}
-    for name in tile_names():
+    for name in tile_names(n):
         lat, lon = map(int, name.split('_'))
-        i = rows - (lat - CELL_BOX['s'] + deg) * LATTICE
-        j = (lon - CELL_BOX['w']) * LATTICE
-        out[name] = {k: a[:, i:i + TILE, j:j + TILE] for k, a in box.items()}
+        i = rows - (lat - CELL_BOX['s'] + deg) * n
+        j = (lon - CELL_BOX['w']) * n
+        out[name] = {k: a[:, i:i + side, j:j + side] for k, a in box.items()}
     return out
 
 
@@ -193,7 +228,7 @@ def tile_cell(name, cid):
     """A cell's (row, column) within its tile, north-west first."""
     n, row, col = parse(cid)
     lat, lon = map(int, name.split('_'))
-    return (lat * n + TILE - 1) - row, col - lon * n
+    return (lat * n + tile_side(n) - 1) - row, col - lon * n
 
 
 def encode_tile(t):
@@ -217,17 +252,17 @@ def encode_tile(t):
     return out
 
 
-def tile_size(steps):
-    return TILE * TILE * steps * sum(int(typ[1]) for _, typ in VARS)
+def tile_size(steps, side=TILE):
+    return side * side * steps * sum(int(typ[1]) for _, typ in VARS)
 
 
-def decode_tile(body, steps):
-    """A tile's bytes (after gunzip) as {var: (steps, TILE, TILE)} in m, s,
+def decode_tile(body, steps, side=TILE):
+    """A tile's bytes (after gunzip) as {var: (steps, side, side)} in m, s,
     degrees, m/s and hPa, NaN where missing: encode_tile() undone."""
     a = np.frombuffer(body, dtype=np.uint8)
-    if a.size != tile_size(steps):
-        raise ValueError(f'a tile of {a.size} bytes; {steps} steps make {tile_size(steps)}')
-    s, n, o, out = CELL_SCALE, TILE * TILE * steps, 0, {}
+    if a.size != tile_size(steps, side):
+        raise ValueError(f'a tile of {a.size} bytes; {steps} steps make {tile_size(steps, side)}')
+    s, n, o, out = CELL_SCALE, side * side * steps, 0, {}
     for k, typ in VARS:
         if typ == 'u2':
             raw = a[o:o + n].astype(np.int64) + 256 * a[o + n:o + 2 * n].astype(np.int64)
@@ -238,7 +273,7 @@ def decode_tile(body, steps):
             if typ == 'i1':
                 q = (q + 128) % 256 - 128
             o += n
-        q = q.T.reshape(steps, TILE, TILE).astype(np.float64)
+        q = q.T.reshape(steps, side, side).astype(np.float64)
         if k in ('hs', 'tp', 'tl'):
             v = np.where(q == 255, np.nan, q / s[k])
         elif k in ('dl', 'dp'):
@@ -251,20 +286,95 @@ def decode_tile(body, steps):
     return out
 
 
-def sea_mask(box):
-    """The box's cells with sea at any step of the run (box as tiles() takes
-    it), for the manifest's cells.sea: one bit a cell, rows north to south and
-    each west to east, the first cell in a byte's top bit, in base64. About a
-    kilobyte, so the app can draw every grid point a beacon can go on, at any
-    zoom, without fetching a tile."""
-    return base64.b64encode(np.packbits(np.isfinite(box['hs']).any(axis=0).ravel())).decode()
+# ---- Beacon points --------------------------------------------------------------------------
+
+def window_mask(lat, lon):
+    """Whether each point (arrays) is in Saltburn's swell window or one of its
+    bends: the window swell_sources.swell_window() makes, kept as the app's
+    assets/window.json (km of sea along each bearing from just off the pier,
+    and each bend's own from its point over its fan)."""
+    with open(WINDOW) as f:
+        w = json.load(f)
+
+    def away(lat0, lon0):
+        p1, p2, dl = np.radians(lat0), np.radians(lat), np.radians(lon - lon0)
+        a = np.sin((p2 - p1) / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dl / 2) ** 2
+        b = np.degrees(np.arctan2(np.sin(dl) * np.cos(p2), np.cos(p1) * np.sin(p2) - np.sin(p1) * np.cos(p2) * np.cos(dl)))
+        return 2 * 6371 * np.arcsin(np.minimum(1, np.sqrt(a))), (b + 360) % 360
+
+    def at(reach, b):
+        reach = np.asarray(reach)
+        return reach[np.floor(b / w['step'] + 0.5).astype(int) % len(reach)]
+    km, b = away(*w['origin'])
+    ok = km <= at(w['reach'], b)
+    for g in w['bends']:
+        km, b = away(g['lat'], g['lon'])
+        r = at(g['reach'], b)
+        ok |= (r > 0) & (km >= g.get('start', 0)) & (km <= r)
+    return ok
 
 
-def manifest_entry(dirname, names, sea=None):
+def near_land(sea, km):
+    """Sea cells (a box mask) within km of a cell with none, in whole cells
+    north-south and east-west at each row's latitude."""
+    rows, cols = sea.shape
+    lat, _ = box_latlon()
+    dy, land, out = 111.2 / LATTICE, ~sea, np.zeros_like(sea)
+    reach = int(km // dy)
+    cs = np.concatenate([np.zeros((rows, 1), int), np.cumsum(land, axis=1)], axis=1)
+    j = np.arange(cols)
+    for r in range(rows):
+        dx = dy * math.cos(math.radians(lat[r, 0]))
+        for di in range(-reach, reach + 1):
+            rr = r + di
+            if not 0 <= rr < rows:
+                continue
+            span = int(math.sqrt(max(0.0, km ** 2 - (di * dy) ** 2)) // dx)
+            out[r] |= cs[rr, np.minimum(cols, j + span + 1)] - cs[rr, np.maximum(0, j - span)] > 0
+    return out & sea
+
+
+def beacon_points(box):
+    """The run's beacon points (box as tiles() takes it): the sea cells in
+    Saltburn's swell window on the chart's square, every one within COAST_KM
+    of land (the model's own: no sea at any step), and further out only the
+    whole-degree points, as d1 cells. Masks: (d4 over the box, d1 over its
+    whole-degree points)."""
+    sea = np.isfinite(box['hs']).any(axis=0)
+    lat, lon = box_latlon()
+    x, y = FWD(lon, lat)
+    ok = sea & window_mask(lat, lon) & (x >= X0) & (x <= X1) & (y <= Y0) & (y >= Y1)
+    near = near_land(sea, COAST_KM)
+    return ok & near, coarse(ok & ~near)
+
+
+def bits(mask):
+    """A mask as the manifest keeps it: one bit a cell, rows north to south and
+    each west to east, the first cell in a byte's top bit, in base64."""
+    return base64.b64encode(np.packbits(mask.ravel())).decode()
+
+
+def tiles_with(mask, n=LATTICE):
+    """The names of lattice n's tiles holding any of a mask's cells."""
+    side, rows = tile_side(n), box_shape(n)[0]
+    deg = side // n
+    out = []
+    for name in tile_names(n):
+        lat, lon = map(int, name.split('_'))
+        i, j = rows - (lat - CELL_BOX['s'] + deg) * n, (lon - CELL_BOX['w']) * n
+        if mask[i:i + side, j:j + side].any():
+            out.append(name)
+    return out
+
+
+def manifest_entry(dirname, names, points=None, coarse_names=None, coarse_points=None):
     """The manifest's cells: where the run's tiles are and how to read them,
-    and where there's sea (sea_mask()) when given."""
+    the beacon points (bits() of beacon_points()'s d4 mask) when given, and
+    the open sea's d1 lattice, its tiles and points, when given."""
     out = dict(lattice=LATTICE, tile=TILE, box=CELL_BOX, dir=dirname, file='{dir}/{tile}.bin.gz', tiles=names,
                vars=[k for k, _ in VARS], scale=CELL_SCALE, encoding=ENCODING)
-    if sea is not None:
-        out['sea'] = sea
+    if points is not None:
+        out['points'] = points
+    if coarse_names is not None:
+        out['coarse'] = dict(lattice=COARSE, tile=COARSE_TILE, file='{dir}/d1/{tile}.bin.gz', tiles=coarse_names, points=coarse_points)
     return out

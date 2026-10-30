@@ -115,24 +115,38 @@ class Cells(unittest.TestCase):
 class Tiles(unittest.TestCase):
     def test_tiles_cover_the_box(self):
         names = grid.tile_names()
-        self.assertEqual(len(names), 28)
-        self.assertEqual(names[0], '60_-12')
-        self.assertEqual(names[-1], '48_12')
+        self.assertEqual(len(names), 240)
+        self.assertEqual(names[0], '84_-56')
+        self.assertEqual(names[-1], '48_36')
         self.assertEqual(grid.tile_of('d4:219:-4'), '52_-4')
+        coarse = grid.tile_names(grid.COARSE)                    # the open sea's d1 tiles: 8° square
+        self.assertEqual((len(coarse), coarse[0], coarse[-1]), (60, '80_-56', '48_32'))
+        self.assertEqual(grid.tile_of('d1:55:2'), '48_0')
 
     def test_box_edges(self):
-        self.assertEqual(grid.tile_of(grid.cell_id(48.0, -12.0)), '48_-12')
-        self.assertEqual(grid.tile_of(grid.cell_id(63.75, 15.75)), '60_12')
-        for lat, lon in ((47.75, 0), (64.0, 0), (55, -12.25), (55, 16.0)):
+        self.assertEqual(grid.tile_of(grid.cell_id(48.0, -56.0)), '48_-56')
+        self.assertEqual(grid.tile_of(grid.cell_id(87.75, 39.75)), '84_36')
+        for lat, lon in ((47.75, 0), (88.0, 0), (55, -56.25), (55, 40.0)):
             self.assertIsNone(grid.tile_of(grid.cell_id(lat, lon)), (lat, lon))
+        self.assertEqual(grid.tile_of('d1:87:39'), '80_32')
+        self.assertIsNone(grid.tile_of('d1:47:0'))
+        self.assertIsNone(grid.tile_of('d12:657:-12'))
 
     def test_split_and_find(self):
         rows, cols = grid.box_shape()
         lat = (grid.CELL_BOX['n'] - 0.25 - np.arange(rows) / 4)[:, None] + 0 * np.arange(cols)
         lon = (grid.CELL_BOX['w'] + np.arange(cols) / 4)[None, :] + 0 * np.arange(rows)[:, None]
-        t = grid.tiles(dict(lat=lat[None], lon=lon[None]))
-        for la, lo in ((54.75, -1.0), (48.0, -12.0), (63.75, 15.75), (60.0, 4.0), (59.75, 3.75)):
+        box = dict(lat=lat[None], lon=lon[None])
+        t = grid.tiles(box)
+        for la, lo in ((54.75, -1.0), (48.0, -56.0), (87.75, 39.75), (60.0, 4.0), (59.75, 3.75)):
             cid = grid.cell_id(la, lo)
+            name = grid.tile_of(cid)
+            i, j = grid.tile_cell(name, cid)
+            self.assertEqual((t[name]['lat'][0, i, j], t[name]['lon'][0, i, j]), (la, lo))
+        # The open sea's d1 tiles: the box's whole-degree points.
+        t = grid.tiles(box, grid.COARSE)
+        for la, lo in ((55, 2), (48, -56), (87, 39), (64, -8)):
+            cid = grid.cell_id(la, lo, grid.COARSE)
             name = grid.tile_of(cid)
             i, j = grid.tile_cell(name, cid)
             self.assertEqual((t[name]['lat'][0, i, j], t[name]['lon'][0, i, j]), (la, lo))
@@ -144,13 +158,13 @@ class Tiles(unittest.TestCase):
         c = grid.cut(lats[:, None] + 0 * lons, lats[0], lons[0])
         d = grid.cut(0 * lats[:, None] + lons, lats[0], lons[0])
         self.assertEqual(c.shape, grid.box_shape())
-        self.assertEqual((c[0, 0], d[0, 0], c[-1, -1], d[-1, -1]), (63.75, -12.0, 48.0, 15.75))
+        self.assertEqual((c[0, 0], d[0, 0], c[-1, -1], d[-1, -1]), (87.75, -56.0, 48.0, 39.75))
         # As NOAA's GRIBs give it (2026-10-28 00z): close enough to be on the cells.
         np.testing.assert_array_equal(grid.cut(lats[:, None] + 0 * lons, lats[0], -79.99998754690796), c)
         with self.assertRaises(ValueError):
             grid.cut(c, 88.1, -80)
         with self.assertRaises(ValueError):
-            grid.cut(c[:10], 63.75, -12)
+            grid.cut(c[:10], 87.75, -56)
 
     def test_round_trip(self):
         t = {k: v[:, :16, :16] for k, v in {k: np.stack([b[k] for b in fake_boxes(STEPS).values()])
@@ -202,28 +216,51 @@ class Written(unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.out)
 
-    def tile(self, name):
-        with open(os.path.join(self.out, self.entry['dir'], f'{name}.bin.gz'), 'rb') as f:
-            return grid.decode_tile(gzip.decompress(f.read()), len(STEPS))
+    def tile(self, name, n=grid.LATTICE):
+        sub = '' if n == grid.LATTICE else 'd1'
+        with open(os.path.join(self.out, self.entry['dir'], sub, f'{name}.bin.gz'), 'rb') as f:
+            return grid.decode_tile(gzip.decompress(f.read()), len(STEPS), grid.tile_side(n))
+
+    def unbits(self, b64, n=grid.LATTICE):
+        rows, cols = grid.box_shape(n)
+        return np.unpackbits(np.frombuffer(base64.b64decode(b64), np.uint8))[:rows * cols].reshape(rows, cols).astype(bool)
 
     def test_manifest_entry(self):
         self.assertEqual(self.entry['dir'], 'cells/2026-10-29-06z/5')
-        self.assertEqual(len(self.entry['tiles']), 28)
         self.assertEqual(self.entry['encoding'], 'cell-series-v1')
-        self.assertEqual(sorted(os.listdir(os.path.join(self.out, self.entry['dir']))), sorted(f'{n}.bin.gz' for n in self.entry['tiles']))
+        self.assertIn('52_-4', self.entry['tiles'])
+        # Only the tiles with beacon points, d4 and d1 (in its own folder).
+        d = os.path.join(self.out, self.entry['dir'])
+        self.assertEqual(sorted(os.listdir(d)), sorted([f'{n}.bin.gz' for n in self.entry['tiles']] + ['d1']))
+        c = self.entry['coarse']
+        self.assertEqual((c['lattice'], c['tile'], c['file']), (1, 8, '{dir}/d1/{tile}.bin.gz'))
+        self.assertEqual(sorted(os.listdir(os.path.join(d, 'd1'))), sorted(f'{n}.bin.gz' for n in c['tiles']))
+        fine, open_sea = self.unbits(self.entry['points']), self.unbits(c['points'], grid.COARSE)
+        self.assertEqual(set(self.entry['tiles']), set(grid.tiles_with(fine)))
+        self.assertEqual(set(c['tiles']), set(grid.tiles_with(open_sea, grid.COARSE)))
 
-    def test_the_sea_mask(self):
-        # One bit a cell: sea at any step, land (no swell ever) not.
-        rows, cols = grid.box_shape()
-        bits = np.unpackbits(np.frombuffer(base64.b64decode(self.entry['sea']), np.uint8))[:rows * cols].reshape(rows, cols)
-        sea = np.isfinite(np.stack([self.boxes[s]['hs'] for s in STEPS])).any(axis=0)
-        np.testing.assert_array_equal(bits.astype(bool), sea)
-        self.assertTrue(bits[box_index(54.75, -1.0)])
-        self.assertFalse(bits[box_index(54.5, -1.0)])
-        # And the app reads the same cells from it, without a tile.
+    def test_the_beacon_points(self):
+        box = {k: np.stack([self.boxes[s][k] for s in STEPS]) for k, _ in grid.VARS}
+        fine, open_sea = grid.beacon_points(box)
+        np.testing.assert_array_equal(self.unbits(self.entry['points']), fine)
+        np.testing.assert_array_equal(self.unbits(self.entry['coarse']['points'], grid.COARSE), open_sea)
+        sea = np.isfinite(box['hs']).any(axis=0)
+        self.assertTrue(fine[box_index(54.75, -1.0)])                # the wave model's cell off Saltburn, by the coast
+        self.assertFalse(fine[box_index(54.5, -1.0)])                # land
+        lat, lon = grid.box_latlon()
+        win = grid.window_mask(lat, lon)
+        self.assertFalse((fine & ~(sea & win)).any())               # sea in the window only
+        self.assertFalse(win[box_index(57.0, -8.0)])                 # west of Scotland: no
+        self.assertTrue(win[box_index(55.0, 2.0)])                   # the open North Sea: yes
+        # Out at sea, whole degrees only, none by the coast.
+        c_lat, c_lon = grid.coarse(lat), grid.coarse(lon)
+        self.assertTrue(((c_lat[open_sea] % 1 == 0) & (c_lon[open_sea] % 1 == 0)).all())
+        self.assertFalse((grid.coarse(fine) & open_sea).any())
+        # And the app reads the same points, without a tile.
         got = js(dict(manifest=self.manifest, base=self.out + '/'))
         self.assertEqual(got['asked'], [])
-        want = [f'd4:{grid.LATTICE * grid.CELL_BOX["n"] - 1 - i}:{grid.LATTICE * grid.CELL_BOX["w"] + j}' for i, j in zip(*np.nonzero(sea))]
+        want = [f'd4:{grid.LATTICE * grid.CELL_BOX["n"] - 1 - i}:{grid.LATTICE * grid.CELL_BOX["w"] + j}' for i, j in zip(*np.nonzero(fine))]
+        want += [f'd1:{grid.CELL_BOX["n"] - 1 - i}:{grid.CELL_BOX["w"] + j}' for i, j in zip(*np.nonzero(open_sea))]
         self.assertEqual(got['sea'], want)
 
     def test_a_cell_keeps_its_own_numbers(self):
@@ -242,15 +279,19 @@ class Written(unittest.TestCase):
             shutil.rmtree(out)
 
     def test_app_reads_them_the_same(self):
-        ids = ['d4:219:-4', 'd4:218:-4', 'd4:192:-48', 'd4:255:63', 'd4:240:4', 'd4:100:0']
+        rows, cols = grid.box_shape(grid.COARSE)
+        i, j = np.argwhere(self.unbits(self.entry['coarse']['points'], grid.COARSE))[0]
+        out_at_sea = f'd1:{grid.CELL_BOX["n"] - 1 - i}:{grid.CELL_BOX["w"] + j}'
+        ids = ['d4:219:-4', 'd4:218:-4', 'd4:192:-48', 'd4:255:63', 'd4:240:4', 'd4:100:0', out_at_sea]
         got = js(dict(manifest=self.manifest, base=self.out + '/', series=ids, ids=ids,
                       resolve=[[54.58, -0.97, 'waves'], [54.58, -0.97, 'wind'], [30.0, 0.0, 'waves']]))
+        written = lambda cid: grid.tile_of(cid) in (self.entry['tiles'] if cid.startswith('d4:') else self.entry['coarse']['tiles'])
         for cid, s in zip(ids, got['series']):
             name = grid.tile_of(cid)
-            if name is None:
+            if not written(cid):
                 self.assertIsNone(s, cid)
                 continue
-            t = self.tile(name)
+            t = self.tile(name, grid.parse(cid)[0])
             i, j = grid.tile_cell(name, cid)
             self.assertEqual((s['id'], s['lat'], s['lon'], s['steps']), (cid, *grid.cell_of(cid), STEPS))
             self.assertEqual(s['sea'], bool(np.isfinite(t['hs'][:, i, j]).any()), cid)
@@ -267,7 +308,7 @@ class Written(unittest.TestCase):
         self.assertEqual(wind, dict(id='d4:218:-4', km=0, bearing=0))
         self.assertIsNone(nowhere)
         self.assertTrue(all(u.endswith(f'?run={self.manifest["run"]}') for u in got['asked']))
-        self.assertEqual(got['tiles'], [grid.tile_of(c) for c in ids])
+        self.assertEqual(got['tiles'], [grid.tile_of(c) if written(c) else None for c in ids])
 
 
 class Square(unittest.TestCase):
