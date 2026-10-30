@@ -402,10 +402,13 @@ class App(unittest.TestCase):
             route.fulfill(response=r, body=r.text().replace('\n];', f',\n  {entry}\n];'))
         self.page.route(lambda url: '/hints.js' in url, serve)
 
-    def kept(self, news=False, **kept):
+    def kept(self, news=False, beacons_news=False, **kept):
         """Someone who's had the timeline's tips, so this visit's one new hint is free, with anything else
-        kept; and a new feature to hear about, with news."""
+        kept; and a new feature to hear about, with news (the tests' own), or Beacons' (the real one) with
+        beacons_news, which is otherwise already heard."""
         seen = {'tip.timeline.slide': 'retired', 'tip.timeline.reset': 'retired'}
+        if not beacons_news:
+            seen['new.beacons'] = 'retired'
         if news:
             self.news()
         kept = {'nss.hints.v1': dict(firstSeenRelease='0', tipsOn=True, seen=seen, guideCompleted=False), **kept}
@@ -486,7 +489,7 @@ class App(unittest.TestCase):
         self.assertEqual(self.page.locator('[data-set="tips"] [data-value="off"]').get_attribute('aria-pressed'), 'true')
         h = self.hints()
         self.assertFalse(h['tipsOn'])
-        self.assertEqual(sorted(h['seen']), ['tip.swell.period', 'tip.timeline.reset', 'tip.timeline.slide'])
+        self.assertEqual(sorted(h['seen']), ['new.beacons', 'tip.beacons.cross', 'tip.swell.period', 'tip.timeline.reset', 'tip.timeline.slide'])
         self.page.reload()
         self.page.wait_for_function("document.querySelector('.nss-timeline').getAttribute('aria-valuemax') !== '0'")
         self.page.click('#panel .nss-band[data-band="swell"]')
@@ -636,14 +639,6 @@ class App(unittest.TestCase):
                     self.page.wait_for_timeout(2500)
                     self.assertTrue(self.page.locator('[data-new-tag]').is_hidden())
 
-    def test_nothing_new_is_announced_for_now(self):
-        self.kept()
-        self.loaded()
-        self.page.wait_for_timeout(2500)
-        self.assertEqual(self.page.locator('.nss-light').count(), 0)
-        self.assertTrue(self.page.locator('[data-new-tag]').is_hidden())
-        self.assertEqual(self.page.locator('#panel [data-menu]').get_attribute('aria-label'), 'Menu')
-
     def test_no_lights_with_tips_off(self):
         self.kept(news=True)
         self.loaded()
@@ -689,7 +684,7 @@ class App(unittest.TestCase):
         self.loaded()
         self.guide()
         self.closed()                                           # the menu's gone; the Guide's over the chart
-        self.assertEqual(self.step(), 'Guide, step 1 of 4')
+        self.assertEqual(self.step(), 'Guide, step 1 of 5')
         self.assertEqual(self.page.locator('[data-guide-card]').get_attribute('role'), 'dialog')
         self.assertEqual(self.focused(), 'Next')
         # 1: the chart itself, live, the panel dimmed; no Back.
@@ -704,7 +699,7 @@ class App(unittest.TestCase):
         self.assertTrue(self.tried())
         # 2: the bands, the rest dimmed, the chart too.
         self.page.click('[data-guide-next]')
-        self.assertEqual(self.step(), 'Guide, step 2 of 4')
+        self.assertEqual(self.step(), 'Guide, step 2 of 5')
         self.assertEqual(self.lit(), ['bands'])
         self.assertTrue(self.page.locator('[data-guide-scrim]').is_visible())
         self.guide_card_clear_of('#panel')
@@ -715,22 +710,29 @@ class App(unittest.TestCase):
         self.guide_card_clear_of('#panel')
         self.page.click('#panel [data-var="period"]')
         self.assertTrue(self.tried())
-        self.assertEqual(self.step(), 'Guide, step 3 of 4')    # never moves on by itself
+        self.assertEqual(self.step(), 'Guide, step 3 of 5')    # never moves on by itself
         # Back, and forward again: still ticked.
         self.page.click('[data-guide-back]')
-        self.assertEqual(self.step(), 'Guide, step 2 of 4')
+        self.assertEqual(self.step(), 'Guide, step 2 of 5')
         self.page.click('[data-guide-next]')
         self.assertTrue(self.tried())
-        # 4: the timeline, slid and brought back to now; Done.
+        # 4: the timeline, slid and brought back to now.
         self.page.click('[data-guide-next]')
         self.assertEqual(self.lit(), ['timeline'])
-        self.assertEqual(self.page.locator('[data-guide-next]').text_content(), 'Done')
+        self.assertEqual(self.page.locator('[data-guide-next]').text_content(), 'Next')
         self.guide_card_clear_of('#panel')
         self.slide()
         self.assertFalse(self.tried())
         b = self.box('#panel .nss-timeline')
         self.page.mouse.dblclick(b['x'] + 80, b['y'] + b['height'] / 2)
         self.assertTrue(self.tried())
+        # 5: Beacons; Done.
+        self.page.click('[data-guide-next]')
+        self.assertEqual(self.step(), 'Guide, step 5 of 5')
+        self.assertEqual(self.lit(), ['beacons'])
+        self.assertEqual(self.page.locator('[data-guide-title]').text_content(), 'Beacons')
+        self.assertEqual(self.page.locator('[data-guide-next]').text_content(), 'Done')
+        self.guide_card_clear_of('#panel')
         self.page.click('[data-guide-next]')
         self.assertIsNone(self.step())
         self.assertEqual(self.lit(), [])
@@ -750,7 +752,7 @@ class App(unittest.TestCase):
                 self.guide()
                 self.page.click('[data-guide-next]')
                 self.page.click('[data-guide-next]')                # on Swell for the key
-                self.assertEqual(self.step(), 'Guide, step 3 of 4')
+                self.assertEqual(self.step(), 'Guide, step 3 of 5')
                 if how == 'close':
                     self.page.click('[data-guide-close]')
                 elif how == 'escape':
@@ -763,7 +765,7 @@ class App(unittest.TestCase):
                 h = self.hints()
                 self.assertFalse(h['guideCompleted'])
                 # Taught already: the tips it covers don't come after it.
-                self.assertEqual({k for k, v in h['seen'].items() if v == 'retired'}, {'tip.timeline.slide', 'tip.timeline.reset', 'tip.swell.period'})
+                self.assertEqual({k for k, v in h['seen'].items() if v == 'retired'}, {'tip.timeline.slide', 'tip.timeline.reset', 'tip.swell.period', 'tip.beacons.cross'})
                 self.page.wait_for_timeout(2000)
                 self.assertIsNone(self.tip())
                 self.assertIn('/index.html', self.page.url)          # back closed the Guide, not the app
@@ -781,7 +783,7 @@ class App(unittest.TestCase):
                 self.kept(**{'nss.docked': True, 'nss.hand': hand})
                 self.loaded()
                 self.guide()
-                for target in (None, 'bands', 'key', 'timeline'):
+                for target in (None, 'bands', 'key', 'timeline', 'beacons'):
                     self.assertEqual(self.lit(), [target] if target else [])
                     self.guide_card_clear_of('#column')
                     self.page.click('[data-guide-next]')
@@ -791,8 +793,8 @@ class App(unittest.TestCase):
         self.kept(**{'nss.lang': 'de'})
         self.loaded()
         self.guide()
-        self.assertEqual(self.step(), 'Rundgang, Schritt 1 von 4')
-        for _ in range(4):
+        self.assertEqual(self.step(), 'Rundgang, Schritt 1 von 5')
+        for _ in range(5):
             self.guide_card_clear_of('#panel')
             self.page.click('[data-guide-next]')
 
@@ -851,7 +853,7 @@ class App(unittest.TestCase):
         self.assertEqual(self.page.locator('#menu').get_attribute('role'), 'dialog')
         self.assertEqual([n.strip() for n in self.page.locator('#menu .nss-menu-name').all_text_contents()],
                          ['Chart', '💡 Feedback & ideas', 'Settings', 'Guide', 'About'])
-        self.assertEqual(self.page.locator('#menu [data-guide] .nss-menu-tag').text_content(), '4 STEPS')
+        self.assertEqual(self.page.locator('#menu [data-guide] .nss-menu-tag').text_content(), '5 STEPS')
         self.assertEqual(self.page.locator('#menu .nss-soon').count(), 0)
         self.assertEqual(self.page.locator('#menu [aria-disabled]').count(), 0)
         chart = self.page.locator('#menu [data-view="chart"]')
@@ -1177,7 +1179,9 @@ class App(unittest.TestCase):
     # The cells run's tiles (test_grid.fake_boxes): Saltburn's own cell
     # d4:218:-4 and those round it are land, but for the wave model's cell
     # north of it, d4:219:-4, whose wave height is 1.0 + k/10 m at step k.
-    def beacon_run(self, query=''):
+    def beacon_run(self, query='', beacons=True):
+        if beacons:
+            self.context.add_init_script("if (localStorage.getItem('nss.beacons') == null) localStorage.setItem('nss.beacons', 'true')")
         self.page.goto(f'{self.origin}/index.html?{query}frames={self.origin}/_frames/cells/')
         self.page.wait_for_function("document.querySelector('#rStatus').hidden")
 
@@ -1198,28 +1202,75 @@ class App(unittest.TestCase):
     def shown_cells(self):
         return self.page.evaluate("crossPts.map((p) => p.c.id)")
 
-    def test_crosses_on_sea_points_at_every_zoom_filling_in_as_it_zooms(self):
-        self.beacon_run()
+    def test_crosses_only_with_beacons_on_and_zoomed_in(self):
+        self.beacon_run(beacons=False)
+        self.to_saltburn_view()
+        self.assertEqual(self.shown_cells(), [])                            # Beacons off: none, however close
+        self.page.click('#panel [data-beacons]')
         self.chart()
-        # The opening view: some, every few grid points, from the sea mask (no tile fetched).
-        far, st = self.shown_cells(), self.page.evaluate('crossStride()')
-        self.assertGreater(len(far), 0)
-        self.assertGreater(st['row'], 1)
-        self.assertEqual(self.page.evaluate('crossTiles.size'), 0)
-        for cid in far:
-            _, row, col = map(int, cid[1:].split(':'))
-            self.assertEqual((row % st['row'], col % st['col']), (0, 0), cid)
-        # Zoomed in: every sea point in sight, the ones from further out among them.
-        self.to_saltburn()
         near = self.shown_cells()
         self.assertEqual(self.page.evaluate('crossStride()'), dict(row=1, col=1))
         self.assertIn('d4:219:-4', near)
-        self.assertNotIn('d4:218:-4', near)                               # land: no cross
-        # A little further out: every other column (they're closer across than down).
+        self.assertNotIn('d4:218:-4', near)                                 # land: no cross
+        self.assertEqual(self.page.evaluate('crossTiles.size'), 0)          # from the sea mask, no tile fetched
+        # Zoomed out past the minimum: none, and the button stays on.
         self.page.evaluate("view.k /= 4; clampView(); requestDraw()")
         self.chart()
-        self.assertEqual(self.page.evaluate('crossStride()'), dict(row=1, col=2))
-        self.assertTrue(all(int(c.split(':')[2]) % 2 == 0 for c in self.shown_cells()))
+        self.assertEqual(self.shown_cells(), [])
+        self.assertEqual(self.page.locator('#panel [data-beacons]').get_attribute('aria-pressed'), 'true')
+
+    def to_saltburn_view(self):
+        self.page.evaluate("""() => { const [x, y] = grid.lonLatToKm(-0.95, 54.8); view.k = 3; view.x = x + 30; view.y = y; clampView(); requestDraw(); }""")
+        self.chart()
+
+    def test_beacons_takes_over_from_the_band_and_glides_in(self):
+        self.beacon_run(beacons=False)
+        self.page.click('#panel .nss-band[data-band="wind"]')
+        self.chart()
+        k0 = self.page.evaluate('view.k')
+        self.page.click('#panel [data-beacons]')
+        pressed = lambda: [b.get_attribute('aria-pressed') for b in self.page.locator('#panel .nss-band').all()]
+        self.assertEqual(pressed(), ['false', 'false', 'false', 'true'])
+        self.assertEqual(self.page.evaluate("(() => { const L = layersOn(); return [L.pressure, L.wind, L.swell, L.field]; })()"), [False] * 4)
+        self.assertEqual(self.page.locator('#keyslot').get_attribute('data-off'), '')
+        # Zoomed out: one glide in to where the points sit 16 px apart east to west.
+        self.page.wait_for_timeout(900)
+        k = self.page.evaluate('view.k')
+        self.assertGreater(k, k0)
+        self.assertEqual(self.page.evaluate('crossStride()'), dict(row=1, col=1))
+        self.assertGreater(self.page.evaluate('crossPts.length'), 0)
+        self.assertTrue(self.page.evaluate("crossPts.length > 0"))
+        # Off and on again, there already: nothing moves.
+        self.page.click('#panel [data-beacons]')
+        self.assertEqual(pressed(), ['false', 'true', 'false', 'false'])  # the band from before
+        self.page.click('#panel [data-beacons]')
+        self.page.wait_for_timeout(700)
+        self.assertEqual(self.page.evaluate('view.k'), k)
+        # Kept between visits.
+        self.page.reload()
+        self.page.wait_for_function("document.querySelector('#rStatus').hidden")
+        self.assertEqual(pressed(), ['false', 'false', 'false', 'true'])
+        # A band tapped: Beacons off, that band on.
+        self.page.click('#panel .nss-band[data-band="swell"]')
+        self.assertEqual(pressed(), ['false', 'false', 'true', 'false'])
+        self.assertEqual(self.page.evaluate("localStorage.getItem('nss.beacons')"), 'false')
+
+    def test_beacons_in_the_side_panel(self):
+        self.kept(**{'nss.docked': True})
+        self.beacon_run(beacons=False)
+        btn = self.page.locator('#column [data-beacons]')
+        self.assertTrue(btn.is_visible())
+        self.assertEqual(btn.get_attribute('aria-label'), 'Beacons')
+        self.assertEqual(self.box('#column [data-beacons]')['height'], self.box('#column .nss-band[data-band="swell"]')['height'])
+        btn.click()
+        self.assertEqual(btn.get_attribute('aria-pressed'), 'true')
+        self.assertTrue(self.page.locator('#flyout').is_hidden())
+
+    def test_four_buttons_fit_the_row_on_a_small_phone(self):
+        self.page.set_viewport_size(dict(width=320, height=640))
+        self.loaded()
+        for b in self.page.locator('#panel .nss-band').all():
+            self.assertLessEqual(b.evaluate('(b) => b.scrollWidth'), b.evaluate('(b) => b.clientWidth'), b.text_content())
 
     def test_a_tap_on_a_cross_drops_the_beacon_and_its_sheet(self):
         self.beacon_run()
@@ -1262,21 +1313,44 @@ class App(unittest.TestCase):
         self.page.keyboard.press('End')
         self.assertEqual(self.box('[data-beacon-mark]'), mark)
 
-    def test_a_beacon_dropped_from_far_out_zooms_in_to_it(self):
-        self.beacon_run()
-        self.chart()
-        k0 = self.page.evaluate('view.k')
-        x, y = self.page.evaluate("(() => { const p = crossPts.find((p) => p.px > 60 && p.px < W - 60 && p.py > 60 && p.py < Hs - panelH() - 60); return [p.px, p.py]; })()")
-        self.page.mouse.click(x, y)
-        self.page.wait_for_function("document.documentElement.hasAttribute('data-tied')")
-        k = self.page.evaluate('view.k')
-        self.assertGreater(k, k0 * 3)
-        # Its neighbours' crosses 24 px apart, or more.
-        self.assertGreaterEqual(self.page.evaluate("BEACON_GAP / cellKm(beacon.lat).col"), k - 1e-9)
-        self.assertEqual(self.page.evaluate('crossStride()'), dict(row=1, col=1))
-        m = self.box('[data-beacon-mark]')
-        self.assertAlmostEqual(m['x'] + m['width'] / 2, 195, delta=1.5)
-        self.assertAlmostEqual(m['y'] + m['height'] / 2, 844 / 4, delta=1.5)
+    def test_the_first_turn_on_points_at_a_pulsing_cross(self):
+        self.kept()
+        self.beacon_run(beacons=False)
+        self.page.click('#panel [data-beacons]')
+        self.tip_due('Tap a cross')
+        spot = self.page.locator('[data-hint-target="cross"]')
+        self.assertEqual(spot.get_attribute('data-on'), '')
+        tip, s = self.box('[data-tip-float]'), self.box('[data-hint-target="cross"]')
+        self.assertAlmostEqual(tip['x'] + tip['width'] / 2, s['x'] + s['width'] / 2, delta=tip['width'] / 2)
+        self.assertLessEqual(tip['y'] + tip['height'], s['y'])
+        # The cross it points at is the one nearest the middle of the chart above the panel.
+        mid = self.page.evaluate("(() => { const v = vis(); return [v.x + v.w / 2, v.h / 2]; })()")
+        nearest = self.page.evaluate(f"crossPts.reduce((a, q) => Math.hypot(q.px - {mid[0]}, q.py - {mid[1]}) < Math.hypot(a.px - {mid[0]}, a.py - {mid[1]}) ? q : a).c.id")
+        self.assertEqual(self.page.evaluate('crossSpot.c.id'), nearest)
+        # Dropping a beacon is what it asked: gone, and the pulse with it.
+        self.page.evaluate("dropBeacon(crossSpot.c)")
+        self.assertIsNone(self.tip())
+        self.assertIsNone(spot.get_attribute('data-on'))
+        self.assertEqual(self.hints()['seen']['tip.beacons.cross'], 'retired')
+
+    def test_beacons_is_announced_to_people_who_came_before_it(self):
+        self.kept(beacons_news=True)
+        self.loaded()
+        self.page.wait_for_function("!document.querySelector('[data-new-tag]').hidden")
+        self.assertEqual(self.page.locator('[data-new-tag]').text_content(), 'New · Beacons')
+        self.assertEqual(self.page.locator('#panel [data-beacons] > .nss-light').count(), 1)
+        self.page.click('[data-new-tag]')
+        self.page.click('[data-show-me]')                                  # Show me turns it on
+        self.assertEqual(self.page.locator('#panel [data-beacons]').get_attribute('aria-pressed'), 'true')
+        self.assertEqual(self.hints()['seen']['new.beacons'], 'retired')
+        self.assertEqual(self.page.locator('.nss-light').count(), 0)
+
+    def test_docked_beacons_news_is_the_light_alone(self):
+        self.kept(beacons_news=True, **{'nss.docked': True})
+        self.loaded()
+        self.page.wait_for_function("document.querySelector('#column [data-beacons] > .nss-light')")
+        self.page.wait_for_timeout(2500)
+        self.assertTrue(self.page.locator('[data-new-tag]').is_hidden())
 
     def layers_pressed(self):
         return [self.page.locator(f'[data-layer="{l}"]').get_attribute('aria-pressed') for l in ('pressure', 'wind', 'swell')]
@@ -1317,19 +1391,26 @@ class App(unittest.TestCase):
         self.page.wait_for_function("document.querySelector('#panel').hasAttribute('data-beacon')")
         self.assertEqual(self.layers_pressed(), ['false', 'true', 'true'])
         # Another cell starts all on.
-        other = self.page.evaluate("(() => { view.k /= 2; clampView(); draw(); const p = crossPts.find((p) => p.c.id !== 'd4:219:-4'); dropBeacon(p.c); return p.c.id; })()")
+        self.page.wait_for_timeout(800)                                     # the glide to it first
+        other = self.page.evaluate("(() => { draw(); const p = crossPts.find((p) => p.c.id !== 'd4:219:-4'); dropBeacon(p.c); return p.c.id; })()")
         self.assertNotEqual(other, 'd4:219:-4')
         self.assertEqual(self.layers_pressed(), ['true', 'true', 'true'])
 
-    def test_close_puts_back_the_band_from_before(self):
-        self.beacon_run()
+    def test_closing_a_beacon_goes_back_to_beacons_then_to_the_band(self):
+        self.beacon_run(beacons=False)
         self.page.click('#panel .nss-band[data-band="wind"]')
+        self.page.click('#panel [data-beacons]')
+        self.page.wait_for_timeout(800)                                     # its glide in first
         self.drop()
         self.page.click('[data-layer="swell"]')
         self.page.click('[data-beacon-close]')
-        self.assertEqual(self.page.locator('#panel .nss-band[data-band="wind"]').get_attribute('aria-pressed'), 'true')
-        self.assertEqual(self.page.evaluate("(() => { const L = layersOn(); return [L.pressure, L.wind, L.swell]; })()"), [False, True, False])
+        on = "(() => { const L = layersOn(); return [L.pressure, L.wind, L.swell]; })()"
+        self.assertEqual(self.page.evaluate(on), [False, False, False])     # Beacons still on: no layers, crosses
+        self.assertTrue(self.page.evaluate('crossPts.length > 0'))
         self.assertTrue(self.page.locator('[data-layer="wind"]').is_hidden())
+        self.page.click('#panel [data-beacons]')
+        self.assertEqual(self.page.locator('#panel .nss-band[data-band="wind"]').get_attribute('aria-pressed'), 'true')
+        self.assertEqual(self.page.evaluate(on), [False, True, False])
 
     def test_three_rows_of_66_px_and_a_toggle_beside_each(self):
         self.beacon_run()
@@ -1401,8 +1482,13 @@ class App(unittest.TestCase):
         self.page.click('[data-beacon-copy]')
         self.page.wait_for_function("document.querySelector('[data-beacon-said]').textContent === 'Link copied'")
         link = self.page.evaluate('navigator.clipboard.readText()')
-        self.assertTrue(link.endswith('/index.html?at=54.75,-1.00'), link)
-        self.beacon_run('at=54.75,-1.00&')
+        self.assertTrue(link.endswith('/index.html?at=54.75,-1.00&layers=pws'), link)
+        # Opened elsewhere, Beacons off there: on, with the sender's layers.
+        self.page.evaluate("localStorage.setItem('nss.beacons', 'false')")
+        self.beacon_run('at=54.75,-1.00&layers=ws&', beacons=False)
+        self.page.wait_for_function("document.querySelector('#panel').hasAttribute('data-beacon')")
+        self.assertEqual(self.layers_pressed(), ['false', 'true', 'true'])
+        self.assertEqual(self.page.evaluate("localStorage.getItem('nss.beacons')"), 'true')
         self.page.wait_for_function("document.querySelector('[data-val=\"hs\"]').textContent.endsWith(' m')")
         self.assertEqual(self.page.evaluate('beacon.id'), 'd4:219:-4')
         self.assertTrue(self.page.locator('[data-beacon-mark]').is_visible())
