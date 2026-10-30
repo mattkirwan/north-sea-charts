@@ -1418,7 +1418,7 @@ for (const b of playBtns) b.addEventListener('click', () => {
 // the needle; the open panel becomes its sheet, with the cell's
 // modelled wind and swell drawn on the timeline's own track, so one needle
 // reads everything. One beacon at a time; the link (?at=lat,lon) opens one.
-const CROSS_GAP = 16, CROSS_HIT = 22, BEACON_AT = 0.25, BEACON_GAP = 24;
+const CROSS_GAP = 16, CROSS_HIT = 22, BEACON_AT = 0.25;
 // Not settled yet: a beacon panned off its place loses its tie and notch
 // until the next drop (false: they come back when it's back).
 const TIE_STAYS_OUT = true;
@@ -1604,12 +1604,11 @@ function glideEase(q) {
   return B(0.7, 1, t);
 }
 // The one time the map moves itself: on a drop, a single glide (a jump with
-// Reduce Motion) of the same view the fingers move, zooming in if need be
-// until its neighbours' crosses sit BEACON_GAP px apart; then the tie. The
-// beacon runs straight to its place as the zoom eases in.
+// Reduce Motion) of the same view the fingers move, at the same zoom; then
+// the tie. The beacon runs straight to its place.
 function recentre() {
   cancelAnimationFrame(glideAnim);
-  const b = beacon, from = { ...view }, k1 = Math.min(kMax(), Math.max(view.k, BEACON_GAP / cellKm(b.lat).col));
+  const b = beacon, from = { ...view }, k1 = view.k;
   view = { x: b.x, y: b.y + (beaconY() - Hs / 2) / k1, k: k1 };
   clampView();
   const to = { ...view }, at = (v) => [W / 2 + (b.x - v.x) * v.k, Hs / 2 - (b.y - v.y) * v.k];

@@ -1305,6 +1305,12 @@ class App(unittest.TestCase):
         for b in self.page.locator('#panel .nss-band').all():
             self.assertLessEqual(b.evaluate('(b) => b.scrollWidth'), b.evaluate('(b) => b.clientWidth'), b.text_content())
 
+    def test_a_drop_far_out_glides_without_zooming(self):
+        self.beacon_run()
+        k = self.page.evaluate("view.k = kMin() * 1.5; clampView(); draw(); dropBeacon(crossPts[0].c); view.k")
+        self.page.wait_for_function("beacon && beacon.tieOk")                # the glide's done
+        self.assertAlmostEqual(self.page.evaluate('view.k'), k)
+
     def test_a_tap_on_a_cross_drops_the_beacon_and_its_sheet(self):
         self.beacon_run()
         # A tap on land, away from every cross, does nothing new.
@@ -1325,7 +1331,7 @@ class App(unittest.TestCase):
         m = self.box('[data-beacon-mark]')
         self.assertAlmostEqual(m['x'] + m['width'] / 2, 195, delta=1.5)
         self.assertAlmostEqual(m['y'] + m['height'] / 2, 844 / 4, delta=1.5)
-        self.assertEqual(self.page.evaluate('view.k'), 3)                   # zoomed in already: no further
+        self.assertEqual(self.page.evaluate('view.k'), 3)                   # the zoom it was at
         # The numbers are the tile's at the needle, and move with it.
         slider = self.page.locator('#panel .nss-timeline')
         i = int(slider.get_attribute('aria-valuenow'))

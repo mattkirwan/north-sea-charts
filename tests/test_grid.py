@@ -37,7 +37,7 @@ def fake_boxes(steps, seed=0):
     the awkward ones in (no sea, gales both ways, the pressure limits, the
     direction wrapping past north), and a known coast off Saltburn: its own
     cell (54.50N 1.00W) and the ones round it land, but for the wave model's
-    cell north of it; and a stretch of open sea in the Norwegian Sea."""
+    cell north of it; and stretches of open sea in the Norwegian and North Seas."""
     rng = np.random.default_rng(seed)
     rows, cols = grid.box_shape()
     land = rng.random((rows, cols)) < 0.3
@@ -45,8 +45,8 @@ def fake_boxes(steps, seed=0):
     i, j = box_index(54.5, -1.0)
     land[i - 4:i + 5, j - 4:j + 5] = True                 # the coast round Saltburn
     land[box_index(54.75, -1.0)] = False
-    (n, w), (s, e) = box_index(70.0, 0.0), box_index(64.0, 8.0)
-    land[n:s + 1, w:e + 1] = False                        # open sea in the Norwegian Sea
+    for (n, w), (s, e) in ((box_index(70.0, 0.0), box_index(64.0, 8.0)), (box_index(57.0, 1.0), box_index(55.5, 4.0))):
+        land[n:s + 1, w:e + 1] = False                    # open sea in the Norwegian Sea and the North Sea
     out = {}
     for k, s in enumerate(steps):
         b = dict(hs=rng.uniform(0, 25, (rows, cols)), tp=rng.uniform(1, 25, (rows, cols)), tl=rng.uniform(1, 25, (rows, cols)),
@@ -260,18 +260,27 @@ class Written(unittest.TestCase):
         self.assertFalse(area[box_index(58.0, 20.0)])                # the Baltic: no
         self.assertFalse(area[box_index(77.5, 22.0)])                # Svalbard's east coast: no
         self.assertFalse(area[box_index(73.0, 28.0)])                # the Barents Sea: no
+        self.assertFalse(area[box_index(58.0, 9.0)])                 # the Skagerrak: no
+        self.assertFalse(area[box_index(57.0, 11.5)])                # the Kattegat: no
+        self.assertTrue(area[box_index(56.0, 8.0)])                  # off Jutland's North Sea coast: yes
+        self.assertTrue(area[box_index(58.0, 5.5)])                  # off Norway's south-west coast: yes
         self.assertTrue(area[box_index(74.5, 19.0)])                 # Bjørnøya's, west of the cut: yes
-        # Out at sea, every other whole degree only (every one from Orkney to
-        # southern Norway), none by the coast.
+        # Out at sea, every other whole degree only, none by the coast; in the
+        # North Sea, d4 points every half degree instead.
         c_lat, c_lon = grid.coarse(lat), grid.coarse(lon)
         self.assertTrue(open_sea.any())
-        dense = (c_lat >= 57) & (c_lat <= 61) & (c_lon >= -3) & (c_lon <= 7)
-        self.assertTrue((((c_lat % 2 == 0) & (c_lon % 2 == 0)) | dense)[open_sea].all())
+        self.assertTrue(((c_lat[open_sea] % 2 == 0) & (c_lon[open_sea] % 2 == 0)).all())
+        D = grid.DENSE
+        dense = lambda la, lo: (la >= D['s']) & (la <= D['n']) & (lo >= D['w']) & (lo <= D['e'])
+        self.assertFalse((open_sea & dense(c_lat, c_lon)).any())
+        far = fine & ~grid.near_land(sea, grid.COAST_KM)
+        self.assertTrue(far.any())
+        self.assertTrue((dense(lat, lon) & (lat * 4 % 2 == 0) & (lon * 4 % 2 == 0))[far].all())
         # A lone cell with no sea isn't coast: open sea all round it.
         one = dict(hs=np.ones((1,) + lat.shape))
         one['hs'][0][box_index(66.0, 3.0)] = np.nan
         f1, o1 = grid.beacon_points(one)
-        self.assertFalse(f1.any())
+        self.assertFalse((f1 & ~dense(lat, lon)).any())
         self.assertTrue(o1[grid.coarse(np.arange(lat.size).reshape(lat.shape)) == np.ravel_multi_index(box_index(66.0, 4.0), lat.shape)].all())
         self.assertFalse((grid.coarse(fine) & open_sea).any())
         # And the app reads the same points, without a tile.

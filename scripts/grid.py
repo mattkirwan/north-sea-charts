@@ -24,12 +24,13 @@ Over the beacons' area on the chart (CELL_BOX holds it), the frames job
 also writes the beacons' cells' values over the whole run. The area is
 Saltburn's swell window and, beyond it, the sea up the Norwegian coast to
 Svalbard (NORTH), but none east of Norway's north-east corner, Svalbard's
-south cape and Spitsbergen's west side (EAST). The beacon points
+south cape and Spitsbergen's west side (EAST), or in the Skagerrak and
+Kattegat (SKAGERRAK). The beacon points
 (beacon_points()) are its sea cells: every one within COAST_KM of land (a
 lone cell with no sea isn't land enough), and out at sea only NOAA's points
-on every OPEN_DEG-th whole degree, every one between Orkney and southern
-Norway (DENSE), as cells of their own lattice (COARSE: d1:<lat>:<lon>), so
-the open sea isn't crowded and its data stays small. Each lattice is kept in tiles, TILE x TILE cells
+on every OPEN_DEG-th whole degree, as cells of their own lattice (COARSE:
+d1:<lat>:<lon>), so the open sea isn't crowded and its data stays small;
+in the North Sea (DENSE), the d4 points on every half degree. Each lattice is kept in tiles, TILE x TILE cells
 for d4 (4° square, on whole multiples of 4°) and COARSE_TILE x COARSE_TILE
 for d1 (8°), one gzipped file a tile, named for its south-west cell (52_-4:
 52.00 to 55.75N, 4.00 to 0.25W), the d1 ones in a folder of their own; only
@@ -79,7 +80,8 @@ COAST_KM = 50                                      # every d4 cell this close to
 OPEN_DEG = 2                                       # further out, NOAA's points on every 2nd whole degree
 NORTH = dict(s=62, w=-2, e=40)                     # degrees: up the Norwegian coast to Svalbard
 EAST = ([70.4, 76.5], [31.1, 17.0])                # the area's east edge: lon by lat, Norway's NE corner to Svalbard's south cape, then north
-DENSE = dict(s=57, n=61, w=-3, e=7)                # the North Sea from Orkney to southern Norway: every whole degree out at sea
+SKAGERRAK = ([57.1, 58.0], [8.6, 7.0])             # none east of Hanstholm to Lindesnes (55 to 60N): the Skagerrak and Kattegat
+DENSE = dict(s=51, n=61, w=-4, e=9)                # the North Sea, Dover to Shetland: its d4 points every half degree out at sea
 WINDOW = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets', 'window.json')
 VARS = [('hs', 'u1'), ('tp', 'u1'), ('tl', 'u1'), ('dl', 'u1'), ('dp', 'u1'), ('u', 'i1'), ('v', 'i1'), ('p', 'u2')]
 CELL_SCALE = dict(hs=10, tp=10, tl=10, dir=2, wind=2, p=[20, 850])   # the manifest's cells.scale
@@ -344,10 +346,11 @@ def near_land(sea, km):
 
 def beacon_area(lat, lon):
     """Whether each point (arrays) is in the beacons' area: Saltburn's swell
-    window, or the sea north of it up the Norwegian coast (NORTH), and no
-    further east than EAST."""
+    window, or the sea north of it up the Norwegian coast (NORTH), no further
+    east than EAST, and not between Norway, Sweden and Denmark (SKAGERRAK)."""
     north = (lat >= NORTH['s']) & (lon >= NORTH['w']) & (lon <= NORTH['e'])
-    return (window_mask(lat, lon) | north) & (lon <= np.interp(lat, *EAST))
+    skag = (lat >= 55) & (lat <= 60) & (lon > np.interp(lat, *SKAGERRAK))
+    return (window_mask(lat, lon) | north) & (lon <= np.interp(lat, *EAST)) & ~skag
 
 
 def beacon_points(box):
@@ -355,9 +358,9 @@ def beacon_points(box):
     the beacons' area on the chart's square, every one within COAST_KM of land
     (the model's own: no sea at any step, and not a lone cell: NOAA has odd
     ones out at sea, and an island that small, Bjørnøya, needs no coast), and
-    further out only the points on every OPEN_DEG-th whole degree, or every
-    one in DENSE, as d1 cells. Masks: (d4 over the box, d1 over its
-    whole-degree points)."""
+    further out only the points on every OPEN_DEG-th whole degree, as d1
+    cells, but in DENSE the d4 points on every half degree. Masks: (d4 over
+    the box, d1 over its whole-degree points)."""
     sea = np.isfinite(box['hs']).any(axis=0)
     lat, lon = box_latlon()
     x, y = FWD(lon, lat)
@@ -366,10 +369,11 @@ def beacon_points(box):
     lone = dry[1:-1, 1:-1] & ~sum(dry[1 + i:dry.shape[0] - 1 + i, 1 + j:dry.shape[1] - 1 + j]
                                    for i in (-1, 0, 1) for j in (-1, 0, 1) if i or j).astype(bool)
     near = near_land(sea | lone, COAST_KM) & sea
+    dense = (lat >= DENSE['s']) & (lat <= DENSE['n']) & (lon >= DENSE['w']) & (lon <= DENSE['e'])
+    half = (np.round(lat * LATTICE) % 2 == 0) & (np.round(lon * LATTICE) % 2 == 0)
     la, lo = coarse(lat), coarse(lon)
-    dense = (la >= DENSE['s']) & (la <= DENSE['n']) & (lo >= DENSE['w']) & (lo <= DENSE['e'])
-    every = dense | ((np.round(la) % OPEN_DEG == 0) & (np.round(lo) % OPEN_DEG == 0))
-    return ok & near, coarse(ok & ~near) & every
+    every = (np.round(la) % OPEN_DEG == 0) & (np.round(lo) % OPEN_DEG == 0)
+    return ok & (near | dense & half), coarse(ok & ~near & ~dense) & every
 
 
 def bits(mask):
