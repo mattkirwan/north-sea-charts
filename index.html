@@ -279,16 +279,29 @@
   .nss-beacon-grip::after { content: ""; position: absolute; inset: -10px -30px; }
   .nss-beacon-grip span { display: block; width: 36px; height: 4px; border-radius: var(--radius-xs); background: var(--ui-track); }
   .nss-beacon-grip:focus-visible { outline: 2px solid var(--lifeboat-deep); outline-offset: 2px; }
-  .nss-rows { position: relative; height: 153px; border: 1px solid var(--ui-track); border-radius: var(--radius-card) var(--radius-card) 0 0;
+  .nss-rows { position: relative; height: 200px; border: 1px solid var(--ui-track); border-radius: var(--radius-card) var(--radius-card) 0 0;
     background: var(--ui-raised); overflow: hidden; font-family: var(--font-mono); color: var(--ui-ink); }
-  .nss-rows-track { position: absolute; left: 50%; top: 0; height: 153px; will-change: transform; }
+  .nss-rows-track { position: absolute; left: 50%; top: 0; height: 200px; will-change: transform; }
   .nss-rows-track svg { position: absolute; left: 0; top: 0; overflow: visible; }
-  .nss-rows-rule { position: absolute; left: 0; right: 0; top: 74px; height: 1px; background: var(--ui-track); }
+  .nss-rows-rule { position: absolute; left: 0; right: 0; height: 1px; background: var(--ui-track); }
+  .nss-row { position: absolute; left: 0; right: 0; height: 66px; }
+  /* A row whose layer is off the chart: grey at 40%, still there, still updating. */
+  .nss-row[data-off] { filter: grayscale(1); opacity: 0.4; }
+  .nss-row-mark[data-off] { background: var(--ui-ink-muted); }
+  /* The control column: a toggle a row, like a band button, then play. */
+  .nss-layer { position: absolute; left: 1px; z-index: 3; width: 44px; height: 66px; padding: 0; border: 0; border-right: 1px solid var(--ui-control);
+    background: var(--ui-control); cursor: pointer; touch-action: manipulation; }
+  .nss-layer::before { content: ""; position: absolute; left: calc(50% - 2.5px); top: calc(50% - 2.5px); width: 5px; height: 5px; border-radius: 1px; background: var(--lifeboat); }
+  .nss-layer[aria-pressed="false"] { background: var(--ui-raised); border-right-color: var(--ui-track); }
+  .nss-layer[aria-pressed="false"]::before { background: var(--ui-led-off); }
+  .nss-layer[data-layer="pressure"] { border-top-left-radius: var(--radius-inner); }
+  .nss-layer:focus-visible { outline: 2px solid var(--lifeboat-deep); outline-offset: -2px; }
+  #panel:not([data-beacon]) .nss-layer { display: none; }
   #panel[data-beacon] .nss-scale { border-top: 0; border-radius: 0 0 var(--radius-card) var(--radius-card); }
   #panel[data-beacon] .nss-scale > .nss-needle { display: none; }
   #panel[data-beacon] .nss-timebox > .nss-play { height: 43px; border-radius: 0 0 0 var(--radius-inner); }
   .nss-needle--box { top: 5px; }
-  .nss-row-label { position: absolute; left: 8px; font-size: 9px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase; color: var(--ui-ink-muted); }
+  .nss-row-label { position: absolute; left: 52px; top: 10px; font-size: 9px; line-height: 1; font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase; color: var(--ui-ink-muted); }
   .nss-val { position: absolute; height: 28px; display: flex; align-items: center; gap: 5px; white-space: nowrap;
     font-size: 18px; line-height: 1; font-weight: 500; letter-spacing: -0.3px; font-variant-numeric: tabular-nums; }
   .nss-val small { font-size: 9px; letter-spacing: 0.4px; color: var(--ui-ink-muted); }
@@ -297,6 +310,8 @@
   .nss-val--r i { flex: 0 0 auto; width: 8px; height: 5px; }
   .nss-val--dir { right: 8px; gap: 4px; font-size: 16px; letter-spacing: 0; }
   .nss-val--dir svg { flex: 0 0 auto; width: 16px; height: 16px; }
+  .nss-val--dir svg.nss-trend { width: 12px; height: 12px; }
+  .nss-row .nss-val { top: 0; }
   .nss-row-mark { position: absolute; left: calc(50% - 3px); top: 0; width: 6px; height: 6px; background: var(--lifeboat); z-index: 3; }
   @media (prefers-reduced-motion: reduce) {
     .nss-beacon[data-ping]::after { animation: none; }
@@ -352,20 +367,35 @@
   <div class="nss-panel-timerow">
     <div class="nss-timebox" data-hint-target="timeline">
       <button type="button" class="nss-play" data-play aria-pressed="false" aria-label="Play through time"></button>
+      <!-- With a beacon open: a toggle a row, for that layer on the chart. -->
+      <button type="button" class="nss-layer" data-layer="pressure" aria-pressed="true" aria-label="Pressure on the chart" data-t-label="pressureOnChart" style="top: 6px"></button>
+      <button type="button" class="nss-layer" data-layer="wind" aria-pressed="true" aria-label="Wind on the chart" data-t-label="windOnChart" style="top: 73px"></button>
+      <button type="button" class="nss-layer" data-layer="swell" aria-pressed="true" aria-label="Swell on the chart" data-t-label="swellOnChart" style="top: 140px"></button>
       <div class="nss-timeline" data-axis="x" role="slider" tabindex="0" aria-label="Forecast timeline" data-t-label="timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
         <span class="nss-timeline-arrow"></span>
         <span class="nss-tip" data-tip hidden></span>
-        <!-- The beacon's wind and swell, on the scale's own track (app.js). -->
+        <!-- The beacon's pressure, wind and swell, on the scale's own track (app.js). -->
         <div class="nss-rows" aria-hidden="true">
           <div class="nss-rows-track" data-rows-track></div>
-          <span class="nss-rows-rule"></span>
-          <span class="nss-row-label" style="top: 9px" data-t="wind">Wind</span>
-          <span class="nss-row-label" style="top: 84px" data-t="swell">Swell</span>
-          <span class="nss-val nss-val--l" style="top: 0" data-val="wind"></span>
-          <span class="nss-val nss-val--dir" style="top: 0" data-val="wdir"></span>
-          <span class="nss-val nss-val--l" style="top: 75px" data-val="hs"></span>
-          <span class="nss-val nss-val--r" style="top: 75px" data-val="tp"></span>
-          <span class="nss-val nss-val--dir" style="top: 75px" data-val="sdir"></span>
+          <span class="nss-rows-rule" style="top: 66px"></span>
+          <span class="nss-rows-rule" style="top: 133px"></span>
+          <div class="nss-row" data-row="pressure" style="top: 0">
+            <span class="nss-row-label" data-t="pressure">Pressure</span>
+            <span class="nss-val nss-val--l" data-val="p"></span>
+            <span class="nss-val nss-val--dir" data-val="ptrend"></span>
+          </div>
+          <div class="nss-row" data-row="wind" style="top: 67px">
+            <span class="nss-row-label" data-t="wind">Wind</span>
+            <span class="nss-val nss-val--l" data-val="wind"></span>
+            <span class="nss-val nss-val--dir" data-val="wdir"></span>
+          </div>
+          <div class="nss-row" data-row="swell" style="top: 134px">
+            <span class="nss-row-label" data-t="swell">Swell</span>
+            <span class="nss-val nss-val--l" data-val="hs"></span>
+            <span class="nss-val nss-val--r" data-val="tp"></span>
+            <span class="nss-val nss-val--dir" data-val="sdir"></span>
+          </div>
+          <span class="nss-row-mark" data-mark="pressure" hidden></span>
           <span class="nss-row-mark" data-mark="wind" hidden></span>
           <span class="nss-row-mark" data-mark="swell" hidden></span>
         </div>

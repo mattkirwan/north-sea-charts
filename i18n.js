@@ -44,7 +44,9 @@ const LANGS = {
     g3Title: 'The key', g3Body: 'Each colour on the sea is a value on the key.', g3Try: 'Switch to period',
     g4Title: 'The timeline', g4Body: 'The needle stays put and the days slide under it, sixteen days ahead. The orange tick is now.', g4Try: 'Slide it, then double-tap to come back to now',
     beacon: 'Beacon', copyBeacon: 'Copy link to this beacon', closeBeacon: 'Close beacon', collapseBeacon: 'Collapse beacon', linkCopied: 'Link copied',
-    beaconTimeline: 'Forecast timeline with swell and wind at this beacon', beaconWind: 'Wind {speed} mph from {from}.', beaconSwell: 'Swell {hs} m, {tp} s, from {from}.',
+    beaconTimeline: 'Forecast timeline with pressure, wind and swell at this beacon', beaconWind: 'Wind {speed} mph from {from}.', beaconSwell: 'Swell {hs} m, {tp} s, from {from}.',
+    pressureOnChart: 'Pressure on the chart', windOnChart: 'Wind on the chart', swellOnChart: 'Swell on the chart',
+    beaconPressure: 'Pressure {hpa} hPa.', beaconPressureFalling: 'Pressure {hpa} hPa, falling {n} in 6 hours.', beaconPressureRising: 'Pressure {hpa} hPa, rising {n} in 6 hours.',
     compass: 'N NNE NE ENE E ESE SE SSE S SSW SW WSW W WNW NW NNW',
     compassLong: 'north,north-north-east,north-east,east-north-east,east,east-south-east,south-east,south-south-east,south,south-south-west,south-west,west-south-west,west,west-north-west,north-west,north-north-west'
   } },
@@ -83,7 +85,9 @@ const LANGS = {
     g3Title: 'Fargeskalaen', g3Body: 'Hver farge på havet er en verdi på fargeskalaen.', g3Try: 'Bytt til periode',
     g4Title: 'Tidslinjen', g4Body: 'Nålen står stille og dagene glir under den, seksten dager fram. Det oransje merket er nå.', g4Try: 'Dra i den, og dobbelttrykk for å komme tilbake til nå',
     beacon: 'Båke', copyBeacon: 'Kopier lenke til denne båken', closeBeacon: 'Lukk båken', collapseBeacon: 'Skjul båken', linkCopied: 'Lenken er kopiert',
-    beaconTimeline: 'Tidslinje for prognosen med dønninger og vind ved denne båken', beaconWind: 'Vind {speed} mph fra {from}.', beaconSwell: 'Dønninger {hs} m, {tp} s, fra {from}.',
+    beaconTimeline: 'Tidslinje for prognosen med lufttrykk, vind og dønninger ved denne båken', beaconWind: 'Vind {speed} mph fra {from}.', beaconSwell: 'Dønninger {hs} m, {tp} s, fra {from}.',
+    pressureOnChart: 'Lufttrykk på kartet', windOnChart: 'Vind på kartet', swellOnChart: 'Dønninger på kartet',
+    beaconPressure: 'Lufttrykk {hpa} hPa.', beaconPressureFalling: 'Lufttrykk {hpa} hPa, fallende {n} på 6 timer.', beaconPressureRising: 'Lufttrykk {hpa} hPa, stigende {n} på 6 timer.',
     compass: 'N NNØ NØ ØNØ Ø ØSØ SØ SSØ S SSV SV VSV V VNV NV NNV',
     compassLong: 'nord,nord-nordøst,nordøst,øst-nordøst,øst,øst-sørøst,sørøst,sør-sørøst,sør,sør-sørvest,sørvest,vest-sørvest,vest,vest-nordvest,nordvest,nord-nordvest'
   } },
@@ -122,7 +126,9 @@ const LANGS = {
     g3Title: 'Farveskalaen', g3Body: 'Hver farve på havet er en værdi på farveskalaen.', g3Try: 'Skift til periode',
     g4Title: 'Tidslinjen', g4Body: 'Nålen står stille, og dagene glider under den, seksten dage frem. Det orange mærke er nu.', g4Try: 'Træk i den, og dobbelttryk for at komme tilbage til nu',
     beacon: 'Båke', copyBeacon: 'Kopiér link til denne båke', closeBeacon: 'Luk båken', collapseBeacon: 'Skjul båken', linkCopied: 'Linket er kopieret',
-    beaconTimeline: 'Tidslinje for prognosen med dønninger og vind ved denne båke', beaconWind: 'Vind {speed} mph fra {from}.', beaconSwell: 'Dønninger {hs} m, {tp} s, fra {from}.',
+    beaconTimeline: 'Tidslinje for prognosen med lufttryk, vind og dønninger ved denne båke', beaconWind: 'Vind {speed} mph fra {from}.', beaconSwell: 'Dønninger {hs} m, {tp} s, fra {from}.',
+    pressureOnChart: 'Lufttryk på kortet', windOnChart: 'Vind på kortet', swellOnChart: 'Dønninger på kortet',
+    beaconPressure: 'Lufttryk {hpa} hPa.', beaconPressureFalling: 'Lufttryk {hpa} hPa, faldende {n} på 6 timer.', beaconPressureRising: 'Lufttryk {hpa} hPa, stigende {n} på 6 timer.',
     compass: 'N NNØ NØ ØNØ Ø ØSØ SØ SSØ S SSV SV VSV V VNV NV NNV',
     compassLong: 'nord,nordnordøst,nordøst,østnordøst,øst,østsydøst,sydøst,sydsydøst,syd,sydsydvest,sydvest,vestsydvest,vest,vestnordvest,nordvest,nordnordvest'
   } },
@@ -161,7 +167,9 @@ const LANGS = {
     g3Title: 'Die Farbskala', g3Body: 'Jede Farbe auf dem Meer ist ein Wert auf der Farbskala.', g3Try: 'Wechsle zur Periode',
     g4Title: 'Die Zeitleiste', g4Body: 'Die Nadel bleibt stehen, die Tage gleiten darunter, sechzehn Tage voraus. Die orange Marke ist jetzt.', g4Try: 'Schieb sie, dann doppelt tippen, um zu jetzt zurückzukehren',
     beacon: 'Bake', copyBeacon: 'Link zu dieser Bake kopieren', closeBeacon: 'Bake schließen', collapseBeacon: 'Bake einklappen', linkCopied: 'Link kopiert',
-    beaconTimeline: 'Prognose-Zeitleiste mit Dünung und Wind an dieser Bake', beaconWind: 'Wind {speed} mph aus {from}.', beaconSwell: 'Dünung {hs} m, {tp} s, aus {from}.',
+    beaconTimeline: 'Prognose-Zeitleiste mit Luftdruck, Wind und Dünung an dieser Bake', beaconWind: 'Wind {speed} mph aus {from}.', beaconSwell: 'Dünung {hs} m, {tp} s, aus {from}.',
+    pressureOnChart: 'Luftdruck auf der Karte', windOnChart: 'Wind auf der Karte', swellOnChart: 'Dünung auf der Karte',
+    beaconPressure: 'Luftdruck {hpa} hPa.', beaconPressureFalling: 'Luftdruck {hpa} hPa, fallend um {n} in 6 Stunden.', beaconPressureRising: 'Luftdruck {hpa} hPa, steigend um {n} in 6 Stunden.',
     compass: 'N NNO NO ONO O OSO SO SSO S SSW SW WSW W WNW NW NNW',
     compassLong: 'Nord,Nordnordost,Nordost,Ostnordost,Ost,Ostsüdost,Südost,Südsüdost,Süd,Südsüdwest,Südwest,Westsüdwest,West,Westnordwest,Nordwest,Nordnordwest'
   } },
@@ -200,7 +208,9 @@ const LANGS = {
     g3Title: 'De kleurschaal', g3Body: 'Elke kleur op zee is een waarde op de kleurschaal.', g3Try: 'Wissel naar periode',
     g4Title: 'De tijdlijn', g4Body: 'De naald staat stil en de dagen schuiven eronder door, zestien dagen vooruit. Het oranje streepje is nu.', g4Try: 'Schuif hem, en tik twee keer om terug te gaan naar nu',
     beacon: 'Baken', copyBeacon: 'Link naar dit baken kopiëren', closeBeacon: 'Baken sluiten', collapseBeacon: 'Baken inklappen', linkCopied: 'Link gekopieerd',
-    beaconTimeline: 'Tijdlijn van de verwachting met deining en wind bij dit baken', beaconWind: 'Wind {speed} mph uit het {from}.', beaconSwell: 'Deining {hs} m, {tp} s, uit het {from}.',
+    beaconTimeline: 'Tijdlijn van de verwachting met luchtdruk, wind en deining bij dit baken', beaconWind: 'Wind {speed} mph uit het {from}.', beaconSwell: 'Deining {hs} m, {tp} s, uit het {from}.',
+    pressureOnChart: 'Luchtdruk op de kaart', windOnChart: 'Wind op de kaart', swellOnChart: 'Deining op de kaart',
+    beaconPressure: 'Luchtdruk {hpa} hPa.', beaconPressureFalling: 'Luchtdruk {hpa} hPa, {n} gedaald in 6 uur.', beaconPressureRising: 'Luchtdruk {hpa} hPa, {n} gestegen in 6 uur.',
     compass: 'N NNO NO ONO O OZO ZO ZZO Z ZZW ZW WZW W WNW NW NNW',
     compassLong: 'noorden,noordnoordoosten,noordoosten,oostnoordoosten,oosten,oostzuidoosten,zuidoosten,zuidzuidoosten,zuiden,zuidzuidwesten,zuidwesten,westzuidwesten,westen,westnoordwesten,noordwesten,noordnoordwesten'
   } },
@@ -239,7 +249,9 @@ const LANGS = {
     g3Title: 'La légende', g3Body: 'Chaque couleur sur la mer est une valeur de la légende.', g3Try: 'Passez à la période',
     g4Title: 'La frise', g4Body: 'L’aiguille reste en place et les jours défilent dessous, seize jours à l’avance. Le repère orange, c’est maintenant.', g4Try: 'Faites-la glisser, puis touchez deux fois pour revenir à maintenant',
     beacon: 'Balise', copyBeacon: 'Copier le lien de cette balise', closeBeacon: 'Fermer la balise', collapseBeacon: 'Replier la balise', linkCopied: 'Lien copié',
-    beaconTimeline: 'Frise de la prévision avec la houle et le vent à cette balise', beaconWind: 'Vent {speed} mph, secteur {from}.', beaconSwell: 'Houle {hs} m, {tp} s, secteur {from}.',
+    beaconTimeline: 'Frise de la prévision avec la pression, le vent et la houle à cette balise', beaconWind: 'Vent {speed} mph, secteur {from}.', beaconSwell: 'Houle {hs} m, {tp} s, secteur {from}.',
+    pressureOnChart: 'Pression sur la carte', windOnChart: 'Vent sur la carte', swellOnChart: 'Houle sur la carte',
+    beaconPressure: 'Pression {hpa} hPa.', beaconPressureFalling: 'Pression {hpa} hPa, en baisse de {n} en 6 heures.', beaconPressureRising: 'Pression {hpa} hPa, en hausse de {n} en 6 heures.',
     compass: 'N NNE NE ENE E ESE SE SSE S SSO SO OSO O ONO NO NNO',
     compassLong: 'nord,nord-nord-est,nord-est,est-nord-est,est,est-sud-est,sud-est,sud-sud-est,sud,sud-sud-ouest,sud-ouest,ouest-sud-ouest,ouest,ouest-nord-ouest,nord-ouest,nord-nord-ouest'
   } }

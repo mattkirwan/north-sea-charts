@@ -1238,7 +1238,7 @@ class App(unittest.TestCase):
         i = int(slider.get_attribute('aria-valuenow'))
         self.assertEqual(self.swell_at_needle(), f'{1 + i / 10:.1f} m')
         self.assertRegex(slider.get_attribute('aria-valuetext'), rf'\. Wind \d+ mph from [a-z-]+\. Swell {1 + i / 10:.1f} m, \d+ s, from [a-z-]+\.$')
-        self.assertEqual(slider.get_attribute('aria-label'), 'Forecast timeline with swell and wind at this beacon')
+        self.assertEqual(slider.get_attribute('aria-label'), 'Forecast timeline with pressure, wind and swell at this beacon')
         self.assertRegex(self.page.locator('[data-val="sdir"]').text_content(), r'^[NESW]{1,3}$')
         slider.focus()
         self.page.keyboard.press('Home')
@@ -1268,6 +1268,93 @@ class App(unittest.TestCase):
         m = self.box('[data-beacon-mark]')
         self.assertAlmostEqual(m['x'] + m['width'] / 2, 195, delta=1.5)
         self.assertAlmostEqual(m['y'] + m['height'] / 2, 844 / 4, delta=1.5)
+
+    def layers_pressed(self):
+        return [self.page.locator(f'[data-layer="{l}"]').get_attribute('aria-pressed') for l in ('pressure', 'wind', 'swell')]
+
+    def test_a_beacon_shows_every_layer_and_each_toggle_turns_one_off(self):
+        self.beacon_run()                                                   # on Pressure, as stored by default
+        self.drop()
+        self.assertEqual(self.layers_pressed(), ['true', 'true', 'true'])
+        on = "(() => { const L = layersOn(); return [L.pressure, L.wind, L.swell, L.field]; })()"
+        self.assertEqual(self.page.evaluate(on), [True, True, True, False])  # swell fill, isobars, wind at the points
+        self.page.evaluate("view.k /= 2; clampView(); requestDraw()")
+        self.chart()
+        self.assertTrue(self.page.evaluate("crossPts.length > 0 && crossPts.every((p) => p.arrow)"))
+        self.page.click('[data-layer="wind"]')                              # wind off: crosses again
+        self.chart()
+        self.assertEqual(self.layers_pressed(), ['true', 'false', 'true'])
+        self.assertFalse(self.page.evaluate("crossPts.some((p) => p.arrow)"))
+        self.assertEqual(self.page.locator('.nss-row[data-row="wind"]').get_attribute('data-off'), '')
+        self.assertEqual(self.page.locator('[data-mark="wind"]').get_attribute('data-off'), '')
+        self.page.click('[data-layer="swell"]')                             # swell off too: the plain sea
+        self.page.click('[data-layer="pressure"]')
+        self.assertEqual(self.page.evaluate(on), [False, False, False, False])
+        self.assertEqual(self.page.evaluate("geomParts(idx).length"), 0)
+        self.page.click('[data-layer="wind"]')                              # wind alone: its slate field under the arrows
+        self.assertEqual(self.page.evaluate(on), [False, True, False, True])
+        # An off row still updates.
+        slider = self.page.locator('#panel .nss-timeline')
+        slider.focus()
+        self.page.keyboard.press('Home')
+        self.assertEqual(self.swell_at_needle(), '1.0 m')
+
+    def test_toggles_are_kept_for_each_cell(self):
+        self.beacon_run()
+        self.drop()
+        self.page.click('[data-layer="pressure"]')
+        self.assertEqual(self.page.evaluate("JSON.parse(localStorage.getItem('nss.beacon.layers'))"), {'d4:219:-4': 'ws'})
+        self.beacon_run('at=54.75,-1.00&')                                  # the same cell, after a reload
+        self.page.wait_for_function("document.querySelector('#panel').hasAttribute('data-beacon')")
+        self.assertEqual(self.layers_pressed(), ['false', 'true', 'true'])
+        # Another cell starts all on.
+        other = self.page.evaluate("(() => { view.k /= 2; clampView(); draw(); const p = crossPts.find((p) => p.c.id !== 'd4:219:-4'); dropBeacon(p.c); return p.c.id; })()")
+        self.assertNotEqual(other, 'd4:219:-4')
+        self.assertEqual(self.layers_pressed(), ['true', 'true', 'true'])
+
+    def test_close_puts_back_the_band_from_before(self):
+        self.beacon_run()
+        self.page.click('#panel .nss-band[data-band="wind"]')
+        self.drop()
+        self.page.click('[data-layer="swell"]')
+        self.page.click('[data-beacon-close]')
+        self.assertEqual(self.page.locator('#panel .nss-band[data-band="wind"]').get_attribute('aria-pressed'), 'true')
+        self.assertEqual(self.page.evaluate("(() => { const L = layersOn(); return [L.pressure, L.wind, L.swell]; })()"), [False, True, False])
+        self.assertTrue(self.page.locator('[data-layer="wind"]').is_hidden())
+
+    def test_three_rows_of_66_px_and_a_toggle_beside_each(self):
+        self.beacon_run()
+        self.drop()
+        scale = self.box('#panel .nss-scale')
+        for name in ('pressure', 'wind', 'swell'):
+            row, toggle = self.box(f'.nss-row[data-row="{name}"]'), self.box(f'[data-layer="{name}"]')
+            self.assertEqual(row['height'], 66, name)
+            self.assertEqual((toggle['width'], toggle['height']), (44, 66), name)
+            self.assertEqual(toggle['y'], row['y'], name)
+        self.assertLess(self.box('.nss-row[data-row="swell"]')['y'] + 66, scale['y'] + 1)
+        self.assertEqual(self.page.locator('#panel .nss-row-label').all_text_contents(), ['Pressure', 'Wind', 'Swell'])
+        # One needle through the box, rows and scale.
+        needle, rows = self.box('#panel .nss-needle--box'), self.box('#panel .nss-rows')
+        self.assertLessEqual(needle['y'], rows['y'])
+        self.assertGreaterEqual(needle['y'] + needle['height'], scale['y'] + scale['height'] - 1)
+
+    def test_pressure_and_its_six_hour_trend_at_the_needle(self):
+        self.beacon_run()
+        self.drop()
+        slider = self.page.locator('#panel .nss-timeline')
+        slider.focus()
+        self.page.keyboard.press('Home')                                   # +0 h: nothing six hours back
+        p0 = self.page.evaluate('beacon.s.p[0]')
+        self.assertEqual(self.page.locator('[data-val="p"]').text_content(), f'{round(p0)} hPa')
+        self.assertEqual(self.page.locator('[data-val="ptrend"]').text_content(), '')
+        for _ in range(6):
+            self.page.keyboard.press('ArrowRight')                         # +6 h
+        p6 = self.page.evaluate('beacon.s.p[6]')
+        self.assertEqual(self.page.locator('[data-val="p"]').text_content(), f'{round(p6)} hPa')
+        self.assertEqual(self.page.locator('[data-val="ptrend"]').text_content(), f'{abs(p6 - p0):.1f} /6H')
+        self.assertEqual(self.page.locator('[data-val="ptrend"] svg').count(), 1 if abs(p6 - p0) >= 0.05 else 0)
+        way = 'falling' if p6 < p0 else 'rising'
+        self.assertIn(f'. Pressure {round(p6)} hPa, {way} {abs(p6 - p0):.1f} in 6 hours. Wind ', slider.get_attribute('aria-valuetext'))
 
     def test_close_brings_the_panel_back_as_it_was(self):
         self.beacon_run()
