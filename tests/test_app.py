@@ -204,6 +204,61 @@ class App(unittest.TestCase):
         self.page.keyboard.press('ArrowRight')                       # no further than the last frame
         self.assertEqual(slider.get_attribute('aria-valuenow'), str(len(STEPS) - 1))
 
+    # ---- Keys: stepped wind and period, no default sea under them -------------------------
+    def sea_pixels(self):
+        """The chart's colour at a few open-sea points, between the arrows."""
+        self.chart()
+        return self.page.evaluate("""() => {
+            const out = [], g = ctx.getImageData(0, 0, cv.width, cv.height).data;
+            for (const [lon, lat] of [[-10, 66], [-5, 68], [2, 70], [-15, 62]]) {
+              const [x, y] = NSSGrid.projection(man.square.proj).toKm(lon, lat);
+              for (const [dx, dy] of [[11, 0], [0, 11], [-11, 0], [0, -11]]) {
+                const px = Math.round((W / 2 + (x - view.x) * view.k + dx) * dpr), py = Math.round((Hs / 2 - (y - view.y) * view.k + dy) * dpr);
+                const k = (py * cv.width + px) * 4;
+                out.push('#' + [g[k], g[k + 1], g[k + 2]].map((c) => c.toString(16).padStart(2, '0')).join('').toUpperCase());
+              }
+            }
+            return out; }""")
+
+    def test_no_default_sea_under_wind_or_period(self):
+        self.loaded()
+        self.page.wait_for_function(ALL_IN)
+        self.assertIn('#3D566F', self.sea_pixels())                        # Pressure: the plain sea, as before
+        self.page.click('#panel .nss-band[data-band="wind"]')
+        self.assertNotIn('#3D566F', self.sea_pixels())
+        self.page.click('#panel .nss-band[data-band="swell"]')
+        self.page.click('#panel [data-swell] [data-var="period"]')
+        self.assertNotIn('#3D566F', self.sea_pixels())
+
+    def test_wind_and_period_bins(self):
+        self.loaded()
+        got = self.page.evaluate("""[[KEYS.wind, 0], [KEYS.wind, 75], [KEYS.wind, 10], [KEYS.wind, 9.99], [KEYS.period, 3], [KEYS.period, 26], [KEYS.period, 8]]
+            .map(([K, v]) => keyTok(K, bin(K, v)))""")
+        self.assertEqual(got, ['--wind-0', '--wind-60', '--wind-10', '--wind-5', '--period-2', '--period-24', '--period-8'])
+        self.assertEqual(self.page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--wind-60').trim()"), '#3B5066')
+
+    def test_the_key_lists_only_the_bins_in_the_run_and_holds_still(self):
+        slider = self.loaded()
+        self.page.wait_for_function(ALL_IN)
+        for band, var, tok in (('wind', None, 'wind'), ('swell', 'period', 'period')):
+            self.page.click(f'#panel .nss-band[data-band="{band}"]')
+            if var:
+                self.page.click(f'#panel [data-swell] [data-var="{var}"]')
+            self.page.wait_for_timeout(300)
+            steps = self.page.locator('#panel [data-key] .nss-key-step').all_text_contents()
+            present = self.page.evaluate(f"KEYS.{tok}.lev.filter((l, i) => present.{tok}[i]).map(String)")
+            top = self.page.evaluate(f"String(KEYS.{tok}.lev.at(-1))")
+            self.assertEqual([s.rstrip('+') for s in steps], present, tok)
+            self.assertEqual([s.endswith('+') for s in steps], [s == top for s in present], tok)
+            # One line, however many steps.
+            keys, step = self.box('#panel [data-key] .nss-key-steps'), self.page.locator('#panel [data-key] .nss-key-step').first.bounding_box()
+            self.assertAlmostEqual(keys['height'], step['height'], delta=1)
+            # Still while the time moves.
+            slider.focus()
+            for key in ('Home', 'End'):
+                self.page.keyboard.press(key)
+                self.assertEqual(self.page.locator('#panel [data-key] .nss-key-step').all_text_contents(), steps)
+
     def test_band_is_remembered(self):
         self.loaded()
         self.page.click('#panel .nss-band[data-band="swell"]')
@@ -1417,6 +1472,21 @@ class App(unittest.TestCase):
     def test_no_manifest_says_offline(self):
         self.open('empty')
         self.page.wait_for_function("document.querySelector('#rStatus').textContent === 'Offline'")
+
+class Tokens(unittest.TestCase):
+    def test_no_old_numbered_wind_or_period_tokens(self):
+        # The keys are named for the bottom of their bins now: wind-0, 5 ... 60
+        # and period-0, 2 ... 24; the old wind-1 to 6 and period-1 to 5 are gone.
+        names = dict(wind=set(range(0, 61, 5)), period=set(range(0, 25, 2)))
+        for name in ('index.html', 'app.js', 'hints.js', 'ds/tokens.css', 'ds/components/bundle.css'):
+            with open(os.path.join(ROOT, name), encoding='utf-8') as f:
+                text = f.read()
+            for kind, n in re.findall(r'--(wind|period)-(\d+)\b', text):
+                self.assertIn(int(n), names[kind], f'{name}: --{kind}-{n}')
+        with open(os.path.join(ROOT, 'ds/tokens.css'), encoding='utf-8') as f:
+            light = f.read().split('}')[0]
+        for kind, want in names.items():
+            self.assertEqual({int(n) for n in re.findall(rf'--{kind}-(\d+):', light)}, want, kind)
 
 
 if __name__ == '__main__':
