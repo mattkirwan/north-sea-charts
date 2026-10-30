@@ -1229,35 +1229,47 @@ class App(unittest.TestCase):
         self.assertEqual(self.shown_cells(), [])
         self.assertEqual(self.page.locator('#panel .nss-band[data-band="pressure"]').get_attribute('aria-pressed'), 'true')
         self.assertEqual(self.page.evaluate("localStorage.getItem('nss.beacons')"), 'false')
+        self.assertTrue(self.page.locator('#panel [data-beacons]').is_disabled())     # and greyed out there
+
+    def test_beacons_only_in_saltburns_swell_window(self):
+        self.beacon_run()
+        self.page.wait_for_function("swellWin")
+        self.assertFalse(self.page.evaluate("inWindow(57, -8)"))           # west of Scotland: Scotland's in the way
+        self.assertTrue(self.page.evaluate("inWindow(55, 2)"))             # the open North Sea
+        self.assertTrue(self.page.evaluate("inWindow(61, -5)"))            # the Atlantic, through the Orkney-Shetland gap
+        self.page.evaluate("view.k /= 2; clampView(); requestDraw()")
+        self.chart()
+        self.assertTrue(self.page.evaluate("crossPts.length > 0 && crossPts.every((p) => inWindow(p.c.lat, p.c.lon))"))
+        self.assertTrue(self.page.evaluate("grid.seaPoints().some((c) => !inWindow(c.lat, c.lon))"))
 
     def to_saltburn_view(self):
         self.page.evaluate("""() => { const [x, y] = grid.lonLatToKm(-0.95, 54.8); view.k = 3; view.x = x + 30; view.y = y; clampView(); requestDraw(); }""")
         self.chart()
 
-    def test_beacons_takes_over_from_the_band_and_glides_in(self):
+    def test_beacons_takes_over_from_the_band_where_it_can_be_used(self):
         self.beacon_run(beacons=False)
         self.page.click('#panel .nss-band[data-band="wind"]')
         self.chart()
-        k0 = self.page.evaluate('view.k')
-        self.page.click('#panel [data-beacons]')
+        btn = self.page.locator('#panel [data-beacons]')
+        self.assertTrue(btn.is_disabled())                                  # the opening view: too far out
+        self.to_saltburn_view()
+        self.assertFalse(btn.is_disabled())
+        k = self.page.evaluate('view.k')
+        btn.click()
         pressed = lambda: [b.get_attribute('aria-pressed') for b in self.page.locator('#panel .nss-band').all()]
         self.assertEqual(pressed(), ['false', 'false', 'false', 'true'])
         self.assertEqual(self.page.evaluate("(() => { const L = layersOn(); return [L.pressure, L.wind, L.swell, L.field]; })()"), [False] * 4)
         self.assertEqual(self.page.locator('#keyslot').get_attribute('data-off'), '')
-        # Zoomed out: one glide in to beacons' minimum zoom, the points thinned there; Beacons stays on.
-        self.page.wait_for_timeout(900)
-        k = self.page.evaluate('view.k')
-        self.assertGreater(k, k0)
-        self.assertTrue(self.page.evaluate('beaconsReach()'))
-        self.assertLess(k, 1.2 * self.page.evaluate("beaconsMinK(grid.kmToLonLat(view.x, view.y)[1])"))
-        self.assertGreater(self.page.evaluate('crossPts.length'), 0)
-        self.assertEqual(pressed()[3], 'true')
-        # Off and on again, there already: nothing moves.
-        self.page.click('#panel [data-beacons]')
-        self.assertEqual(pressed(), ['false', 'true', 'false', 'false'])  # the band from before
-        self.page.click('#panel [data-beacons]')
         self.page.wait_for_timeout(700)
-        self.assertEqual(self.page.evaluate('view.k'), k)
+        self.assertEqual(self.page.evaluate('view.k'), k)                   # the map stays put
+        self.assertGreater(self.page.evaluate('crossPts.length'), 0)
+        # Square: the menu button's size.
+        b, menu = self.box('#panel [data-beacons]'), self.box('#panel [data-menu]')
+        self.assertEqual((b['width'], b['height']), (menu['width'], menu['height']))
+        # Off: the band from before.
+        btn.click()
+        self.assertEqual(pressed(), ['false', 'true', 'false', 'false'])
+        btn.click()
         # Kept between visits.
         self.page.reload()
         self.page.wait_for_function("document.querySelector('#rStatus').hidden")
@@ -1282,6 +1294,7 @@ class App(unittest.TestCase):
         self.beacon_run(beacons=False)
         btn = self.page.locator('#column [data-beacons]')
         self.assertTrue(btn.is_visible())
+        self.to_saltburn_view()
         self.assertEqual(btn.get_attribute('aria-label'), 'Beacons')
         self.assertEqual(self.box('#column [data-beacons]')['height'], self.box('#column .nss-band[data-band="swell"]')['height'])
         btn.click()
@@ -1338,6 +1351,8 @@ class App(unittest.TestCase):
     def test_the_first_turn_on_points_at_a_pulsing_cross(self):
         self.kept()
         self.beacon_run(beacons=False)
+        self.to_saltburn_view()
+        self.page.evaluate("view.k /= 2; clampView(); requestDraw()")       # a few crosses round the middle
         self.page.click('#panel [data-beacons]')
         self.tip_due('Tap a cross')
         spot = self.page.locator('[data-hint-target="cross"]')
@@ -1362,8 +1377,12 @@ class App(unittest.TestCase):
         self.assertEqual(self.page.locator('[data-new-tag]').text_content(), 'New · Beacons')
         self.assertEqual(self.page.locator('#panel [data-beacons] > .nss-light').count(), 1)
         self.page.click('[data-new-tag]')
-        self.page.click('[data-show-me]')                                  # Show me turns it on
+        k0 = self.page.evaluate('view.k')
+        self.page.click('[data-show-me]')                                  # Show me turns it on, gliding in to where it works
         self.assertEqual(self.page.locator('#panel [data-beacons]').get_attribute('aria-pressed'), 'true')
+        self.page.wait_for_timeout(900)
+        self.assertGreater(self.page.evaluate('view.k'), k0)
+        self.assertTrue(self.page.evaluate('beaconsReach() && beaconsOn'))
         self.assertEqual(self.hints()['seen']['new.beacons'], 'retired')
         self.assertEqual(self.page.locator('.nss-light').count(), 0)
 
@@ -1414,15 +1433,15 @@ class App(unittest.TestCase):
         self.assertEqual(self.layers_pressed(), ['false', 'true', 'true'])
         # Another cell starts all on.
         self.page.wait_for_timeout(800)                                     # the glide to it first
-        other = self.page.evaluate("(() => { draw(); const p = crossPts.find((p) => p.c.id !== 'd4:219:-4'); dropBeacon(p.c); return p.c.id; })()")
+        other = self.page.evaluate("(() => { view.k /= 2; clampView(); draw(); const p = crossPts.find((p) => p.c.id !== 'd4:219:-4'); dropBeacon(p.c); return p.c.id; })()")
         self.assertNotEqual(other, 'd4:219:-4')
         self.assertEqual(self.layers_pressed(), ['true', 'true', 'true'])
 
     def test_closing_a_beacon_goes_back_to_beacons_then_to_the_band(self):
         self.beacon_run(beacons=False)
         self.page.click('#panel .nss-band[data-band="wind"]')
+        self.to_saltburn_view()
         self.page.click('#panel [data-beacons]')
-        self.page.wait_for_timeout(800)                                     # its glide in first
         self.drop()
         self.page.click('[data-layer="swell"]')
         self.page.click('[data-beacon-close]')

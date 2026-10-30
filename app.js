@@ -514,6 +514,35 @@ fetch('assets/base.json').then((r) => r.json()).then((b) => {
   requestDraw();
 }).catch(() => {});
 
+// ---- Saltburn's swell window ----------------------------------------------------------
+// The open sea swell can cross to reach Saltburn, which beacons are for:
+// km of sea along each bearing from just off the pier to the first land,
+// and the three bends (round the Aberdeenshire corner, along the Yorkshire
+// coast, through the gap between Orkney and Shetland), each from its own
+// point over its own fan. Geography, so kept here (assets/window.json, as
+// scripts/swell_sources.py's swell_window() makes it, which the chart job
+// also publishes as window.json); remake it if that changes.
+let swellWin = null;
+fetch('assets/window.json').then((r) => r.json()).then((w) => { swellWin = w; requestDraw(); }).catch(() => { swellWin = false; requestDraw(); });
+function gcAway(lat1, lon1, lat2, lon2) {
+  const r = Math.PI / 180, f1 = lat1 * r, f2 = lat2 * r, dl = (lon2 - lon1) * r;
+  const km = 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(Math.sin((f2 - f1) / 2) ** 2 + Math.cos(f1) * Math.cos(f2) * Math.sin(dl / 2) ** 2)));
+  const b = (Math.atan2(Math.sin(dl) * Math.cos(f2), Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl)) / r + 360) % 360;
+  return { km, b };
+}
+// In the window (or one of its bends), or true if the window didn't load.
+function inWindow(lat, lon) {
+  const w = swellWin;
+  if (!w) return swellWin === false;
+  const at = (reach, b) => reach[Math.round(b / w.step) % reach.length];
+  const o = gcAway(w.origin[0], w.origin[1], lat, lon);
+  if (o.km <= at(w.reach, o.b)) return true;
+  return w.bends.some((g) => {
+    const e = gcAway(g.lat, g.lon, lat, lon), r = at(g.reach, e.b);
+    return r > 0 && e.km >= (g.start || 0) && e.km <= r;
+  });
+}
+
 // ---- View: pan and zoom -------------------------------------------------------------
 const cv = $('#chart'), ctx = cv.getContext('2d');
 let W = 0, Hs = 0, dpr = 1;
@@ -893,11 +922,14 @@ document.querySelectorAll('.nss-band[data-band]').forEach((b) => b.addEventListe
 }));
 // Beacons on: the layers off, the grid points on, zoomed in to where they
 // can be used; off: the band from before, the map left where it is.
-function setBeacons(on) {
+// It's there to switch from beacons' minimum zoom in (the button is greyed
+// further out), so the map stays put; only the new-feature card's Show me
+// glides in first.
+function setBeacons(on, zoom) {
   beaconsOn = on; store.set('nss.beacons', on);
   renderPanel(); requestDraw(); warm();
   if (!sideOn()) setTimeout(easeClamp, reduced.matches ? 0 : 220);
-  if (on) { zoomToBeacons(); emit('beacons.on'); }
+  if (on) { if (zoom) zoomToBeacons(); emit('beacons.on'); }
   hintWait();
 }
 document.querySelectorAll('[data-beacons]').forEach((b) => b.addEventListener('click', () => { firstInteraction('band'); setBeacons(!beaconsOn); }));
@@ -1430,6 +1462,9 @@ function drawCrosses(sx, sy, pb, L, fi) {
   const path = new Path2D(), arrows = new Path2D(), d = L.points && fi >= 0 && frames[fi];
   const P = man.grids.p, sq = man.square, ws = man.scale.wind || 2;
   const add = (c) => {
+    // In Saltburn's swell window only (worked out once a point).
+    if (c.win === undefined && swellWin !== null) c.win = inWindow(c.lat, c.lon);
+    if (!c.win) return;
     const px = sx(c.x), py = sy(c.y);
     if (px < -7 || px > W + 7 || py < -7 || py > Hs + 7 || (px > pb.x0 && px < pb.x1 && py > pb.y)) return;
     if (d) {
@@ -1477,7 +1512,11 @@ const beaconsReach = () => view.k >= beaconsMinK(grid.kmToLonLat(view.x, view.y)
 // Zoomed out past it with no beacon open (and not on the way in): Beacons
 // goes off, and the band comes back.
 let beaconsGlide = false, beaconsOffT = 0;
+const beaconsBtns = [...document.querySelectorAll('[data-beacons]')];
+let beaconsUsable = null;
 function checkBeaconsReach() {
+  const usable = !!grid && beaconsReach();
+  if (usable !== beaconsUsable) { beaconsUsable = usable; for (const b of beaconsBtns) b.disabled = !usable; }
   if (!beaconsOn || beacon || beaconsGlide || !grid || beaconsOffT || beaconsReach()) return;
   beaconsOffT = setTimeout(() => { beaconsOffT = 0; if (beaconsOn && !beacon && !beaconsGlide && !beaconsReach()) setBeacons(false); });
 }
@@ -1605,9 +1644,9 @@ function recentre() {
   glideAnim = requestAnimationFrame(step);
 }
 
-// Beacons turned on zoomed out: one glide in, about the middle of the
-// visible chart, to beacons' minimum zoom (a jump with Reduce Motion);
-// already there, nothing moves.
+// Show me, zoomed out: one glide in, about the middle of the visible chart,
+// to beacons' minimum zoom (a jump with Reduce Motion); already there,
+// nothing moves.
 function zoomToBeacons() {
   if (!grid) return;
   const v = vis(), cx = v.x + v.w / 2, cy = (sideOn() ? Hs : v.h) / 2;
@@ -1913,7 +1952,7 @@ const hintBusy = () => !!(ptrs.size || drag || tl.moving || sheetOn || guideOn()
 const floatTag = $('[data-tip-float]'), newTag = $('[data-new-tag]'), card = $('[data-hint-card]');
 const gotIt = card.querySelector('[data-got-it]'), showMe = card.querySelector('[data-show-me]');
 // What Show me does.
-const HINT_ACTIONS = { 'open-settings:panel': () => openSheet('settings', '[data-set="panel"] [aria-pressed="true"]'), 'beacons-on': () => setBeacons(true) };
+const HINT_ACTIONS = { 'open-settings:panel': () => openSheet('settings', '[data-set="panel"] [aria-pressed="true"]'), 'beacons-on': () => setBeacons(true, true) };
 // The control a hint is about, in the panel showing.
 const hintEl = (h) => [...document.querySelectorAll(`[data-hint-target="${h.target}"]`)].find((el) => !el.closest('[data-away], [hidden]'));
 // Beside what it's about, notched to it and kept on the screen: over it, off
