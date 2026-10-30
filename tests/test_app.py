@@ -1391,7 +1391,8 @@ class App(unittest.TestCase):
         self.page.wait_for_function("document.querySelector('#panel').hasAttribute('data-beacon')")
         self.assertEqual(self.layers_pressed(), ['false', 'true', 'true'])
         # Another cell starts all on.
-        other = self.page.evaluate("(() => { view.k /= 2; clampView(); draw(); const p = crossPts.find((p) => p.c.id !== 'd4:219:-4'); dropBeacon(p.c); return p.c.id; })()")
+        self.page.wait_for_timeout(800)                                     # the glide to it first
+        other = self.page.evaluate("(() => { draw(); const p = crossPts.find((p) => p.c.id !== 'd4:219:-4'); dropBeacon(p.c); return p.c.id; })()")
         self.assertNotEqual(other, 'd4:219:-4')
         self.assertEqual(self.layers_pressed(), ['true', 'true', 'true'])
 
@@ -1399,6 +1400,7 @@ class App(unittest.TestCase):
         self.beacon_run(beacons=False)
         self.page.click('#panel .nss-band[data-band="wind"]')
         self.page.click('#panel [data-beacons]')
+        self.page.wait_for_timeout(800)                                     # its glide in first
         self.drop()
         self.page.click('[data-layer="swell"]')
         self.page.click('[data-beacon-close]')
