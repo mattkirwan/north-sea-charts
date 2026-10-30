@@ -72,6 +72,11 @@ class Problems(unittest.TestCase):
     def test_coast_fill_where_noaa_has_no_sea_is_not_a_fault(self):
         self.assertEqual(vf.problems(case(hs=[0.2, float('nan')], tp=[8.0, float('nan')])), [])
 
+    def test_a_period_off_the_blend_but_within_noaas_cells_round_it_passes(self):
+        self.assertEqual(vf.problems(case(tp=[7.0, 10.4], tp_span=[6.9, 14.2])), [])
+        self.assertTrue(vf.problems(case(tp=[4.0, 10.4], tp_span=[6.9, 14.2])))
+        self.assertTrue(vf.problems(case(tp=[7.0, 10.4])))                 # no span: the point alone
+
     def test_a_whole_grid_off(self):
         r = case()
         r['grid']['p']['rms'] = 5.0

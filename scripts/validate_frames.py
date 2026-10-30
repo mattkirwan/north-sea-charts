@@ -64,6 +64,11 @@ POINTS = [
 # a flipped grid or a bad rotation is far outside them.
 LIMITS = dict(p_point=2.0, p_rms=0.8, wind_point=2.5, wind_rms=0.8, dir_point=25.0,
               hs_point=0.35, hs_rms=0.12, tp_point=1.5, tp_rms=0.6)
+# The longest swell's period can jump between neighbouring cells (a swell
+# just under 0.1 m in one, over it in the next), and blending across the
+# jump puts the frame's value and NOAA's own at the point apart. So at a
+# point, a period within the cells this near (either way) passes too.
+SPAN_CELLS = 2
 # The cell tiles are NOAA's own grid points, not resampled: all that's allowed
 # is rounding to the steps they're stored in (grid.py), half a step either way.
 CELL_LIMITS = dict(hs=0.05, tl=0.05, p=0.025, u=0.25, v=0.25, dp=1.0)
@@ -167,6 +172,17 @@ class Source:
         lat0, lon0 = (self.wlat0, self.wlon0) if wave else (self.lat0, self.lon0)
         return bilinear(getattr(self, name), (lat0 - lat) / 0.25, (lon - lon0) / 0.25)
 
+    def span(self, name, lon, lat, k=SPAN_CELLS):
+        """The lowest and highest of the model's cells within k of a point: all
+        a frame's value there can be made of (NaN, NaN if none has sea)."""
+        wave = name in ('hs', 'tp')
+        lat0, lon0 = (self.wlat0, self.wlon0) if wave else (self.lat0, self.lon0)
+        r, c = int(np.floor((lat0 - lat) / 0.25)), int(np.floor((lon - lon0) / 0.25))
+        a = getattr(self, name)[max(0, r - k + 1):r + k + 1, max(0, c - k + 1):c + k + 1]
+        if not np.isfinite(a).any():
+            return [float('nan')] * 2
+        return [round(float(np.nanmin(a)), 2), round(float(np.nanmax(a)), 2)]
+
 
 # ---- Comparing -----------------------------------------------------------------------------
 
@@ -186,7 +202,8 @@ def compare(fr, src, grid_lon, grid_lat, slon, slat):
                    p=[round(float(frame_at(fr, 'p', lon, lat)), 2), round(float(src.at('p', lon, lat)), 2)],
                    wind=[round(float(np.hypot(u, v)), 2), round(float(np.hypot(su, sv)), 2)],
                    hs=[round(float(frame_at(fr, 'h', lon, lat)), 2), round(float(src.at('hs', lon, lat)), 2)],
-                   tp=[round(float(frame_at(fr, 't', lon, lat)), 2), round(float(src.at('tp', lon, lat)), 2)])
+                   tp=[round(float(frame_at(fr, 't', lon, lat)), 2), round(float(src.at('tp', lon, lat)), 2)],
+                   tp_span=src.span('tp', lon, lat))
         # to_/from direction doesn't matter: both are the way the wind blows.
         row['dir'] = [round(float(np.degrees(np.arctan2(u, v)) % 360), 1), round(float(np.degrees(np.arctan2(su, sv)) % 360), 1)]
         out['points'].append(row)
@@ -223,6 +240,8 @@ def problems(res):
                 continue   # NOAA has no sea in a corner here; the frame fills it from the nearest sea (to_coast)
             if np.isnan(ours):
                 out.append(f"{r['point']}: {key} is {ours} here and {theirs} in NOAA's file")
+            elif key == 'tp' and 'tp_span' in r and r['tp_span'][0] - lim <= ours <= r['tp_span'][1] + lim:
+                continue   # the longest swell's period jumps from cell to cell; ours is still NOAA's, near the point
             elif not np.isnan(ours) and abs(ours - theirs) > lim:
                 out.append(f"{r['point']}: {key} {ours} against NOAA's {theirs} {unit} (limit {lim})")
         if r['wind'][1] >= MIN_WIND_FOR_DIRECTION and angle_diff(*r['dir']) > L['dir_point']:
