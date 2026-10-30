@@ -275,8 +275,10 @@
     transform: translate(-50%, -50%); border: 2px solid var(--lifeboat); opacity: 0; }
   .nss-cross-spot[data-on]::after { animation: nss-beacon-ping 2.4s linear infinite; }
   @media (prefers-reduced-motion: reduce) { .nss-cross-spot[data-on]::after { animation: none; opacity: 0.9; } }
-  /* Four buttons in the open panel's row: tighter letters before smaller type. */
-  @media (max-width: 360px) { .nss-panel .nss-band { letter-spacing: 0.3px; } }
+  /* Beacons: square, the menu button's size, beside the band buttons; greyed
+     zoomed out past where its grid points show. */
+  .nss-panel .nss-band[data-beacons] { flex: 0 0 48px; }
+  .nss-band[data-beacons]:disabled { opacity: 0.4; cursor: default; }
   /* The sheet: the open panel with the key, the bands and the menu button
      put away, a title row on top and the beacon's rows over the scale. */
   #panel[data-beacon] { padding-top: 4px; box-shadow: 0 -8px 24px rgba(14,18,20,0.25); }
