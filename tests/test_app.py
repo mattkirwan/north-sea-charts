@@ -1239,7 +1239,7 @@ class App(unittest.TestCase):
         self.page.evaluate("view.k /= 2; clampView(); requestDraw()")
         self.chart()
         self.assertTrue(self.page.evaluate("crossPts.length > 0 && crossPts.every((p) => inWindow(p.c.lat, p.c.lon))"))
-        self.assertTrue(self.page.evaluate("grid.seaPoints().some((c) => !inWindow(c.lat, c.lon))"))
+        self.assertTrue(self.page.evaluate("grid.seaPoints().every((c) => inWindow(c.lat, c.lon))"))  # only window points published
 
     def to_saltburn_view(self):
         self.page.evaluate("""() => { const [x, y] = grid.lonLatToKm(-0.95, 54.8); view.k = 3; view.x = x + 30; view.y = y; clampView(); requestDraw(); }""")
