@@ -226,21 +226,24 @@ class App(unittest.TestCase):
         self.assertIn('#3D566F', self.sea_pixels())                        # Pressure: the plain sea, as before
         self.page.click('#panel .nss-band[data-band="wind"]')
         self.assertNotIn('#3D566F', self.sea_pixels())
-        self.page.click('#panel .nss-band[data-band="swell"]')
+        self.page.click('#panel .nss-band[data-band="swell"]')                 # height
+        self.assertNotIn('#3D566F', self.sea_pixels())
         self.page.click('#panel [data-swell] [data-var="period"]')
         self.assertNotIn('#3D566F', self.sea_pixels())
 
-    def test_wind_and_period_bins(self):
+    def test_wind_height_and_period_bins(self):
         self.loaded()
-        got = self.page.evaluate("""[[KEYS.wind, 0], [KEYS.wind, 75], [KEYS.wind, 10], [KEYS.wind, 9.99], [KEYS.period, 3], [KEYS.period, 26], [KEYS.period, 8]]
-            .map(([K, v]) => keyTok(K, bin(K, v)))""")
-        self.assertEqual(got, ['--wind-0', '--wind-60', '--wind-10', '--wind-5', '--period-2', '--period-24', '--period-8'])
+        got = self.page.evaluate("""[[KEYS.wind, 0], [KEYS.wind, 75], [KEYS.wind, 10], [KEYS.wind, 9.99], [KEYS.period, 3], [KEYS.period, 26], [KEYS.period, 8],
+            [KEYS.height, 0.3], [KEYS.height, 7.2], [KEYS.height, 2.5], [KEYS.height, 1.49]].map(([K, v]) => keyTok(K, bin(K, v)))""")
+        self.assertEqual(got, ['--wind-0', '--wind-60', '--wind-10', '--wind-5', '--period-2', '--period-24', '--period-8',
+                               '--height-0', '--height-600', '--height-250', '--height-100'])
+        self.assertEqual(self.page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--height-250').trim()"), '#F4BD30')
         self.assertEqual(self.page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--wind-60').trim()"), '#3B5066')
 
     def test_the_key_lists_only_the_bins_in_the_run_and_holds_still(self):
         slider = self.loaded()
         self.page.wait_for_function(ALL_IN)
-        for band, var, tok in (('wind', None, 'wind'), ('swell', 'period', 'period')):
+        for band, var, tok in (('wind', None, 'wind'), ('swell', 'height', 'height'), ('swell', 'period', 'period')):
             self.page.click(f'#panel .nss-band[data-band="{band}"]')
             if var:
                 self.page.click(f'#panel [data-swell] [data-var="{var}"]')
@@ -250,6 +253,12 @@ class App(unittest.TestCase):
             top = self.page.evaluate(f"String(KEYS.{tok}.lev.at(-1))")
             self.assertEqual([s.rstrip('+') for s in steps], present, tok)
             self.assertEqual([s.endswith('+') for s in steps], [s == top for s in present], tok)
+            # The figures shown never run into each other (every other bin labelled when tight).
+            gaps = self.page.evaluate("""(() => { const r = document.createRange();
+                const boxes = [...document.querySelectorAll('#panel [data-key] .nss-key-step')].filter((s) => getComputedStyle(s).color !== 'rgba(0, 0, 0, 0)')
+                  .map((s) => { r.selectNodeContents(s.lastChild); const b = r.getBoundingClientRect(); return [b.left, b.right]; });
+                return boxes.slice(1).map((b, i) => b[0] - boxes[i][1]); })()""")
+            self.assertTrue(all(g >= 3 for g in gaps), (tok, gaps))
             # One line, however many steps.
             keys, step = self.box('#panel [data-key] .nss-key-steps'), self.page.locator('#panel [data-key] .nss-key-step').first.bounding_box()
             self.assertAlmostEqual(keys['height'], step['height'], delta=1)
@@ -1561,14 +1570,15 @@ class App(unittest.TestCase):
         self.page.wait_for_function("document.querySelector('#rStatus').textContent === 'Offline'")
 
 class Tokens(unittest.TestCase):
-    def test_no_old_numbered_wind_or_period_tokens(self):
-        # The keys are named for the bottom of their bins now: wind-0, 5 ... 60
-        # and period-0, 2 ... 24; the old wind-1 to 6 and period-1 to 5 are gone.
-        names = dict(wind=set(range(0, 61, 5)), period=set(range(0, 25, 2)))
+    def test_no_old_numbered_key_tokens(self):
+        # The keys are named for the bottom of their bins now: wind-0, 5 ... 60,
+        # height-0, 50 ... 600 (cm) and period-0, 2 ... 24; the old wind-1 to 6,
+        # height-1 to 7 and period-1 to 5 are gone.
+        names = dict(wind=set(range(0, 61, 5)), height=set(range(0, 601, 50)), period=set(range(0, 25, 2)))
         for name in ('index.html', 'app.js', 'hints.js', 'ds/tokens.css', 'ds/components/bundle.css'):
             with open(os.path.join(ROOT, name), encoding='utf-8') as f:
                 text = f.read()
-            for kind, n in re.findall(r'--(wind|period)-(\d+)\b', text):
+            for kind, n in re.findall(r'--(wind|height|period)-(\d+)\b', text):
                 self.assertIn(int(n), names[kind], f'{name}: --{kind}-{n}')
         with open(os.path.join(ROOT, 'ds/tokens.css'), encoding='utf-8') as f:
             light = f.read().split('}')[0]

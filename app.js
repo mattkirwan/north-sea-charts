@@ -74,9 +74,9 @@ function readTokens() {
     sea: v('--chart-sea'), land: v('--chart-land'), coast: v('--chart-coast'), grid: v('--chart-grid'),
     iso: v('--chart-isobar'), high: v('--chart-high'), arrow: v('--chart-arrow'), ice: v('--chart-ice'),
     ink: v('--ui-ink'), control: v('--ui-control'), raised: v('--ui-raised'),
-    height: [1, 2, 3, 4, 5, 6, 7].map((i) => v(`--height-${i}`)),
-    period: KEYS.period.lev.map((l) => v(`--period-${l}`)),
-    wind: KEYS.wind.lev.map((l) => v(`--wind-${l}`))
+    height: KEYS.height.lev.map((l, i) => v(keyTok(KEYS.height, i))),
+    period: KEYS.period.lev.map((l, i) => v(keyTok(KEYS.period, i))),
+    wind: KEYS.wind.lev.map((l, i) => v(keyTok(KEYS.wind, i)))
   };
 }
 const FONT = '"Geist Mono", ui-monospace, monospace';
@@ -106,17 +106,17 @@ const ICONS = {
 };
 const icon = (n, cls = '') => `<svg class="nss-icon${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
 document.querySelectorAll('[data-icon]').forEach((el) => { el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon, el.dataset.iconSize ? ` nss-icon--${el.dataset.iconSize}` : '')); });
-// The keys. Wind and period are stepped bins, each token named for the
-// bottom of its bin (wind-10 is 10 to 15 mph), from calm and chop up, so
-// every sea cell under them takes a key colour; height keeps its seven.
+// The keys: 13 stepped bins each, every token named for the bottom of its
+// bin (wind-10 is 10 to 15 mph), from calm, flat and chop up, so every sea
+// cell under them takes a key colour. Height's are named in centimetres, as
+// a CSS name can't hold a decimal point (height-150 is 1.5 to 2 m).
 const bins = (top, step) => Array.from({ length: top / step + 1 }, (_, i) => i * step);
 const KEYS = {
-  wind: { unit: 'windUnit', tok: 'wind', lev: bins(60, 5), binned: true },
-  height: { unit: 'heightUnit', steps: ['0.5', '1', '1.5', '2', '3', '4', '6+'], tok: 'height', lev: [0.5, 1, 1.5, 2, 3, 4, 6], fig: (l) => `${l} m` },
-  period: { unit: 'periodUnit', tok: 'period', lev: bins(24, 2), binned: true, fig: (l) => `${l} s` }
+  wind: { unit: 'windUnit', tok: 'wind', lev: bins(60, 5) },
+  height: { unit: 'heightUnit', tok: 'height', lev: bins(6, 0.5), cm: true, fig: (l) => `${l} m` },
+  period: { unit: 'periodUnit', tok: 'period', lev: bins(24, 2), fig: (l) => `${l} s` }
 };
-// A key step's token: wind-<bin> and period-<bin>, height-1 to height-7.
-const keyTok = (K, i) => `--${K.tok}-${K.binned ? K.lev[i] : i + 1}`;
+const keyTok = (K, i) => `--${K.tok}-${K.cm ? Math.round(K.lev[i] * 100) : K.lev[i]}`;
 // Which of a key's steps a value falls in (the top one past its end, -1
 // below the first or for no value): a value on a boundary is the upper bin.
 function bin(K, v) {
@@ -132,8 +132,8 @@ let man = null, frames = [], idx = 0, shown = -1;
 let band = store.get('nss.band', 'pressure'), swellVar = store.get('nss.swell', 'height');
 let docked = store.get('nss.docked', false), hand = store.get('nss.hand', 'right');
 let offline = false, updatedNote = false, failedAt = {};
-// The wind and period bins found in the run's frames loaded so far (the key's steps).
-let present = { wind: [], period: [] };
+// The bins found in the run's frames loaded so far (the keys' steps).
+let present = { wind: [], height: [], period: [] };
 const loading = new Set();
 let inflight = 0;
 
@@ -204,13 +204,14 @@ function pump() {
   }
 }
 setInterval(pump, 15e3);
-// A frame's wind and period bins into the run's; the key redrawn when that grows.
+// A frame's bins into the run's; the key redrawn when that grows.
 let presentT = 0;
 function notePresent(d) {
   let grew = false;
   const mark = (K, v) => { const b = bin(K, v); if (b >= 0 && !present[K.tok][b]) { present[K.tok][b] = true; grew = true; } };
-  const ws = man.scale.wind || 2, st = man.scale.t;
+  const ws = man.scale.wind || 2, sh = man.scale.h, st = man.scale.t;
   for (let k = 0; k < d.u.length; k++) mark(KEYS.wind, Math.hypot(d.u[k], d.v[k]) / ws * MPH);
+  for (let k = 0; k < d.h.length; k++) if (d.h[k] !== 255) mark(KEYS.height, d.h[k] / sh);
   for (let k = 0; k < d.t.length; k++) if (d.t[k] !== 255) mark(KEYS.period, d.t[k] / st);
   if (grew) { clearTimeout(presentT); presentT = setTimeout(renderPanel, 200); }
 }
@@ -273,7 +274,7 @@ async function refreshManifest() {
   try { m = await getManifest(); offline = navigator.onLine === false; } catch { offline = true; renderStatus(); return; }
   if (!man) {
     man = m; frames = []; loadIce(m); grid = makeGrid(m);
-    present = { wind: [], period: [] };
+    present = { wind: [], height: [], period: [] };
     idx = nearestIndex(m, Date.now());
     tl.raw = tl.target = idx;
     buildTicks(); setFrame(idx, true); pump(); hintWait(); openAt();
@@ -283,7 +284,7 @@ async function refreshManifest() {
     try {
       const d = await fetchFrame(m, j);
       man = m; frames = []; loadIce(m); grid = makeGrid(m); frames[j] = d;
-      present = { wind: [], period: [] }; notePresent(d); failedAt = {}; idx = j; tl.raw = tl.target = play.pos = j; geomCache.clear();
+      present = { wind: [], height: [], period: [] }; notePresent(d); failedAt = {}; idx = j; tl.raw = tl.target = play.pos = j; geomCache.clear();
       if (beacon) loadBeacon();
       buildTicks(); markTick(j); setFrame(j, true);
       updatedNote = true; setTimeout(fadeUpdated, 3000);
@@ -572,7 +573,7 @@ function resize() {
   cv.width = Math.round(W * dpr); cv.height = Math.round(Hs * dpr);
   if (!view) fitHome();
   clampView();
-  requestDraw(); renderHint();
+  requestDraw(); renderHint(); fitKeys();
   if (guideOn()) placeGuide();
 }
 addEventListener('resize', resize);
@@ -678,12 +679,12 @@ function draw() {
   const screen = () => ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const sx = (wx) => W / 2 + (wx - x) * k, sy = (wy) => Hs / 2 - (wy - y) * k;
   screen();
-  // No default sea under Wind or Swell period: every sea cell takes a key
+  // No default sea under Wind or Swell: every sea cell takes a key
   // colour there, and where the model has none it reads as land.
   // (Beyond the model's square, the plain sea as ever.)
   const L = layersOn();
   ctx.fillStyle = C.sea; ctx.fillRect(0, 0, W, Hs);
-  if (L.field || (L.swell && L.swellVar === 'period')) {
+  if (L.field || L.swell) {
     ctx.fillStyle = C.land;
     ctx.fillRect(sx(SQ.x0), sy(SQ.y0), (SQ.x1 - SQ.x0) * k, (SQ.y0 - SQ.y1) * k);
   }
@@ -840,21 +841,35 @@ function renderPanel() {
   } else {
     const K = KEYS[band === 'wind' ? 'wind' : swellVar];
     unit = tr(K.unit);
-    // Wind and period: only the bins found in the run loaded so far (all of
-    // them before any is), so the key holds still while the time moves.
-    const steps = K.binned
-      ? K.lev.map((l, i) => [i, `${l}${i === K.lev.length - 1 ? '+' : ''}`]).filter(([i]) => !present[K.tok].some(Boolean) || present[K.tok][i])
-      : K.steps.map((t, i) => [i, t]);
+    // Only the bins found in the run loaded so far (all of them before any
+    // is), so the key holds still while the time moves.
+    const steps = K.lev.map((l, i) => [i, `${l}${i === K.lev.length - 1 ? '+' : ''}`]).filter(([i]) => !present[K.tok].some(Boolean) || present[K.tok][i]);
     html = `<span class="nss-key-unit">${unit}</span><div class="nss-key-steps">` +
-      steps.map(([i, t]) => `<span class="nss-key-step"><i style="background: var(${keyTok(K, i)})"></i>${t}</span>`).join('') + '</div>';
+      steps.map(([i, t]) => `<span class="nss-key-step"${i % 2 ? ' data-odd' : ''}><i style="background: var(${keyTok(K, i)})"></i>${t}</span>`).join('') + '</div>';
   }
   document.querySelectorAll('[data-key]').forEach((k) => { k.setAttribute('aria-label', tr('keyOf', { unit })); k.innerHTML = html; });
+  fitKeys();
   // Docked, the key floats level with the selected band (and comes in from
   // the column each time it moves).
   const slot = columnEl.querySelector(`.nss-band[data-band="${band}"]`).parentNode;
   if (flyout.parentNode !== slot) slot.appendChild(flyout);
   flyout.hidden = false;
   renderHint();
+}
+// A key too narrow for all its figures (13 steps beside the swell switch)
+// keeps every swatch but labels every other bin of the scale: 0, 1, 2 m;
+// 0, 10, 20 mph; 0, 4, 8 s.
+function fitKeys() {
+  document.querySelectorAll('[data-key]').forEach((k) => {
+    k.removeAttribute('data-sparse');
+    // A figure needs its own width and 4 px clear of the next.
+    const r = document.createRange(), tight = [...k.querySelectorAll('.nss-key-step')].some((s) => {
+      if (!s.clientWidth || !s.lastChild) return false;
+      r.selectNodeContents(s.lastChild);
+      return r.getBoundingClientRect().width + 4 > s.getBoundingClientRect().width + 1;
+    });
+    if (tight) k.setAttribute('data-sparse', '');
+  });
 }
 function setBand(b) {
   band = b; store.set('nss.band', band); renderPanel(); requestDraw(); warm();
@@ -874,7 +889,7 @@ document.querySelectorAll('[data-swell]').forEach((sw) => sw.addEventListener('c
 // once, behind the menu, and kept for next time.
 function setDocked(d, first) {
   docked = d; store.set('nss.docked', d);
-  applyPanels(); renderSettings();
+  applyPanels(); renderSettings(); fitKeys();
   if (!first) { easeClamp(); emit('panel.changed'); }
 }
 function setHand(h, first) {
@@ -1539,16 +1554,6 @@ function recentre() {
 }
 
 // ---- The beacon's rows: pressure, wind and swell on the timeline's track ----
-// A colour from a key's steps, blended between them (the swell line's height).
-function ramp(cols, lev, v) {
-  if (!(v > lev[0])) return cols[0];
-  if (v >= lev[lev.length - 1]) return cols[cols.length - 1];
-  let i = 0;
-  while (v >= lev[i + 1]) i++;
-  const f = (v - lev[i]) / (lev[i + 1] - lev[i]), hex = (h) => [1, 3, 5].map((k) => parseInt(h.slice(k, k + 2), 16));
-  const a = hex(cols[i]), b = hex(cols[i + 1]);
-  return `rgb(${a.map((x, k) => Math.round(x + (b[k] - x) * f)).join(',')})`;
-}
 const arrowPath = (x, y, dx, dy, half, head) => {
   const hx = x + dx * half, hy = y + dy * half, c = Math.cos(Math.PI / 6), s = Math.sin(Math.PI / 6);
   return `M${(x - dx * half).toFixed(1)} ${(y - dy * half).toFixed(1)}L${hx.toFixed(1)} ${hy.toFixed(1)}` +
@@ -1612,13 +1617,14 @@ function renderRows() {
   }
   out.push(row('wind', wind));
   // Swell: height up the row, the fill in the period's stepped colours, the
-  // line in the height's over a darker one, and the swell's way every 6 hours.
+  // line in the height's (stepped too) over a darker one, and the swell's way
+  // every 6 hours.
   const sBase = R.plot.swell + R.plotH;
   let swell = fill(hy, sBase, (i) => binColour(KEYS.period, s.tp[i])) +
     `<path d="${line(hy)}" fill="none" stroke="${C.ink}" stroke-opacity="0.5" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"/>`;
   for (let i = 0; i < n - 1; i++) {
     if (Number.isNaN(s.hs[i]) || Number.isNaN(s.hs[i + 1])) continue;
-    swell += `<line x1="${X(i)}" y1="${hy(i).toFixed(1)}" x2="${X(i + 1)}" y2="${hy(i + 1).toFixed(1)}" stroke="${ramp(C.height, KEYS.height.lev, (s.hs[i] + s.hs[i + 1]) / 2)}" stroke-width="3" stroke-linecap="round"/>`;
+    swell += `<line x1="${X(i)}" y1="${hy(i).toFixed(1)}" x2="${X(i + 1)}" y2="${hy(i + 1).toFixed(1)}" stroke="${binColour(KEYS.height, (s.hs[i] + s.hs[i + 1]) / 2)}" stroke-width="3" stroke-linecap="round"/>`;
   }
   for (let i = 0; i < n; i++) {
     if (man.steps[i] % 6 || Number.isNaN(s.dp[i]) || hy(i) > sBase - 14) continue;
