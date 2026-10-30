@@ -37,7 +37,7 @@ def fake_boxes(steps, seed=0):
     the awkward ones in (no sea, gales both ways, the pressure limits, the
     direction wrapping past north), and a known coast off Saltburn: its own
     cell (54.50N 1.00W) and the ones round it land, but for the wave model's
-    cell north of it."""
+    cell north of it; and a stretch of open sea in the Norwegian Sea."""
     rng = np.random.default_rng(seed)
     rows, cols = grid.box_shape()
     land = rng.random((rows, cols)) < 0.3
@@ -45,6 +45,8 @@ def fake_boxes(steps, seed=0):
     i, j = box_index(54.5, -1.0)
     land[i - 4:i + 5, j - 4:j + 5] = True                 # the coast round Saltburn
     land[box_index(54.75, -1.0)] = False
+    (n, w), (s, e) = box_index(70.0, 0.0), box_index(64.0, 8.0)
+    land[n:s + 1, w:e + 1] = False                        # open sea in the Norwegian Sea
     out = {}
     for k, s in enumerate(steps):
         b = dict(hs=rng.uniform(0, 25, (rows, cols)), tp=rng.uniform(1, 25, (rows, cols)), tl=rng.uniform(1, 25, (rows, cols)),
@@ -248,13 +250,18 @@ class Written(unittest.TestCase):
         self.assertTrue(fine[box_index(54.75, -1.0)])                # the wave model's cell off Saltburn, by the coast
         self.assertFalse(fine[box_index(54.5, -1.0)])                # land
         lat, lon = grid.box_latlon()
-        win = grid.window_mask(lat, lon)
-        self.assertFalse((fine & ~(sea & win)).any())               # sea in the window only
-        self.assertFalse(win[box_index(57.0, -8.0)])                 # west of Scotland: no
-        self.assertTrue(win[box_index(55.0, 2.0)])                   # the open North Sea: yes
-        # Out at sea, whole degrees only, none by the coast.
+        area = grid.beacon_area(lat, lon)
+        self.assertFalse((fine & ~(sea & area)).any())              # sea in the area only
+        self.assertFalse(area[box_index(57.0, -8.0)])                # west of Scotland: no
+        self.assertTrue(area[box_index(55.0, 2.0)])                  # the open North Sea: yes
+        self.assertTrue(area[box_index(76.0, 14.0)])                 # off Svalbard: yes, though out of the window
+        self.assertTrue(area[box_index(71.25, 25.75)])               # off North Cape: yes
+        self.assertFalse(grid.window_mask(lat, lon)[box_index(71.25, 25.75)])
+        self.assertFalse(area[box_index(58.0, 20.0)])                # the Baltic: no
+        # Out at sea, every other whole degree only, none by the coast.
         c_lat, c_lon = grid.coarse(lat), grid.coarse(lon)
-        self.assertTrue(((c_lat[open_sea] % 1 == 0) & (c_lon[open_sea] % 1 == 0)).all())
+        self.assertTrue(open_sea.any())
+        self.assertTrue(((c_lat[open_sea] % 2 == 0) & (c_lon[open_sea] % 2 == 0)).all())
         self.assertFalse((grid.coarse(fine) & open_sea).any())
         # And the app reads the same points, without a tile.
         got = js(dict(manifest=self.manifest, base=self.out + '/'))

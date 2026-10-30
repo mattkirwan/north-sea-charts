@@ -157,6 +157,8 @@ const NSSGrid = (() => {
           };
           add(C.points || C.sea, N);
           if (C.coarse && C.coarse.points) add(C.coarse.points, C.coarse.lattice);
+          // Picked points are the beacons' area already; the old sea mask is every sea cell.
+          if (C.points) for (const c of seaList) c.win = true;
         }
         return seaList;
       },

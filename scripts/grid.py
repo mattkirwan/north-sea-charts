@@ -20,12 +20,14 @@ onto for the app to draw: 185 nodes across for the swell (25 km), 116 for
 pressure and wind (40 km). It's a picture of the model, so nothing keeps
 its node numbers.
 
-Over Saltburn's swell window on the chart (CELL_BOX holds it), the frames
-job also writes the beacons' cells' values over the whole run. The beacon
-points (beacon_points()) are the sea cells in the window: every one within
-COAST_KM of land, and out at sea only NOAA's whole-degree points, as cells of
-their own lattice (COARSE: d1:<lat>:<lon>), so the open sea isn't crowded
-and its data stays small. Each lattice is kept in tiles, TILE x TILE cells
+Over the beacons' area on the chart (CELL_BOX holds it), the frames job
+also writes the beacons' cells' values over the whole run. The area is
+Saltburn's swell window and, beyond it, the sea up the Norwegian coast to
+Svalbard and the Barents Sea (NORTH). The beacon points (beacon_points())
+are its sea cells: every one within COAST_KM of land, and out at sea only
+NOAA's points on every OPEN_DEG-th whole degree, as cells of their own
+lattice (COARSE: d1:<lat>:<lon>), so the open sea isn't crowded and its data
+stays small. Each lattice is kept in tiles, TILE x TILE cells
 for d4 (4° square, on whole multiples of 4°) and COARSE_TILE x COARSE_TILE
 for d1 (8°), one gzipped file a tile, named for its south-west cell (52_-4:
 52.00 to 55.75N, 4.00 to 0.25W), the d1 ones in a folder of their own; only
@@ -72,6 +74,8 @@ COARSE = 1                                         # the open sea's beacon point
 COARSE_TILE = 8                                    # a d1 tile's cells a side: 8°
 CELL_BOX = dict(s=48, n=88, w=-56, e=40)           # degrees, on whole tiles of both: the swell window on the chart
 COAST_KM = 50                                      # every d4 cell this close to land is a beacon point
+OPEN_DEG = 2                                       # further out, NOAA's points on every 2nd whole degree
+NORTH = dict(s=62, w=-2, e=40)                     # degrees: up the Norwegian coast to Svalbard and the Barents Sea
 WINDOW = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets', 'window.json')
 VARS = [('hs', 'u1'), ('tp', 'u1'), ('tl', 'u1'), ('dl', 'u1'), ('dp', 'u1'), ('u', 'i1'), ('v', 'i1'), ('p', 'u2')]
 CELL_SCALE = dict(hs=10, tp=10, tl=10, dir=2, wind=2, p=[20, 850])   # the manifest's cells.scale
@@ -334,18 +338,26 @@ def near_land(sea, km):
     return out & sea
 
 
+def beacon_area(lat, lon):
+    """Whether each point (arrays) is in the beacons' area: Saltburn's swell
+    window, or the sea north of it up the Norwegian coast (NORTH)."""
+    north = (lat >= NORTH['s']) & (lon >= NORTH['w']) & (lon <= NORTH['e'])
+    return window_mask(lat, lon) | north
+
+
 def beacon_points(box):
     """The run's beacon points (box as tiles() takes it): the sea cells in
-    Saltburn's swell window on the chart's square, every one within COAST_KM
-    of land (the model's own: no sea at any step), and further out only the
-    whole-degree points, as d1 cells. Masks: (d4 over the box, d1 over its
-    whole-degree points)."""
+    the beacons' area on the chart's square, every one within COAST_KM of land
+    (the model's own: no sea at any step), and further out only the points on
+    every OPEN_DEG-th whole degree, as d1 cells. Masks: (d4 over the box, d1
+    over its whole-degree points)."""
     sea = np.isfinite(box['hs']).any(axis=0)
     lat, lon = box_latlon()
     x, y = FWD(lon, lat)
-    ok = sea & window_mask(lat, lon) & (x >= X0) & (x <= X1) & (y <= Y0) & (y >= Y1)
+    ok = sea & beacon_area(lat, lon) & (x >= X0) & (x <= X1) & (y <= Y0) & (y >= Y1)
     near = near_land(sea, COAST_KM)
-    return ok & near, coarse(ok & ~near)
+    la, lo = coarse(lat), coarse(lon)
+    return ok & near, coarse(ok & ~near) & (np.round(la) % OPEN_DEG == 0) & (np.round(lo) % OPEN_DEG == 0)
 
 
 def bits(mask):
