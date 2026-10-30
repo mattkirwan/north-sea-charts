@@ -5,6 +5,7 @@ projected the same way on both sides.
 
   python -m unittest discover -s tests
 """
+import base64
 import datetime as dt
 import gzip
 import json
@@ -210,6 +211,20 @@ class Written(unittest.TestCase):
         self.assertEqual(len(self.entry['tiles']), 28)
         self.assertEqual(self.entry['encoding'], 'cell-series-v1')
         self.assertEqual(sorted(os.listdir(os.path.join(self.out, self.entry['dir']))), sorted(f'{n}.bin.gz' for n in self.entry['tiles']))
+
+    def test_the_sea_mask(self):
+        # One bit a cell: sea at any step, land (no swell ever) not.
+        rows, cols = grid.box_shape()
+        bits = np.unpackbits(np.frombuffer(base64.b64decode(self.entry['sea']), np.uint8))[:rows * cols].reshape(rows, cols)
+        sea = np.isfinite(np.stack([self.boxes[s]['hs'] for s in STEPS])).any(axis=0)
+        np.testing.assert_array_equal(bits.astype(bool), sea)
+        self.assertTrue(bits[box_index(54.75, -1.0)])
+        self.assertFalse(bits[box_index(54.5, -1.0)])
+        # And the app reads the same cells from it, without a tile.
+        got = js(dict(manifest=self.manifest, base=self.out + '/'))
+        self.assertEqual(got['asked'], [])
+        want = [f'd4:{grid.LATTICE * grid.CELL_BOX["n"] - 1 - i}:{grid.LATTICE * grid.CELL_BOX["w"] + j}' for i, j in zip(*np.nonzero(sea))]
+        self.assertEqual(got['sea'], want)
 
     def test_a_cell_keeps_its_own_numbers(self):
         t = self.tile('52_-4')

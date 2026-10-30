@@ -87,6 +87,7 @@ const NSSGrid = (() => {
   function fromManifest(man, { base = '', get } = {}) {
     const P = projection(man.square.proj), C = man.cells || null, N = C ? C.lattice : 4;
     const tiles = new Map();
+    let seaList = null;
 
     function tileOf(id) {
       if (!C) return null;
@@ -126,6 +127,25 @@ const NSSGrid = (() => {
         return pts.flatMap(([lat, lon]) => P.toKm(lon, lat));
       },
       tileOf,
+      // Every cell with sea in the run, where it is on the Earth and on the
+      // square: from the manifest's sea mask (grid.py's sea_mask()), without a
+      // tile; null for a manifest from before the mask.
+      seaPoints() {
+        if (!C || !C.sea) return null;
+        if (!seaList) {
+          const b = C.box, cols = (b.e - b.w) * N, rows = (b.n - b.s) * N, bits = atob(C.sea);
+          seaList = [];
+          for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+              const k = r * cols + c;
+              if (!((bits.charCodeAt(k >> 3) >> (7 - (k & 7))) & 1)) continue;
+              const row = b.n * N - 1 - r, col = b.w * N + c, lat = row / N, lon = col / N, [x, y] = P.toKm(lon, lat);
+              seaList.push({ id: `d${N}:${row}:${col}`, row, col, lat, lon, x, y });
+            }
+          }
+        }
+        return seaList;
+      },
       // The run's tiles over a box of latitude and longitude (degrees).
       tilesIn(s, n, w, e) {
         if (!C) return [];

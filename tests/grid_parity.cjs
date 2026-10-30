@@ -2,7 +2,7 @@
 // ASK has the manifest, the folder standing in for where the tiles are
 // published (base), and what to work out: points to project and to name the
 // cells of, km to unproject, cells to outline and to read the forecasts of,
-// and places to resolve. Prints the answers as JSON (NaN as null).
+// and places to resolve; and every cell the sea mask has sea in. Prints the answers as JSON (NaN as null).
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const NSSGrid = require(path.join(__dirname, '..', 'grid.js'));
 
@@ -28,6 +28,7 @@ const NSSGrid = require(path.join(__dirname, '..', 'grid.js'));
     tiles: (ask.ids || []).map((id) => g.tileOf(id)),
     bounds: (ask.ids || []).map((id) => g.cellBoundsKm(id)),
     bad: (ask.bad || []).map((id) => { try { g.cellOf(id); return false; } catch { return true; } }),
+    sea: (g.seaPoints() || []).map((c) => c.id),
     series, resolved, asked
   }));
 })().catch((e) => { console.error(e); process.exit(1); });

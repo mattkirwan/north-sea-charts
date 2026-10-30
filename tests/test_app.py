@@ -1131,15 +1131,31 @@ class App(unittest.TestCase):
     def swell_at_needle(self):
         return self.page.locator('[data-val="hs"]').text_content()
 
-    def test_crosses_on_sea_points_once_zoomed_in(self):
+    def shown_cells(self):
+        return self.page.evaluate("crossPts.map((p) => p.c.id)")
+
+    def test_crosses_on_sea_points_at_every_zoom_filling_in_as_it_zooms(self):
         self.beacon_run()
         self.chart()
-        self.assertEqual(self.page.evaluate('crossPts.length'), 0)      # the opening view: none
+        # The opening view: some, every few grid points, from the sea mask (no tile fetched).
+        far, st = self.shown_cells(), self.page.evaluate('crossStride()')
+        self.assertGreater(len(far), 0)
+        self.assertGreater(st['row'], 1)
+        self.assertEqual(self.page.evaluate('crossTiles.size'), 0)
+        for cid in far:
+            _, row, col = map(int, cid[1:].split(':'))
+            self.assertEqual((row % st['row'], col % st['col']), (0, 0), cid)
+        # Zoomed in: every sea point in sight, the ones from further out among them.
         self.to_saltburn()
-        self.assertGreater(self.page.evaluate('crossPts.length'), 0)
-        ids = self.page.evaluate("[...crossTiles.values()].flatMap((t) => (t || []).map((c) => c.id))")
-        self.assertIn('d4:219:-4', ids)
-        self.assertNotIn('d4:218:-4', ids)                                # land: no cross
+        near = self.shown_cells()
+        self.assertEqual(self.page.evaluate('crossStride()'), dict(row=1, col=1))
+        self.assertIn('d4:219:-4', near)
+        self.assertNotIn('d4:218:-4', near)                               # land: no cross
+        # A little further out: every other column (they're closer across than down).
+        self.page.evaluate("view.k /= 4; clampView(); requestDraw()")
+        self.chart()
+        self.assertEqual(self.page.evaluate('crossStride()'), dict(row=1, col=2))
+        self.assertTrue(all(int(c.split(':')[2]) % 2 == 0 for c in self.shown_cells()))
 
     def test_a_tap_on_a_cross_drops_the_beacon_and_its_sheet(self):
         self.beacon_run()
@@ -1158,9 +1174,10 @@ class App(unittest.TestCase):
         self.assertTrue(self.page.locator('[data-beacon-mark]').is_visible())
         # Recentred above the needle, clear of the sheet, then tied to it.
         self.page.wait_for_function("document.documentElement.hasAttribute('data-tied')")
-        m, panel = self.box('[data-beacon-mark]'), self.box('#panel')
+        m = self.box('[data-beacon-mark]')
         self.assertAlmostEqual(m['x'] + m['width'] / 2, 195, delta=1.5)
-        self.assertAlmostEqual(panel['y'] - (m['y'] + m['height'] / 2), 160, delta=1.5)
+        self.assertAlmostEqual(m['y'] + m['height'] / 2, 844 / 4, delta=1.5)
+        self.assertEqual(self.page.evaluate('view.k'), 3)                   # zoomed in already: no further
         # The numbers are the tile's at the needle, and move with it.
         slider = self.page.locator('#panel .nss-timeline')
         i = int(slider.get_attribute('aria-valuenow'))
@@ -1180,6 +1197,22 @@ class App(unittest.TestCase):
         mark = self.box('[data-beacon-mark]')
         self.page.keyboard.press('End')
         self.assertEqual(self.box('[data-beacon-mark]'), mark)
+
+    def test_a_beacon_dropped_from_far_out_zooms_in_to_it(self):
+        self.beacon_run()
+        self.chart()
+        k0 = self.page.evaluate('view.k')
+        x, y = self.page.evaluate("(() => { const p = crossPts.find((p) => p.px > 60 && p.px < W - 60 && p.py > 60 && p.py < Hs - panelH() - 60); return [p.px, p.py]; })()")
+        self.page.mouse.click(x, y)
+        self.page.wait_for_function("document.documentElement.hasAttribute('data-tied')")
+        k = self.page.evaluate('view.k')
+        self.assertGreater(k, k0 * 3)
+        # Its neighbours' crosses 24 px apart, or more.
+        self.assertGreaterEqual(self.page.evaluate("BEACON_GAP / cellKm(beacon.lat).col"), k - 1e-9)
+        self.assertEqual(self.page.evaluate('crossStride()'), dict(row=1, col=1))
+        m = self.box('[data-beacon-mark]')
+        self.assertAlmostEqual(m['x'] + m['width'] / 2, 195, delta=1.5)
+        self.assertAlmostEqual(m['y'] + m['height'] / 2, 844 / 4, delta=1.5)
 
     def test_close_brings_the_panel_back_as_it_was(self):
         self.beacon_run()
