@@ -5,3 +5,4 @@
 - Open the PR when the work is pushed; don't ask first.
 - New-feature announcements (`hints.js`, `type: 'new'`: a light, a tag and a card) only for a key feature, and only when Matt asks for one. The layer is kept with none in it.
 - Words in the app go in all six languages in i18n.js (en, nb, da, de, nl, fr), never English alone, and must fit on a phone in the longest of them. tests/test_i18n.py checks every language has every key.
+- Tests: the full suite runs on every pull request (`test`), so don't run it all locally. Run only the tests you touched, wrote or are deliberately checking, as a quick sanity check, then push and let CI do the rest.
