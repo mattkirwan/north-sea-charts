@@ -323,24 +323,30 @@ def cell_dir(run, keep):
 
 
 def cell_tiles(out, run, keep, boxes):
-    """Write the run's cell tiles (grid.py) for the steps published. Returns
-    the manifest's cells entry, or None without them: the frames publish anyway."""
+    """Write the run's cell tiles (grid.py) for the steps published: the tiles
+    holding beacon points, d4 along the coasts and d1 out at sea. Returns the
+    manifest's cells entry, or None without them: the frames publish anyway."""
     try:
         missing = [s for s in keep if boxes.get(s) is None]
         if missing:
             raise RuntimeError(f'no cells for +{missing[0]} h' + (f' and {len(missing) - 1} more' if len(missing) > 1 else ''))
         d = cell_dir(run, keep)
-        os.makedirs(os.path.join(out, d), exist_ok=True)
+        os.makedirs(os.path.join(out, d, 'd1'), exist_ok=True)
         box = {k: np.stack([boxes[s][k] for s in keep]) for k, _ in grid.VARS}
+        fine, open_sea = grid.beacon_points(box)
+        names = {grid.LATTICE: grid.tiles_with(fine), grid.COARSE: grid.tiles_with(open_sea, grid.COARSE)}
         size = 0
-        for name, t in grid.tiles(box).items():
-            path = os.path.join(out, d, f'{name}.bin.gz')
-            with open(path, 'wb') as f:
-                f.write(gzip.compress(grid.encode_tile(t), 9))
-            size += os.path.getsize(path)
-        names = grid.tile_names()
-        print(f'cells: {len(names)} tiles in {d}, {size / 1e6:.1f} MB')
-        return grid.manifest_entry(d, names, grid.sea_mask(box))
+        for n, sub in ((grid.LATTICE, ''), (grid.COARSE, 'd1')):
+            for name, t in grid.tiles(box, n).items():
+                if name not in names[n]:
+                    continue
+                path = os.path.join(out, d, sub, f'{name}.bin.gz')
+                with open(path, 'wb') as f:
+                    f.write(gzip.compress(grid.encode_tile(t), 9))
+                size += os.path.getsize(path)
+        print(f'cells: {int(fine.sum())} beacon points by the coast in {len(names[grid.LATTICE])} tiles, '
+              f'{int(open_sea.sum())} out at sea in {len(names[grid.COARSE])}, in {d}, {size / 1e6:.1f} MB')
+        return grid.manifest_entry(d, names[grid.LATTICE], grid.bits(fine), names[grid.COARSE], grid.bits(open_sea))
     except Exception as e:
         print(f'No cell tiles this run: {type(e).__name__}: {e}')
         return None

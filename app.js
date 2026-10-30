@@ -616,7 +616,7 @@ let gesture = null, lastTap = null, zoomAnim = 0, onTap = null;
 cv.addEventListener('pointerdown', (e) => {
   cv.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  cancelAnimationFrame(zoomAnim); cancelAnimationFrame(glideAnim); beaconsGlide = false;
+  cancelAnimationFrame(zoomAnim); cancelAnimationFrame(glideAnim);
   gesture = { t: performance.now(), x: e.clientX, y: e.clientY, moved: 0, multi: ptrs.size > 1 };
 });
 cv.addEventListener('pointermove', (e) => {
@@ -651,7 +651,7 @@ const endPtr = (e) => {
 };
 cv.addEventListener('pointerup', endPtr);
 cv.addEventListener('pointercancel', endPtr);
-cv.addEventListener('wheel', (e) => { e.preventDefault(); cancelAnimationFrame(glideAnim); beaconsGlide = false; firstInteraction('zoom'); emit('map.zoom'); zoomAbout(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.002)); clampView(); requestDraw(); saveView(); }, { passive: false });
+cv.addEventListener('wheel', (e) => { e.preventDefault(); cancelAnimationFrame(glideAnim); firstInteraction('zoom'); emit('map.zoom'); zoomAbout(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.002)); clampView(); requestDraw(); saveView(); }, { passive: false });
 function animateZoom(sx, sy, f) {
   const start = performance.now(), dur = reduced.matches ? 0 : 260;
   let done = 1;
@@ -709,7 +709,6 @@ function draw() {
   drawQueued = false;
   if (!W) return;
   const { x, y, k } = view, pb = panelBox();
-  checkBeaconsReach();
   const world = () => ctx.setTransform(dpr * k, 0, 0, -dpr * k, dpr * (W / 2 - x * k), dpr * (Hs / 2 + y * k));
   const screen = () => ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const sx = (wx) => W / 2 + (wx - x) * k, sy = (wy) => Hs / 2 - (wy - y) * k;
@@ -920,16 +919,13 @@ document.querySelectorAll('.nss-band[data-band]').forEach((b) => b.addEventListe
   if (band === b.dataset.band && !beaconsOn) return;
   firstInteraction('band'); setBand(b.dataset.band);
 }));
-// Beacons on: the layers off, the grid points on, zoomed in to where they
-// can be used; off: the band from before, the map left where it is.
-// It's there to switch from beacons' minimum zoom in (the button is greyed
-// further out), so the map stays put; only the new-feature card's Show me
-// glides in first.
-function setBeacons(on, zoom) {
+// Beacons on: the layers off, the grid points on, at any zoom (thinned
+// further out), the map left where it is; off: the band from before.
+function setBeacons(on) {
   beaconsOn = on; store.set('nss.beacons', on);
   renderPanel(); requestDraw(); warm();
   if (!sideOn()) setTimeout(easeClamp, reduced.matches ? 0 : 220);
-  if (on) { if (zoom) zoomToBeacons(); emit('beacons.on'); }
+  if (on) emit('beacons.on');
   hintWait();
 }
 document.querySelectorAll('[data-beacons]').forEach((b) => b.addEventListener('click', () => { firstInteraction('band'); setBeacons(!beaconsOn); }));
@@ -1440,25 +1436,26 @@ const ROWS = { h: 200, plotH: 38, plot: { pressure: 28, wind: 95, swell: 162 }, 
 
 // The km between neighbouring grid points down (a row) and across (a
 // column) at a latitude.
-const cellKm = (lat) => ({ row: 111.2 / grid.lattice, col: 111.2 / grid.lattice * Math.cos(lat * Math.PI / 180) });
+const cellKm = (lat, n = grid.lattice) => ({ row: 111.2 / n, col: 111.2 / n * Math.cos(lat * Math.PI / 180) });
 // Which grid points get a cross, so none sit closer than CROSS_GAP px: every
 // one when zoomed in that far, else every 2nd, 4th, 8th... row and column,
 // counted on NOAA's own lattice, so zooming in only ever adds crosses
-// between the ones already there.
-function crossStride() {
-  const km = cellKm(grid.kmToLonLat(view.x, view.y)[1]), st = (d) => 2 ** Math.max(0, Math.ceil(Math.log2(CROSS_GAP / (d * view.k))));
+// between the ones already there. Each lattice its own (the open sea's
+// whole-degree points are already four cells apart).
+function crossStride(n = grid.lattice) {
+  const km = cellKm(grid.kmToLonLat(view.x, view.y)[1], n), st = (d) => 2 ** Math.max(0, Math.ceil(Math.log2(CROSS_GAP / (d * view.k))));
   return { row: st(km.row), col: st(km.col) };
 }
-// The crosses in sight: from the manifest's sea mask, at any zoom; from a
-// manifest without one, from the tiles under the screen (each fetched once),
-// zoomed in to where every point shows. With a beacon's wind on, each point
+// The crosses in sight: the manifest's beacon points (every cell by the
+// coast, whole degrees out at sea), or an older manifest's sea mask; from a
+// manifest with neither, from the tiles under the screen (each fetched once). With a beacon's wind on, each point
 // carries the wind's arrow there instead (a calm point keeps its cross),
 // still the place to tap.
 function drawCrosses(sx, sy, pb, L, fi) {
   crossPts = [];
   // With Beacons on only, and only from beacons' minimum zoom in.
-  if (!grid || !grid.seaPoints || !beaconsOn || !beaconsReach()) return;
-  const st = crossStride();
+  if (!grid || !grid.seaPoints || !beaconsOn) return;
+  const st = { [grid.lattice]: crossStride(), 1: crossStride(1) };
   const path = new Path2D(), arrows = new Path2D(), d = L.points && fi >= 0 && frames[fi];
   const P = man.grids.p, sq = man.square, ws = man.scale.wind || 2;
   const add = (c) => {
@@ -1477,7 +1474,10 @@ function drawCrosses(sx, sy, pb, L, fi) {
   };
   const pts = grid.seaPoints();
   if (pts) {
-    for (const c of pts) if (!(c.row % st.row) && !(c.col % st.col)) add(c);
+    for (const c of pts) {
+      const s = st[c.n] || st[grid.lattice];
+      if (!(c.row % s.row) && !(c.col % s.col)) add(c);
+    }
   } else {
     let s = 90, n = -90, w = 180, e = -180;
     for (const fx of [-0.5, 0, 0.5]) for (const fy of [-0.5, 0, 0.5]) {
@@ -1502,23 +1502,6 @@ function drawCrosses(sx, sy, pb, L, fi) {
   ctx.stroke(path);
   ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = C.arrow;
   ctx.stroke(arrows);
-}
-// Beacons' minimum zoom at a latitude: BEACONS_OUT times further out than
-// where every grid point shows 16 px apart east to west, the points thinned
-// there (crossStride) and filling in as the map zooms in.
-const BEACONS_OUT = 2.5;
-const beaconsMinK = (lat) => CROSS_GAP / cellKm(lat).col / BEACONS_OUT;
-const beaconsReach = () => view.k >= beaconsMinK(grid.kmToLonLat(view.x, view.y)[1]) * 0.999;
-// Zoomed out past it with no beacon open (and not on the way in): Beacons
-// goes off, and the band comes back.
-let beaconsGlide = false, beaconsOffT = 0;
-const beaconsBtns = [...document.querySelectorAll('[data-beacons]')];
-let beaconsUsable = null;
-function checkBeaconsReach() {
-  const usable = !!grid && beaconsReach();
-  if (usable !== beaconsUsable) { beaconsUsable = usable; for (const b of beaconsBtns) b.disabled = !usable; }
-  if (!beaconsOn || beacon || beaconsGlide || !grid || beaconsOffT || beaconsReach()) return;
-  beaconsOffT = setTimeout(() => { beaconsOffT = 0; if (beaconsOn && !beacon && !beaconsGlide && !beaconsReach()) setBeacons(false); });
 }
 // The cross for the first-use tip ("Tap a cross") to point at, pulsing: the
 // one nearest the middle of the visible chart, kept while the tip shows.
@@ -1640,29 +1623,6 @@ function recentre() {
     view = { x: b.x - (px - W / 2) / k, y: b.y + (py - Hs / 2) / k, k };
     requestDraw();
     if (q < 1) glideAnim = requestAnimationFrame(step); else done();
-  };
-  glideAnim = requestAnimationFrame(step);
-}
-
-// Show me, zoomed out: one glide in, about the middle of the visible chart,
-// to beacons' minimum zoom (a jump with Reduce Motion); already there,
-// nothing moves.
-function zoomToBeacons() {
-  if (!grid) return;
-  const v = vis(), cx = v.x + v.w / 2, cy = (sideOn() ? Hs : v.h) / 2;
-  const lat = grid.kmToLonLat(view.x + (cx - W / 2) / view.k, view.y - (cy - Hs / 2) / view.k)[1];
-  const k1 = Math.min(kMax(), beaconsMinK(lat) * 1.01), k0 = view.k;
-  if (k0 >= k1) return;
-  cancelAnimationFrame(glideAnim);
-  if (reduced.matches) { zoomAbout(cx, cy, k1 / k0); clampView(); requestDraw(); saveView(); return; }
-  const start = performance.now();
-  let done = 1;
-  beaconsGlide = true;
-  const step = (t) => {
-    const q = Math.min(1, (t - start) / 600), f = Math.pow(k1 / k0, glideEase(q));
-    zoomAbout(cx, cy, f / done); done = f;
-    clampView(); requestDraw();
-    if (q < 1) glideAnim = requestAnimationFrame(step); else { beaconsGlide = false; saveView(); hintWait(); }
   };
   glideAnim = requestAnimationFrame(step);
 }
@@ -1891,11 +1851,18 @@ document.addEventListener('keydown', (e) => {
 const atQ = (Q.get('at') || '').split(',').map(Number), layersQ = Q.get('layers');
 async function openAt() {
   if (atQ.length !== 2 || atQ.some(Number.isNaN) || !grid) return;
-  const r = await grid.resolve(atQ[0], atQ[1], 'waves', 30).catch(() => null);
-  if (!r || beacon) return;
-  const c = grid.cellOf(r.id), [x, y] = grid.lonLatToKm(c.lon, c.lat);
+  // A beacon point of the link's own, else the nearest sea cell.
+  const pts = (grid.seaPoints && grid.seaPoints()) || [];
+  let c = pts.find((p) => Math.abs(p.lat - atQ[0]) < 0.01 && Math.abs(p.lon - atQ[1]) < 0.01);
+  if (!c) {
+    const r = await grid.resolve(atQ[0], atQ[1], 'waves', 30).catch(() => null);
+    if (!r || beacon) return;
+    const at = grid.cellOf(r.id), [x, y] = grid.lonLatToKm(at.lon, at.lat);
+    c = { id: r.id, ...at, x, y };
+  }
+  if (beacon) return;
   if (!beaconsOn) { beaconsOn = true; store.set('nss.beacons', true); renderPanel(); }
-  dropBeacon({ id: r.id, ...c, x, y }, layersQ == null ? null : Object.fromEntries(LAYERS.map((l) => [l, layersQ.includes(l[0])])));
+  dropBeacon(c, layersQ == null ? null : Object.fromEntries(LAYERS.map((l) => [l, layersQ.includes(l[0])])));
 }
 
 // ---- Hints: what the app teaches (hints.js), one controller for all of it --------------------
@@ -1952,7 +1919,7 @@ const hintBusy = () => !!(ptrs.size || drag || tl.moving || sheetOn || guideOn()
 const floatTag = $('[data-tip-float]'), newTag = $('[data-new-tag]'), card = $('[data-hint-card]');
 const gotIt = card.querySelector('[data-got-it]'), showMe = card.querySelector('[data-show-me]');
 // What Show me does.
-const HINT_ACTIONS = { 'open-settings:panel': () => openSheet('settings', '[data-set="panel"] [aria-pressed="true"]'), 'beacons-on': () => setBeacons(true, true) };
+const HINT_ACTIONS = { 'open-settings:panel': () => openSheet('settings', '[data-set="panel"] [aria-pressed="true"]'), 'beacons-on': () => setBeacons(true) };
 // The control a hint is about, in the panel showing.
 const hintEl = (h) => [...document.querySelectorAll(`[data-hint-target="${h.target}"]`)].find((el) => !el.closest('[data-away], [hidden]'));
 // Beside what it's about, notched to it and kept on the screen: over it, off

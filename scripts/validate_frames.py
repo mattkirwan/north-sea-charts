@@ -100,13 +100,16 @@ def published(base, manifest, step):
 
 def published_cells(base, manifest, tiles, step):
     """cell_at() for a step over the run's published cell tiles, fetched once
-    into tiles; None if the run has none."""
+    into tiles (None for a cell whose tile wasn't written: only those with
+    beacon points are); None if the run has none."""
     if not manifest.get('cells'):
         return None
     n = len(manifest['steps'])
 
     def cell_at(cid):
         name = grid.tile_of(cid)
+        if name not in manifest['cells']['tiles']:
+            return None
         if name not in tiles:
             tiles[name] = grid.decode_tile(gzip.decompress(check_fresh.get(check_fresh.cell_url(base, manifest, name))), n)
         return tile_reader(tiles, manifest['steps'].index(step))(cid)
@@ -242,7 +245,10 @@ def cell_problems(cell_at, src):
         cid = grid.cell_id(lat, lon)
         if grid.tile_of(cid) is None:
             continue
-        ours, theirs = cell_at(cid), src.cell(cid)
+        ours = cell_at(cid)
+        if ours is None:
+            continue
+        theirs = src.cell(cid)
         for key, lim in CELL_LIMITS.items():
             a, b = float(ours[key]), float(theirs[key])
             if np.isnan(a) and np.isnan(b):

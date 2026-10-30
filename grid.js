@@ -4,9 +4,10 @@
    own 0.25° grid points (GFS and GFS-Wave share them), named d4:<row>:<col>
    with row = lat * 4 and col = lon * 4, for keeps (54.75N 1.00W, the wave
    model's cell off Saltburn, is d4:219:-4). The chart's square is only the
-   picture the frames are drawn on. Over the North Sea each run also has its
-   cells' whole forecasts, in tiles (the manifest's cells), which series()
-   fetches as wanted. A place people care about is better held as latitude
+   picture the frames are drawn on. Over Saltburn's swell window each run
+   also has its beacon points' whole forecasts, in tiles (the manifest's
+   cells), which series() fetches as wanted: d4 cells by the coast, and out
+   at sea NOAA's whole-degree points, d1:<lat>:<lon>, in tiles of their own. A place people care about is better held as latitude
    and longitude, and resolve()d to a cell when used.
 
    Everything comes from the manifest, nothing is fixed here, so the frames
@@ -86,30 +87,38 @@ const NSSGrid = (() => {
 
   function fromManifest(man, { base = '', get } = {}) {
     const P = projection(man.square.proj), C = man.cells || null, N = C ? C.lattice : 4;
+    // Each lattice with tiles: d4, and (since the swell window's cells) the
+    // open sea's d1, each with its own tile size, file and tiles.
+    const L = {};
+    if (C) {
+      L[C.lattice] = C;
+      if (C.coarse) L[C.coarse.lattice] = C.coarse;
+    }
     const tiles = new Map();
     let seaList = null;
 
     function tileOf(id) {
-      if (!C) return null;
-      const { n, row, col } = parse(id);
-      if (n !== C.lattice) return null;
-      const lat0 = Math.floor(row / C.tile) * C.tile / n, lon0 = Math.floor(col / C.tile) * C.tile / n;
+      const { n, row, col } = parse(id), c = L[n];
+      if (!c) return null;
+      const lat0 = Math.floor(row / c.tile) * c.tile / n, lon0 = Math.floor(col / c.tile) * c.tile / n;
       const b = C.box, name = `${lat0}_${lon0}`;
-      return lat0 >= b.s && lat0 < b.n && lon0 >= b.w && lon0 < b.e && C.tiles.includes(name) ? name : null;
+      return lat0 >= b.s && lat0 < b.n && lon0 >= b.w && lon0 < b.e && c.tiles.includes(name) ? name : null;
     }
-    // A run's tile, fetched once (the last few kept).
-    function tile(name) {
-      if (!tiles.has(name)) {
-        const url = `${base}${C.file.replace('{dir}', C.dir).replace('{tile}', name)}?run=${man.run}`;
-        tiles.set(name, get(url).then((b) => decodeTile(b, C.vars, C.tile * C.tile, man.steps.length)));
-        tiles.get(name).catch(() => tiles.delete(name));
+    // A run's tile of lattice n, fetched once (the last few kept).
+    function tile(n, name) {
+      const key = `${n}/${name}`, c = L[n];
+      if (!tiles.has(key)) {
+        const url = `${base}${c.file.replace('{dir}', C.dir).replace('{tile}', name)}?run=${man.run}`;
+        tiles.set(key, get(url).then((b) => decodeTile(b, C.vars, c.tile * c.tile, man.steps.length)));
+        tiles.get(key).catch(() => tiles.delete(key));
         if (tiles.size > 8) tiles.delete(tiles.keys().next().value);
       }
-      return tiles.get(name);
+      return tiles.get(key);
     }
     function where(name, id) {
       const { n, row, col } = parse(id), [lat0, lon0] = name.split('_').map(Number);
-      return (lat0 * n + C.tile - 1 - row) * C.tile + (col - lon0 * n);
+      const side = L[n].tile;
+      return (lat0 * n + side - 1 - row) * side + (col - lon0 * n);
     }
     const isSea = (t, k) => { for (let s = 0; s < man.steps.length; s++) if (t.hs[k * man.steps.length + s] !== 255) return true; return false; };
 
@@ -127,22 +136,27 @@ const NSSGrid = (() => {
         return pts.flatMap(([lat, lon]) => P.toKm(lon, lat));
       },
       tileOf,
-      // Every cell with sea in the run, where it is on the Earth and on the
-      // square: from the manifest's sea mask (grid.py's sea_mask()), without a
-      // tile; null for a manifest from before the mask.
+      // The beacon points, where each is on the Earth and on the square: the
+      // manifest's (grid.py's beacon_points(), d4 by the coast and d1 out at
+      // sea), or every sea cell from a manifest of before (its sea mask);
+      // without a tile. Null for a manifest with neither.
       seaPoints() {
-        if (!C || !C.sea) return null;
+        if (!C || !(C.points || C.sea)) return null;
         if (!seaList) {
-          const b = C.box, cols = (b.e - b.w) * N, rows = (b.n - b.s) * N, bits = atob(C.sea);
           seaList = [];
-          for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-              const k = r * cols + c;
-              if (!((bits.charCodeAt(k >> 3) >> (7 - (k & 7))) & 1)) continue;
-              const row = b.n * N - 1 - r, col = b.w * N + c, lat = row / N, lon = col / N, [x, y] = P.toKm(lon, lat);
-              seaList.push({ id: `d${N}:${row}:${col}`, row, col, lat, lon, x, y });
+          const add = (b64, n) => {
+            const b = C.box, cols = (b.e - b.w) * n, rows = (b.n - b.s) * n, bits = atob(b64);
+            for (let r = 0; r < rows; r++) {
+              for (let c = 0; c < cols; c++) {
+                const k = r * cols + c;
+                if (!((bits.charCodeAt(k >> 3) >> (7 - (k & 7))) & 1)) continue;
+                const row = b.n * n - 1 - r, col = b.w * n + c, lat = row / n, lon = col / n, [x, y] = P.toKm(lon, lat);
+                seaList.push({ id: `d${n}:${row}:${col}`, n, row, col, lat, lon, x, y });
+              }
             }
-          }
+          };
+          add(C.points || C.sea, N);
+          if (C.coarse && C.coarse.points) add(C.coarse.points, C.coarse.lattice);
         }
         return seaList;
       },
@@ -161,7 +175,7 @@ const NSSGrid = (() => {
       // A tile's cells with sea in them over the run (the grid points a
       // beacon can go on), each with its name and where it is.
       async seaCells(name) {
-        const t = await tile(name), [lat0, lon0] = name.split('_').map(Number), n = C.lattice, out = [];
+        const t = await tile(N, name), [lat0, lon0] = name.split('_').map(Number), n = N, out = [];
         for (let row = lat0 * n; row < lat0 * n + C.tile; row++) {
           for (let col = lon0 * n; col < lon0 * n + C.tile; col++) {
             const id = `d${n}:${row}:${col}`;
@@ -177,7 +191,7 @@ const NSSGrid = (() => {
       async series(id) {
         const name = tileOf(id);
         if (!name) return null;
-        const t = await tile(name), k = where(name, id), S = man.steps.length, sc = C.scale;
+        const t = await tile(parse(id).n, name), k = where(name, id), S = man.steps.length, sc = C.scale;
         const pick = (a, f) => Float32Array.from({ length: S }, (_, s) => f(a[k * S + s]));
         const sea = (q, d) => (q === 255 ? NaN : q / d);
         return {
@@ -201,7 +215,7 @@ const NSSGrid = (() => {
           if (!name) continue;
           const c = g.cellOf(id), d = away(lat, lon, c.lat, c.lon);
           if (d.km > within || (best && d.km >= best.km)) continue;
-          if (isSea(await tile(name), where(name, id))) best = { id, ...d };
+          if (isSea(await tile(N, name), where(name, id))) best = { id, ...d };
         }
         return best;
       }

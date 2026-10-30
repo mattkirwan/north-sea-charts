@@ -18,6 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, '..')
 sys.path.insert(0, os.path.join(ROOT, 'scripts'))
 import chart_frames as cf  # noqa: E402
+import grid  # noqa: E402
 import validate_frames as vf  # noqa: E402
 from test_frames import fields  # noqa: E402
 
@@ -100,11 +101,16 @@ class CellProblems(unittest.TestCase):
     def test_rounded_as_stored_passes(self):
         self.assertEqual(vf.cell_problems(self.ours(), self.Src()), [])
 
-    def test_only_points_over_the_north_sea(self):
+    def test_only_points_inside_the_cells_box(self):
         seen = []
         vf.cell_problems(lambda cid: seen.append(cid) or self.ours()(cid), self.Src())
         self.assertIn('d4:219:-4', seen)
-        self.assertEqual(len(seen), sum(1 for _, la, lo in vf.POINTS if 48 <= la < 64 and -12 <= lo < 16))
+        b = grid.CELL_BOX
+        self.assertEqual(len(seen), sum(1 for _, la, lo in vf.POINTS if b['s'] <= la < b['n'] and b['w'] <= lo < b['e']))
+
+    def test_cells_without_a_written_tile_are_passed_over(self):
+        # Only the tiles with beacon points are written: a cell in none isn't compared.
+        self.assertEqual(vf.cell_problems(lambda cid: None, self.Src()), [])
 
     def test_a_resampled_value_is_a_fault(self):
         found = vf.cell_problems(self.ours(hs=1.4), self.Src())
