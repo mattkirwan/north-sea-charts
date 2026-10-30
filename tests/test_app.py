@@ -1181,7 +1181,10 @@ class App(unittest.TestCase):
     # north of it, d4:219:-4, whose wave height is 1.0 + k/10 m at step k.
     def beacon_run(self, query='', beacons=True):
         if beacons:
-            self.context.add_init_script("if (localStorage.getItem('nss.beacons') == null) localStorage.setItem('nss.beacons', 'true')")
+            # On, as Beacons is kept: with the map left zoomed in off Saltburn (zoomed out, it'd go off).
+            view = json.dumps(json.dumps(dict(x=-62.5 + 30, y=-3770.9, k=3)))
+            self.context.add_init_script("if (localStorage.getItem('nss.beacons') == null) { localStorage.setItem('nss.beacons', 'true');"
+                                         f" localStorage.setItem('nss.view', {view}); }}")
         self.page.goto(f'{self.origin}/index.html?{query}frames={self.origin}/_frames/cells/')
         self.page.wait_for_function("document.querySelector('#rStatus').hidden")
 
@@ -1213,11 +1216,19 @@ class App(unittest.TestCase):
         self.assertIn('d4:219:-4', near)
         self.assertNotIn('d4:218:-4', near)                                 # land: no cross
         self.assertEqual(self.page.evaluate('crossTiles.size'), 0)          # from the sea mask, no tile fetched
-        # Zoomed out past the minimum: none, and the button stays on.
+        # Further out: thinned, every other column, still 16 px apart.
         self.page.evaluate("view.k /= 4; clampView(); requestDraw()")
         self.chart()
+        self.assertEqual(self.page.evaluate('crossStride()'), dict(row=1, col=2))
+        self.assertTrue(self.shown_cells())
+        self.assertTrue(all(int(c.split(':')[2]) % 2 == 0 for c in self.shown_cells()))
+        # Out past beacons' minimum, with no beacon open: Beacons goes off and the band comes back.
+        self.page.evaluate("view.k /= 4; clampView(); requestDraw()")
+        self.page.wait_for_function("document.querySelector('#panel [data-beacons]').getAttribute('aria-pressed') === 'false'")
+        self.chart()
         self.assertEqual(self.shown_cells(), [])
-        self.assertEqual(self.page.locator('#panel [data-beacons]').get_attribute('aria-pressed'), 'true')
+        self.assertEqual(self.page.locator('#panel .nss-band[data-band="pressure"]').get_attribute('aria-pressed'), 'true')
+        self.assertEqual(self.page.evaluate("localStorage.getItem('nss.beacons')"), 'false')
 
     def to_saltburn_view(self):
         self.page.evaluate("""() => { const [x, y] = grid.lonLatToKm(-0.95, 54.8); view.k = 3; view.x = x + 30; view.y = y; clampView(); requestDraw(); }""")
@@ -1233,13 +1244,14 @@ class App(unittest.TestCase):
         self.assertEqual(pressed(), ['false', 'false', 'false', 'true'])
         self.assertEqual(self.page.evaluate("(() => { const L = layersOn(); return [L.pressure, L.wind, L.swell, L.field]; })()"), [False] * 4)
         self.assertEqual(self.page.locator('#keyslot').get_attribute('data-off'), '')
-        # Zoomed out: one glide in to where the points sit 16 px apart east to west.
+        # Zoomed out: one glide in to beacons' minimum zoom, the points thinned there; Beacons stays on.
         self.page.wait_for_timeout(900)
         k = self.page.evaluate('view.k')
         self.assertGreater(k, k0)
-        self.assertEqual(self.page.evaluate('crossStride()'), dict(row=1, col=1))
+        self.assertTrue(self.page.evaluate('beaconsReach()'))
+        self.assertLess(k, 1.2 * self.page.evaluate("beaconsMinK(grid.kmToLonLat(view.x, view.y)[1])"))
         self.assertGreater(self.page.evaluate('crossPts.length'), 0)
-        self.assertTrue(self.page.evaluate("crossPts.length > 0"))
+        self.assertEqual(pressed()[3], 'true')
         # Off and on again, there already: nothing moves.
         self.page.click('#panel [data-beacons]')
         self.assertEqual(pressed(), ['false', 'true', 'false', 'false'])  # the band from before
@@ -1254,6 +1266,16 @@ class App(unittest.TestCase):
         self.page.click('#panel .nss-band[data-band="swell"]')
         self.assertEqual(pressed(), ['false', 'false', 'true', 'false'])
         self.assertEqual(self.page.evaluate("localStorage.getItem('nss.beacons')"), 'false')
+
+    def test_an_open_beacon_stays_open_zoomed_right_out(self):
+        self.beacon_run()
+        self.drop()
+        self.page.evaluate("view.k = kMin(); clampView(); requestDraw()")
+        self.chart()
+        self.page.wait_for_timeout(300)
+        self.assertEqual(self.page.locator('#panel').get_attribute('data-beacon'), '')
+        self.assertTrue(self.page.locator('[data-beacon-mark]').is_visible())
+        self.assertEqual(self.page.evaluate("localStorage.getItem('nss.beacons')"), 'true')
 
     def test_beacons_in_the_side_panel(self):
         self.kept(**{'nss.docked': True})
