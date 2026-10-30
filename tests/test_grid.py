@@ -255,8 +255,11 @@ class Written(unittest.TestCase):
         self.assertFalse(area[box_index(57.0, -8.0)])                # west of Scotland: no
         self.assertTrue(area[box_index(55.0, 2.0)])                  # the open North Sea: yes
         self.assertTrue(area[box_index(76.0, 14.0)])                 # off Svalbard: yes, though out of the window
-        self.assertTrue(area[box_index(71.25, 25.75)])               # off North Cape: yes
-        self.assertFalse(grid.window_mask(lat, lon)[box_index(71.25, 25.75)])
+        self.assertTrue(area[box_index(70.0, 19.0)])                 # off Tromsø: yes
+        self.assertFalse(grid.window_mask(lat, lon)[box_index(70.0, 19.0)])
+        self.assertFalse(area[box_index(71.25, 25.75)])              # round the top past 70.66N 21.93E: no
+        self.assertFalse(area[box_index(64.0, 21.0)])                # the Gulf of Bothnia: no
+        self.assertTrue(area[box_index(67.0, 13.0)])                 # off Bodø: yes
         self.assertFalse(area[box_index(58.0, 20.0)])                # the Baltic: no
         self.assertFalse(area[box_index(77.5, 22.0)])                # Svalbard's east coast: no
         self.assertFalse(area[box_index(73.0, 28.0)])                # the Barents Sea: no
@@ -264,7 +267,6 @@ class Written(unittest.TestCase):
         self.assertFalse(area[box_index(57.0, 11.5)])                # the Kattegat: no
         self.assertTrue(area[box_index(56.0, 8.0)])                  # off Jutland's North Sea coast: yes
         self.assertTrue(area[box_index(58.0, 5.5)])                  # off Norway's south-west coast: yes
-        self.assertTrue(area[box_index(74.5, 19.0)])                 # Bjørnøya's, west of the cut: yes
         # Out at sea, every other whole degree only, none by the coast; in the
         # North Sea, d4 points every half degree instead.
         c_lat, c_lon = grid.coarse(lat), grid.coarse(lon)
@@ -281,7 +283,12 @@ class Written(unittest.TestCase):
         one['hs'][0][box_index(66.0, 3.0)] = np.nan
         f1, o1 = grid.beacon_points(one)
         self.assertFalse((f1 & ~dense(lat, lon)).any())
-        self.assertTrue(o1[grid.coarse(np.arange(lat.size).reshape(lat.shape)) == np.ravel_multi_index(box_index(66.0, 4.0), lat.shape)].all())
+        at = lambda la, lo: o1[grid.coarse(np.arange(lat.size).reshape(lat.shape)) == np.ravel_multi_index(box_index(la, lo), lat.shape)]
+        self.assertTrue(at(66.0, 4.0).all())
+        # Out in the Atlantic, two rows of them south of the window.
+        self.assertFalse(grid.beacon_area(lat, lon)[box_index(52.0, -30.0)])
+        self.assertTrue(at(52.0, -30.0).all())
+        self.assertFalse(at(50.0, -30.0).any())
         self.assertFalse((grid.coarse(fine) & open_sea).any())
         # And the app reads the same points, without a tile.
         got = js(dict(manifest=self.manifest, base=self.out + '/'))
