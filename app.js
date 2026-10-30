@@ -587,7 +587,7 @@ let gesture = null, lastTap = null, zoomAnim = 0, onTap = null;
 cv.addEventListener('pointerdown', (e) => {
   cv.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  cancelAnimationFrame(zoomAnim); cancelAnimationFrame(glideAnim);
+  cancelAnimationFrame(zoomAnim); cancelAnimationFrame(glideAnim); beaconsGlide = false;
   gesture = { t: performance.now(), x: e.clientX, y: e.clientY, moved: 0, multi: ptrs.size > 1 };
 });
 cv.addEventListener('pointermove', (e) => {
@@ -622,7 +622,7 @@ const endPtr = (e) => {
 };
 cv.addEventListener('pointerup', endPtr);
 cv.addEventListener('pointercancel', endPtr);
-cv.addEventListener('wheel', (e) => { e.preventDefault(); cancelAnimationFrame(glideAnim); firstInteraction('zoom'); emit('map.zoom'); zoomAbout(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.002)); clampView(); requestDraw(); saveView(); }, { passive: false });
+cv.addEventListener('wheel', (e) => { e.preventDefault(); cancelAnimationFrame(glideAnim); beaconsGlide = false; firstInteraction('zoom'); emit('map.zoom'); zoomAbout(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.002)); clampView(); requestDraw(); saveView(); }, { passive: false });
 function animateZoom(sx, sy, f) {
   const start = performance.now(), dur = reduced.matches ? 0 : 260;
   let done = 1;
@@ -680,6 +680,7 @@ function draw() {
   drawQueued = false;
   if (!W) return;
   const { x, y, k } = view, pb = panelBox();
+  checkBeaconsReach();
   const world = () => ctx.setTransform(dpr * k, 0, 0, -dpr * k, dpr * (W / 2 - x * k), dpr * (Hs / 2 + y * k));
   const screen = () => ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const sx = (wx) => W / 2 + (wx - x) * k, sy = (wy) => Hs / 2 - (wy - y) * k;
@@ -1423,11 +1424,9 @@ function crossStride() {
 // still the place to tap.
 function drawCrosses(sx, sy, pb, L, fi) {
   crossPts = [];
-  // With Beacons on only, and only zoomed in to where they're 16 px apart
-  // east to west (beacons' minimum zoom).
-  if (!grid || !grid.seaPoints || !beaconsOn) return;
+  // With Beacons on only, and only from beacons' minimum zoom in.
+  if (!grid || !grid.seaPoints || !beaconsOn || !beaconsReach()) return;
   const st = crossStride();
-  if (st.col > 1) return;
   const path = new Path2D(), arrows = new Path2D(), d = L.points && fi >= 0 && frames[fi];
   const P = man.grids.p, sq = man.square, ws = man.scale.wind || 2;
   const add = (c) => {
@@ -1468,6 +1467,19 @@ function drawCrosses(sx, sy, pb, L, fi) {
   ctx.stroke(path);
   ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = C.arrow;
   ctx.stroke(arrows);
+}
+// Beacons' minimum zoom at a latitude: BEACONS_OUT times further out than
+// where every grid point shows 16 px apart east to west, the points thinned
+// there (crossStride) and filling in as the map zooms in.
+const BEACONS_OUT = 2.5;
+const beaconsMinK = (lat) => CROSS_GAP / cellKm(lat).col / BEACONS_OUT;
+const beaconsReach = () => view.k >= beaconsMinK(grid.kmToLonLat(view.x, view.y)[1]) * 0.999;
+// Zoomed out past it with no beacon open (and not on the way in): Beacons
+// goes off, and the band comes back.
+let beaconsGlide = false, beaconsOffT = 0;
+function checkBeaconsReach() {
+  if (!beaconsOn || beacon || beaconsGlide || !grid || beaconsOffT || beaconsReach()) return;
+  beaconsOffT = setTimeout(() => { beaconsOffT = 0; if (beaconsOn && !beacon && !beaconsGlide && !beaconsReach()) setBeacons(false); });
 }
 // The cross for the first-use tip ("Tap a cross") to point at, pulsing: the
 // one nearest the middle of the visible chart, kept while the tip shows.
@@ -1594,23 +1606,24 @@ function recentre() {
 }
 
 // Beacons turned on zoomed out: one glide in, about the middle of the
-// visible chart, to the zoom where the grid points sit 16 px apart east to
-// west (a jump with Reduce Motion); already there, nothing moves.
+// visible chart, to beacons' minimum zoom (a jump with Reduce Motion);
+// already there, nothing moves.
 function zoomToBeacons() {
   if (!grid) return;
   const v = vis(), cx = v.x + v.w / 2, cy = (sideOn() ? Hs : v.h) / 2;
   const lat = grid.kmToLonLat(view.x + (cx - W / 2) / view.k, view.y - (cy - Hs / 2) / view.k)[1];
-  const k1 = Math.min(kMax(), CROSS_GAP / cellKm(lat).col * 1.001), k0 = view.k;
+  const k1 = Math.min(kMax(), beaconsMinK(lat) * 1.01), k0 = view.k;
   if (k0 >= k1) return;
   cancelAnimationFrame(glideAnim);
   if (reduced.matches) { zoomAbout(cx, cy, k1 / k0); clampView(); requestDraw(); saveView(); return; }
   const start = performance.now();
   let done = 1;
+  beaconsGlide = true;
   const step = (t) => {
     const q = Math.min(1, (t - start) / 600), f = Math.pow(k1 / k0, glideEase(q));
     zoomAbout(cx, cy, f / done); done = f;
     clampView(); requestDraw();
-    if (q < 1) glideAnim = requestAnimationFrame(step); else { saveView(); hintWait(); }
+    if (q < 1) glideAnim = requestAnimationFrame(step); else { beaconsGlide = false; saveView(); hintWait(); }
   };
   glideAnim = requestAnimationFrame(step);
 }
