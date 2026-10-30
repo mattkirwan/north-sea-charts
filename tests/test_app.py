@@ -1230,7 +1230,7 @@ class App(unittest.TestCase):
         self.assertGreater(st['col'], 2)
         self.assertEqual(self.page.locator('#panel [data-beacons]').get_attribute('aria-pressed'), 'true')
 
-    def test_beacons_only_in_saltburns_swell_window(self):
+    def test_beacons_only_in_the_beacons_area(self):
         self.beacon_run()
         self.page.wait_for_function("swellWin")
         self.assertFalse(self.page.evaluate("inWindow(57, -8)"))           # west of Scotland: Scotland's in the way
@@ -1238,8 +1238,10 @@ class App(unittest.TestCase):
         self.assertTrue(self.page.evaluate("inWindow(61, -5)"))            # the Atlantic, through the Orkney-Shetland gap
         self.page.evaluate("view.k /= 2; clampView(); requestDraw()")
         self.chart()
-        self.assertTrue(self.page.evaluate("crossPts.length > 0 && crossPts.every((p) => inWindow(p.c.lat, p.c.lon))"))
-        self.assertTrue(self.page.evaluate("grid.seaPoints().every((c) => inWindow(c.lat, c.lon))"))  # only window points published
+        # The run's points are the area already (test_grid has it): all of them
+        # shown, the north beyond the window too.
+        self.assertTrue(self.page.evaluate("crossPts.length > 0 && crossPts.every((p) => p.c.win)"))
+        self.assertTrue(self.page.evaluate("grid.seaPoints().some((c) => !inWindow(c.lat, c.lon))"))
 
     def to_saltburn_view(self):
         self.page.evaluate("""() => { const [x, y] = grid.lonLatToKm(-0.95, 54.8); view.k = 3; view.x = x + 30; view.y = y; clampView(); requestDraw(); }""")

@@ -1459,7 +1459,8 @@ function drawCrosses(sx, sy, pb, L, fi) {
   const path = new Path2D(), arrows = new Path2D(), d = L.points && fi >= 0 && frames[fi];
   const P = man.grids.p, sq = man.square, ws = man.scale.wind || 2;
   const add = (c) => {
-    // In Saltburn's swell window only (worked out once a point).
+    // In the beacons' area only: a run's picked points are; with the old sea
+    // mask, Saltburn's swell window (worked out once a point).
     if (c.win === undefined && swellWin !== null) c.win = inWindow(c.lat, c.lon);
     if (!c.win) return;
     const px = sx(c.x), py = sy(c.y);
