@@ -47,6 +47,7 @@ wind and pressure, and no sea.
 
 numpy only, so the app's tests can import it.
 """
+import base64
 import math
 
 import numpy as np
@@ -250,7 +251,20 @@ def decode_tile(body, steps):
     return out
 
 
-def manifest_entry(dirname, names):
-    """The manifest's cells: where the run's tiles are and how to read them."""
-    return dict(lattice=LATTICE, tile=TILE, box=CELL_BOX, dir=dirname, file='{dir}/{tile}.bin.gz', tiles=names,
-                vars=[k for k, _ in VARS], scale=CELL_SCALE, encoding=ENCODING)
+def sea_mask(box):
+    """The box's cells with sea at any step of the run (box as tiles() takes
+    it), for the manifest's cells.sea: one bit a cell, rows north to south and
+    each west to east, the first cell in a byte's top bit, in base64. About a
+    kilobyte, so the app can draw every grid point a beacon can go on, at any
+    zoom, without fetching a tile."""
+    return base64.b64encode(np.packbits(np.isfinite(box['hs']).any(axis=0).ravel())).decode()
+
+
+def manifest_entry(dirname, names, sea=None):
+    """The manifest's cells: where the run's tiles are and how to read them,
+    and where there's sea (sea_mask()) when given."""
+    out = dict(lattice=LATTICE, tile=TILE, box=CELL_BOX, dir=dirname, file='{dir}/{tile}.bin.gz', tiles=names,
+               vars=[k for k, _ in VARS], scale=CELL_SCALE, encoding=ENCODING)
+    if sea is not None:
+        out['sea'] = sea
+    return out

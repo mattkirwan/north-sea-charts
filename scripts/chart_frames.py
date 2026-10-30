@@ -340,7 +340,7 @@ def cell_tiles(out, run, keep, boxes):
             size += os.path.getsize(path)
         names = grid.tile_names()
         print(f'cells: {len(names)} tiles in {d}, {size / 1e6:.1f} MB')
-        return grid.manifest_entry(d, names)
+        return grid.manifest_entry(d, names, grid.sea_mask(box))
     except Exception as e:
         print(f'No cell tiles this run: {type(e).__name__}: {e}')
         return None

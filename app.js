@@ -1286,15 +1286,15 @@ for (const b of playBtns) b.addEventListener('click', () => {
 });
 
 // ---- Beacon: a forecast point dropped on a sea grid point -----------------------------------
-// Zoomed in far enough, every sea grid point (one of NOAA's cells, from the
-// run's cell tiles: grid.js) carries a small cross. Tap one and a lifeboat
-// beacon drops there, pings three times, and the map glides once to put it
-// above the needle; the open panel becomes its sheet, with the cell's
+// The sea grid points (NOAA's cells: grid.js) carry small crosses, thinned
+// out as the map zooms out and filling in as it zooms in. Tap one and a
+// lifeboat beacon drops there, pings three times, and the map glides (and
+// zooms in, if need be) to put it a quarter of the way down, straight above
+// the needle; the open panel becomes its sheet, with the cell's
 // modelled wind and swell drawn on the timeline's own track, so one needle
 // reads everything. One beacon at a time; the link (?at=lat,lon) opens one.
-const CROSS_GAP = 16, CROSS_HIT = 22, BEACON_LIFT = 160;
-// Not settled yet: crosses hide below the zoom where they'd sit closer than
-// CROSS_GAP px, and a beacon panned off its place loses its tie and notch
+const CROSS_GAP = 16, CROSS_HIT = 22, BEACON_AT = 0.25, BEACON_GAP = 24;
+// Not settled yet: a beacon panned off its place loses its tie and notch
 // until the next drop (false: they come back when it's back).
 const TIE_STAYS_OUT = true;
 let beacon = null, glideAnim = 0, crossPts = [], rowArrows = [];
@@ -1305,35 +1305,49 @@ const vals = Object.fromEntries([...document.querySelectorAll('[data-val]')].map
 const marks = Object.fromEntries([...document.querySelectorAll('[data-mark]')].map((el) => [el.dataset.mark, el]));
 const ROWS = { windTop: 50, windH: 24, windMax: 35, arrowY: 39, swellTop: 103, swellH: 50, swellMax: 3 };
 
-function crossesShown() {
-  if (!grid || !grid.tilesIn) return false;
-  const lat = grid.kmToLonLat(view.x, view.y)[1];
-  return 111.2 / grid.lattice * Math.cos(lat * Math.PI / 180) * view.k >= CROSS_GAP;
+// The km between neighbouring grid points down (a row) and across (a
+// column) at a latitude.
+const cellKm = (lat) => ({ row: 111.2 / grid.lattice, col: 111.2 / grid.lattice * Math.cos(lat * Math.PI / 180) });
+// Which grid points get a cross, so none sit closer than CROSS_GAP px: every
+// one when zoomed in that far, else every 2nd, 4th, 8th... row and column,
+// counted on NOAA's own lattice, so zooming in only ever adds crosses
+// between the ones already there.
+function crossStride() {
+  const km = cellKm(grid.kmToLonLat(view.x, view.y)[1]), st = (d) => 2 ** Math.max(0, Math.ceil(Math.log2(CROSS_GAP / (d * view.k))));
+  return { row: st(km.row), col: st(km.col) };
 }
-// The crosses in sight, from the tiles under the screen (each fetched once).
+// The crosses in sight: from the manifest's sea mask, at any zoom; from a
+// manifest without one, from the tiles under the screen (each fetched once),
+// zoomed in to where every point shows.
 function drawCrosses(sx, sy, pb) {
   crossPts = [];
-  if (!crossesShown()) return;
-  let s = 90, n = -90, w = 180, e = -180;
-  for (const fx of [-0.5, 0, 0.5]) for (const fy of [-0.5, 0, 0.5]) {
-    const [lon, lat] = grid.kmToLonLat(view.x + fx * W / view.k, view.y + fy * Hs / view.k);
-    s = Math.min(s, lat); n = Math.max(n, lat); w = Math.min(w, lon); e = Math.max(e, lon);
-  }
-  const path = new Path2D();
-  for (const name of grid.tilesIn(s - 0.5, n + 0.5, w - 0.5, e + 0.5)) {
-    if (!crossTiles.has(name)) {
-      crossTiles.set(name, null);
-      grid.seaCells(name).then((cells) => {
-        crossTiles.set(name, cells.map((c) => { const [x, y] = grid.lonLatToKm(c.lon, c.lat); return { ...c, x, y }; }));
-        requestDraw();
-      }).catch(() => setTimeout(() => crossTiles.delete(name), 30e3));
-      continue;
+  if (!grid || !grid.seaPoints) return;
+  const st = crossStride(), path = new Path2D();
+  const add = (c) => {
+    const px = sx(c.x), py = sy(c.y);
+    if (px < -4 || px > W + 4 || py < -4 || py > Hs + 4 || (px > pb.x0 && px < pb.x1 && py > pb.y)) return;
+    crossPts.push({ c, px, py });
+    path.moveTo(px - 4, py); path.lineTo(px + 4, py); path.moveTo(px, py - 4); path.lineTo(px, py + 4);
+  };
+  const pts = grid.seaPoints();
+  if (pts) {
+    for (const c of pts) if (!(c.row % st.row) && !(c.col % st.col)) add(c);
+  } else if (st.row === 1 && st.col === 1) {
+    let s = 90, n = -90, w = 180, e = -180;
+    for (const fx of [-0.5, 0, 0.5]) for (const fy of [-0.5, 0, 0.5]) {
+      const [lon, lat] = grid.kmToLonLat(view.x + fx * W / view.k, view.y + fy * Hs / view.k);
+      s = Math.min(s, lat); n = Math.max(n, lat); w = Math.min(w, lon); e = Math.max(e, lon);
     }
-    for (const c of crossTiles.get(name) || []) {
-      const px = sx(c.x), py = sy(c.y);
-      if (px < -4 || px > W + 4 || py < -4 || py > Hs + 4 || (px > pb.x0 && px < pb.x1 && py > pb.y)) continue;
-      crossPts.push({ c, px, py });
-      path.moveTo(px - 4, py); path.lineTo(px + 4, py); path.moveTo(px, py - 4); path.lineTo(px, py + 4);
+    for (const name of grid.tilesIn(s - 0.5, n + 0.5, w - 0.5, e + 0.5)) {
+      if (!crossTiles.has(name)) {
+        crossTiles.set(name, null);
+        grid.seaCells(name).then((cells) => {
+          crossTiles.set(name, cells.map((c) => { const [x, y] = grid.lonLatToKm(c.lon, c.lat); return { ...c, x, y }; }));
+          requestDraw();
+        }).catch(() => setTimeout(() => crossTiles.delete(name), 30e3));
+        continue;
+      }
+      for (const c of crossTiles.get(name) || []) add(c);
     }
   }
   ctx.lineWidth = 1.3; ctx.lineCap = 'butt'; ctx.setLineDash([]);
@@ -1347,8 +1361,9 @@ onTap = (cx, cy) => {
   if (best) dropBeacon(best);
 };
 
-// Where the beacon sits once recentred: the middle of the screen, clear above the sheet.
-const beaconY = () => Math.max(56, Hs - panelH() - BEACON_LIFT);
+// Where the beacon sits once recentred: across the middle of the screen, a
+// quarter of the way down (and always clear above the sheet).
+const beaconY = () => Math.min(Hs * BEACON_AT, Hs - panelH() - 40);
 function dropBeacon(c) {
   const opening = !beacon;
   beacon = { id: c.id, lat: c.lat, lon: c.lon, x: c.x, y: c.y, s: null, w: null, tieOk: false };
@@ -1423,20 +1438,24 @@ function glideEase(q) {
   return B(0.7, 1, t);
 }
 // The one time the map moves itself: on a drop, a single glide (a jump with
-// Reduce Motion) of the same view the fingers move; then the tie.
+// Reduce Motion) of the same view the fingers move, zooming in if need be
+// until its neighbours' crosses sit BEACON_GAP px apart; then the tie. The
+// beacon runs straight to its place as the zoom eases in.
 function recentre() {
   cancelAnimationFrame(glideAnim);
-  const b = beacon, from = { ...view };
-  view = { x: b.x, y: b.y + (beaconY() - Hs / 2) / view.k, k: view.k };
+  const b = beacon, from = { ...view }, k1 = Math.min(kMax(), Math.max(view.k, BEACON_GAP / cellKm(b.lat).col));
+  view = { x: b.x, y: b.y + (beaconY() - Hs / 2) / k1, k: k1 };
   clampView();
-  const to = { ...view };
+  const to = { ...view }, at = (v) => [W / 2 + (b.x - v.x) * v.k, Hs / 2 - (b.y - v.y) * v.k];
+  const [x0, y0] = at(from), [x1, y1] = at(to);
   view = from;
   const done = () => { view = to; saveView(); if (beacon === b) b.tieOk = true; requestDraw(); };
   if (reduced.matches) { done(); return; }
   const start = performance.now();
   const step = (t) => {
-    const q = Math.min(1, (t - start) / 600), e = glideEase(q);
-    view = { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e, k: from.k };
+    const q = Math.min(1, (t - start) / 600), e = glideEase(q), k = from.k * Math.pow(to.k / from.k, e);
+    const px = x0 + (x1 - x0) * e, py = y0 + (y1 - y0) * e;
+    view = { x: b.x - (px - W / 2) / k, y: b.y + (py - Hs / 2) / k, k };
     requestDraw();
     if (q < 1) glideAnim = requestAnimationFrame(step); else done();
   };
