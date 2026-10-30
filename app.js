@@ -638,9 +638,24 @@ const halo = (text, x, y, fill, haloCol) => {
   ctx.strokeStyle = haloCol; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeText(text, x, y);
   ctx.fillStyle = fill; ctx.fillText(text, x, y);
 };
-// The geometry each band draws, by frame.
-const geomKey = (i) => (band === 'pressure' ? `p${man.run}:${i}` : band === 'wind' ? `wind${man.run}:${i}` : `${swellVar}${man.run}:${i}`);
-const buildGeom = (i) => (band === 'pressure' ? pressureGeom(i) : band === 'wind' ? windGeom(i) : swellGeom(i, swellVar));
+// What the chart shows: the selected band; or, with a beacon open, every
+// layer its toggles have on, each its own kind of mark: swell (always its
+// height) the fill, pressure the lines, wind the arrows at the grid points,
+// with its slate field only when there's no swell fill.
+function layersOn() {
+  if (beacon) return { ...beacon.layers, swellVar: 'height', field: beacon.layers.wind && !beacon.layers.swell, points: beacon.layers.wind };
+  return { pressure: band === 'pressure', wind: band === 'wind', swell: band === 'swell', swellVar, field: band === 'wind', points: false };
+}
+// The geometry the chart needs for a frame, as [cache key, build].
+function geomParts(i) {
+  const L = layersOn(), r = man.run, out = [];
+  if (L.swell) out.push([`${L.swellVar}${r}:${i}`, () => swellGeom(i, L.swellVar)]);
+  if (L.field) out.push([`wind${r}:${i}`, () => windGeom(i)]);
+  if (L.pressure) out.push([`p${r}:${i}`, () => pressureGeom(i)]);
+  return out;
+}
+const geomReady = (i) => geomParts(i).every(([key]) => geomCache.has(key));
+const buildGeom = (i) => geomParts(i).forEach(([key, make]) => { if (!geomCache.has(key)) make(); });
 // While the timeline moves, the frame to draw. Building one takes a phone tens
 // of ms, too long for every frame a drag or flick passes: the needle's own
 // frame is built at most every 150 ms and every few redraws, and in between
@@ -648,10 +663,10 @@ const buildGeom = (i) => (band === 'pressure' ? pressureGeom(i) : band === 'wind
 // timeline stops.
 let lastBuild = 0, sinceBuild = 0;
 function movingFrame(fi) {
-  if (fi < 0 || !tl.moving || geomCache.has(geomKey(fi))) return fi;
+  if (fi < 0 || !tl.moving || geomReady(fi)) return fi;
   if (performance.now() - lastBuild > 150 && sinceBuild >= 4) return fi;
   for (let d = 1; d < man.steps.length; d++) {
-    for (const i of [fi - d, fi + d]) if (frames[i] && geomCache.has(geomKey(i))) { requestDraw(); return i; }
+    for (const i of [fi - d, fi + d]) if (frames[i] && geomReady(i)) { requestDraw(); return i; }
   }
   return fi;
 }
@@ -666,24 +681,25 @@ function draw() {
   // No default sea under Wind or Swell period: every sea cell takes a key
   // colour there, and where the model has none it reads as land.
   // (Beyond the model's square, the plain sea as ever.)
+  const L = layersOn();
   ctx.fillStyle = C.sea; ctx.fillRect(0, 0, W, Hs);
-  if (band === 'wind' || (band === 'swell' && swellVar === 'period')) {
+  if (L.field || (L.swell && L.swellVar === 'period')) {
     ctx.fillStyle = C.land;
     ctx.fillRect(sx(SQ.x0), sy(SQ.y0), (SQ.x1 - SQ.x0) * k, (SQ.y0 - SQ.y1) * k);
   }
   const fi = movingFrame(frames[idx] ? idx : shown >= 0 && frames[shown] ? shown : -1);
   if (fi >= 0) shown = fi;
-  if (fi >= 0 && !geomCache.has(geomKey(fi))) {
+  if (fi >= 0 && !geomReady(fi)) {
     buildGeom(fi); lastBuild = performance.now(); sinceBuild = 0;
     if (tlDbg && tlDbg.cur && tl.moving) tlDbg.cur.builds++;
   } else sinceBuild++;
-  const swell = band === 'swell' && fi >= 0 ? swellGeom(fi, swellVar) : null;
+  const swell = L.swell && fi >= 0 ? swellGeom(fi, L.swellVar) : null;
   if (swell) {
     world();
-    const cols = C[KEYS[swellVar].tok];
+    const cols = C[KEYS[L.swellVar].tok];
     swell.bands.forEach((b, i) => { ctx.fillStyle = cols[i]; ctx.fill(b.path, 'evenodd'); });
   }
-  if (band === 'wind' && fi >= 0) {
+  if (L.field && fi >= 0) {
     world();
     windGeom(fi).forEach((p, i) => { ctx.fillStyle = C.wind[i]; ctx.fill(p, 'evenodd'); });
   }
@@ -714,10 +730,10 @@ function draw() {
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(baseLayer.canvas, 0, 0);
   }
-  if (fi < 0) { screen(); drawCrosses(sx, sy, pb); placeBeacon(); return; }
-  if (band === 'wind') drawWind(fi, sx, sy, screen);
-  // Isobars, centres and their figures on the Pressure band only.
-  const g = band === 'pressure' ? pressureGeom(fi) : { centres: [], labelled: [] };
+  if (fi < 0) { screen(); drawCrosses(sx, sy, pb, L, -1); placeBeacon(); return; }
+  if (L.wind && !L.points) drawWind(fi, sx, sy, screen);
+  // Isobars, centres and their figures: on the Pressure band, or with a beacon's pressure on.
+  const g = L.pressure ? pressureGeom(fi) : { centres: [], labelled: [] };
   if (g.lows) {
   world();
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -727,7 +743,7 @@ function draw() {
   }
   // The grid points a beacon can go on, over the weather, under the figures.
   screen();
-  drawCrosses(sx, sy, pb);
+  drawCrosses(sx, sy, pb, L, fi);
   // Figures: centres first, then every third isobar, then swell band edges.
   const boxes = [], free = (bx, by, bw, bh) => {
     if (bx < 2 || by < 2 || bx + bw > W - 2 || by + bh > Hs - 2) return false;
@@ -745,9 +761,9 @@ function draw() {
   ctx.font = `400 10px ${FONT}`;
   for (const l of g.labelled) placeAlong(l.pts, String(l.lev), 70, 260, sx, sy, free, (t, px, py) => halo(t, px, py, C.iso, C.sea));
   if (swell) {
-    const cols = C[KEYS[swellVar].tok];
+    const cols = C[KEYS[L.swellVar].tok];
     swell.bands.forEach((b, i) => {
-      const text = KEYS[swellVar].fig(b.lev);
+      const text = KEYS[L.swellVar].fig(b.lev);
       if (!b.lev) return;
       for (const r of b.rings) placeAlong(r, text, 200, 520, sx, sy, (bx, by, bw, bh) => {
         const wx = x + (bx + bw / 2 - W / 2) / k, wy = y - (by + bh / 2 - Hs / 2) / k;
@@ -778,6 +794,13 @@ function placeAlong(pts, text, first, every, sx, sy, free, paint) {
     acc += seg; px = qx; py = qy;
   }
 }
+// A wind arrow, 14 px, centred on (px, py), pointing the way (dx, dy) on screen.
+function arrowAt(p, px, py, dx, dy) {
+  const hx = px + dx * 7, hy = py + dy * 7, a = Math.PI / 6, l = 4.5;
+  p.moveTo(px - dx * 7, py - dy * 7); p.lineTo(hx, hy);
+  p.moveTo(hx - l * (dx * Math.cos(a) - dy * Math.sin(a)), hy - l * (dy * Math.cos(a) + dx * Math.sin(a))); p.lineTo(hx, hy);
+  p.lineTo(hx - l * (dx * Math.cos(a) + dy * Math.sin(a)), hy - l * (dy * Math.cos(a) - dx * Math.sin(a)));
+}
 function drawWind(fi, sx, sy, screen) {
   const d = frames[fi], P = man.grids.p, sq = man.square, { x, y, k } = view, pb = panelBox();
   const s = 32 / k, x0 = x - W / 2 / k, x1 = x + W / 2 / k, y1 = y + Hs / 2 / k, y0 = y - Hs / 2 / k;
@@ -790,11 +813,7 @@ function drawWind(fi, sx, sy, screen) {
       const gj = (wx - sq.x0) / (sq.x1 - sq.x0) * (P - 1), gi = (sq.y0 - wy) / (sq.y0 - sq.y1) * (P - 1);
       const u = bilinear(d.u, P, gj, gi) / ws, v = bilinear(d.v, P, gj, gi) / ws, sp = Math.hypot(u, v);
       if (sp < 0.3) continue;
-      const dx = u / sp, dy = -v / sp, hx = px + dx * 7, hy = py + dy * 7, p = path;
-      p.moveTo(px - dx * 7, py - dy * 7); p.lineTo(hx, hy);
-      const a = Math.PI / 6, l = 4.5;
-      p.moveTo(hx - l * (dx * Math.cos(a) - dy * Math.sin(a)), hy - l * (dy * Math.cos(a) + dx * Math.sin(a))); p.lineTo(hx, hy);
-      p.lineTo(hx - l * (dx * Math.cos(a) + dy * Math.sin(a)), hy - l * (dy * Math.cos(a) - dx * Math.sin(a)));
+      arrowAt(path, px, py, u / sp, -v / sp);
     }
   }
   screen();
@@ -1153,7 +1172,7 @@ function warm() {
     if (!man || tl.moving) return;
     for (let d = 1; d <= 16; d++) {
       for (const i of [idx + d, idx - d]) {
-        if (i < 0 || i >= man.steps.length || !frames[i] || geomCache.has(geomKey(i))) continue;
+        if (i < 0 || i >= man.steps.length || !frames[i] || geomReady(i)) continue;
         buildGeom(i); warmT = setTimeout(next, 0); return;
       }
     }
@@ -1345,7 +1364,11 @@ const markEl = $('[data-beacon-mark]'), tieEl = $('[data-tie]'), rowsTrack = $('
 const copyBtn = $('[data-beacon-copy]'), saidEl = $('[data-beacon-said]'), grip = $('[data-beacon-grip]');
 const vals = Object.fromEntries([...document.querySelectorAll('[data-val]')].map((el) => [el.dataset.val, el]));
 const marks = Object.fromEntries([...document.querySelectorAll('[data-mark]')].map((el) => [el.dataset.mark, el]));
-const ROWS = { windTop: 50, windH: 24, windMax: 35, arrowY: 39, swellTop: 103, swellH: 50, swellMax: 3 };
+// The rows: three of 66 px (a 28 px band of numbers over 38 px of plot)
+// split by hairlines, pressure at 0, wind at 67, swell at 134. Wind's plot
+// is its arrows over 20 px of speed.
+const ROWS = { h: 200, plotH: 38, plot: { pressure: 28, wind: 95, swell: 162 }, arrowY: 104, speedTop: 113, speedH: 20,
+  pMin: 990, pMax: 1020, windMax: 35, swellMax: 3 };
 
 // The km between neighbouring grid points down (a row) and across (a
 // column) at a latitude.
@@ -1360,14 +1383,22 @@ function crossStride() {
 }
 // The crosses in sight: from the manifest's sea mask, at any zoom; from a
 // manifest without one, from the tiles under the screen (each fetched once),
-// zoomed in to where every point shows.
-function drawCrosses(sx, sy, pb) {
+// zoomed in to where every point shows. With a beacon's wind on, each point
+// carries the wind's arrow there instead (a calm point keeps its cross),
+// still the place to tap.
+function drawCrosses(sx, sy, pb, L, fi) {
   crossPts = [];
   if (!grid || !grid.seaPoints) return;
-  const st = crossStride(), path = new Path2D();
+  const st = crossStride(), path = new Path2D(), arrows = new Path2D(), d = L.points && fi >= 0 && frames[fi];
+  const P = man.grids.p, sq = man.square, ws = man.scale.wind || 2;
   const add = (c) => {
     const px = sx(c.x), py = sy(c.y);
-    if (px < -4 || px > W + 4 || py < -4 || py > Hs + 4 || (px > pb.x0 && px < pb.x1 && py > pb.y)) return;
+    if (px < -7 || px > W + 7 || py < -7 || py > Hs + 7 || (px > pb.x0 && px < pb.x1 && py > pb.y)) return;
+    if (d) {
+      const gj = (c.x - sq.x0) / (sq.x1 - sq.x0) * (P - 1), gi = (sq.y0 - c.y) / (sq.y0 - sq.y1) * (P - 1);
+      const u = bilinear(d.u, P, gj, gi) / ws, v = bilinear(d.v, P, gj, gi) / ws, sp = Math.hypot(u, v);
+      if (sp >= 0.3) { crossPts.push({ c, px, py, arrow: true }); arrowAt(arrows, px, py, u / sp, -v / sp); return; }
+    }
     crossPts.push({ c, px, py });
     path.moveTo(px - 4, py); path.lineTo(px + 4, py); path.moveTo(px, py - 4); path.lineTo(px, py + 4);
   };
@@ -1392,9 +1423,12 @@ function drawCrosses(sx, sy, pb) {
       for (const c of crossTiles.get(name) || []) add(c);
     }
   }
+  // Dark over a key's colours, white at 50% over the plain sea.
   ctx.lineWidth = 1.3; ctx.lineCap = 'butt'; ctx.setLineDash([]);
-  ctx.strokeStyle = band === 'pressure' ? 'rgba(255,255,255,0.5)' : C.ink;
+  ctx.strokeStyle = L.swell || L.field ? C.ink : 'rgba(255,255,255,0.5)';
   ctx.stroke(path);
+  ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = C.arrow;
+  ctx.stroke(arrows);
 }
 // A tap: the nearest cross within reach, or nothing.
 onTap = (cx, cy) => {
@@ -1408,7 +1442,7 @@ onTap = (cx, cy) => {
 const beaconY = () => Math.min(Hs * BEACON_AT, Hs - panelH() - 40);
 function dropBeacon(c) {
   const opening = !beacon;
-  beacon = { id: c.id, lat: c.lat, lon: c.lon, x: c.x, y: c.y, s: null, w: null, tieOk: false };
+  beacon = { id: c.id, lat: c.lat, lon: c.lon, x: c.x, y: c.y, s: null, w: null, tieOk: false, layers: layersFor(c.id) };
   if (opening) {
     if (hintOn) { hintOn = null; hintCard = false; clearTimeout(hintGoT); renderHint(); }
     panelEl.setAttribute('data-beacon', '');
@@ -1419,7 +1453,7 @@ function dropBeacon(c) {
   document.documentElement.removeAttribute('data-tied');
   markEl.hidden = tieEl.hidden = false;
   markEl.removeAttribute('data-ping'); void markEl.offsetWidth; markEl.setAttribute('data-ping', '');
-  loadBeacon();
+  loadBeacon(); renderLayers(); warm();
   setFrame(idx, true);
   recentre();
 }
@@ -1504,8 +1538,8 @@ function recentre() {
   glideAnim = requestAnimationFrame(step);
 }
 
-// ---- The beacon's rows: wind and swell on the timeline's track ----
-// A colour from a key's steps, blended between them.
+// ---- The beacon's rows: pressure, wind and swell on the timeline's track ----
+// A colour from a key's steps, blended between them (the swell line's height).
 function ramp(cols, lev, v) {
   if (!(v > lev[0])) return cols[0];
   if (v >= lev[lev.length - 1]) return cols[cols.length - 1];
@@ -1527,22 +1561,27 @@ function renderRows() {
   if (!s || !man || s.run !== man.run) { rowsTrack.innerHTML = ''; return; }
   const n = Math.min(man.steps.length, s.hs.length), w = beacon.w, now = Date.now(), R = ROWS, out = [];
   const X = (i) => i * TICK, past = (i) => validAt(man, i) < now;
-  const wy = (i) => R.windTop + R.windH - Math.min(w.speed[i], R.windMax) / R.windMax * R.windH;
-  const hy = (i) => R.swellTop + R.swellH - Math.min(s.hs[i], R.swellMax) / R.swellMax * R.swellH;
-  // Midnights, in line with the scale's day ticks.
+  // A value up a plot, clamped to its scale.
+  const up = (v, top, h, lo, hi) => top + h - (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * h;
+  const py = (i) => up(s.p[i], R.plot.pressure, R.plotH, R.pMin, R.pMax);
+  const wy = (i) => up(w.speed[i], R.speedTop, R.speedH, 0, R.windMax);
+  const hy = (i) => up(s.hs[i], R.plot.swell, R.plotH, 0, R.swellMax);
+  // Midnights through all three rows, in line with the scale's day ticks.
   const first = new Date(validAt(man, 0)); first.setHours(24, 0, 0, 0);
   for (let d = new Date(first); d.getTime() <= validAt(man, n - 1); d.setDate(d.getDate() + 1)) {
     const x = (fracIndex(d.getTime()) * TICK).toFixed(1);
-    out.push(`<line x1="${x}" y1="0" x2="${x}" y2="153" stroke="${C.ink}" stroke-opacity="0.12"/>`);
+    out.push(`<line x1="${x}" y1="0" x2="${x}" y2="${R.h}" stroke="${C.ink}" stroke-opacity="0.12"/>`);
   }
   // A fill frame by frame, its top meeting the next frame's halfway.
   const fill = (y, base, col) => {
+    let o = '';
     for (let i = 0; i < n; i++) {
       const y0 = y(i);
       if (Number.isNaN(y0)) continue;
       const yl = i && !Number.isNaN(y(i - 1)) ? (y(i - 1) + y0) / 2 : y0, yr = i < n - 1 && !Number.isNaN(y(i + 1)) ? (y(i + 1) + y0) / 2 : y0;
-      out.push(`<path d="M${X(i) - 4} ${base}V${yl.toFixed(1)}L${X(i)} ${y0.toFixed(1)}L${X(i) + 4} ${yr.toFixed(1)}V${base}Z" fill="${col(i)}"/>`);
+      o += `<path d="M${X(i) - 4} ${base}V${yl.toFixed(1)}L${X(i)} ${y0.toFixed(1)}L${X(i) + 4} ${yr.toFixed(1)}V${base}Z" fill="${col(i)}"/>`;
     }
+    return o;
   };
   const line = (y) => {
     let d = '', pen = false;
@@ -1553,37 +1592,44 @@ function renderRows() {
     }
     return d;
   };
-  // Wind: speed up the row in the key's colours, a line on top, and arrows
-  // downwind every third frame.
-  fill(wy, R.windTop + R.windH, (i) => binColour(KEYS.wind, w.speed[i]));
-  out.push(`<path d="${line(wy)}" fill="none" stroke="${C.control}" stroke-width="1.2" stroke-linejoin="round"/>`);
+  // The past, washed out as the scale's past ticks are.
+  const np = Math.min(X(n - 1) + 4, fracIndex(now) * TICK);
+  const wash = (top, h) => (np > -4 ? `<rect x="-4" y="${top}" width="${(np + 4).toFixed(1)}" height="${h}" fill="${C.raised}" fill-opacity="0.6"/>` : '');
+  const row = (name, body) => `<g data-row="${name}">${body}</g>`;
+  // Pressure: a line over a faint fill, 990 to 1020 hPa.
+  const pBase = R.plot.pressure + R.plotH;
+  out.push(row('pressure', fill(py, pBase, () => C.ink).replace(/fill="[^"]+"/g, `fill="${C.ink}" fill-opacity="0.07"`) +
+    `<path d="${line(py)}" fill="none" stroke="${C.ink}" stroke-width="1.5" stroke-linejoin="round"/>` + wash(R.plot.pressure, R.plotH)));
+  // Wind: arrows downwind every third frame, then speed up the row in the
+  // key's stepped colours with a line on top.
+  let wind = fill(wy, R.speedTop + R.speedH, (i) => binColour(KEYS.wind, w.speed[i])) +
+    `<path d="${line(wy)}" fill="none" stroke="${C.control}" stroke-width="1.2" stroke-linejoin="round"/>` + wash(R.speedTop, R.speedH);
   for (let i = 0; i < n; i += 3) {
     const sp = Math.hypot(w.u[i], w.v[i]);
     if (!(sp > 0.2)) continue;
-    out.push(`<path data-x="${X(i)}" data-h="7" d="${arrowPath(X(i), R.arrowY, w.u[i] / sp, -w.v[i] / sp, 7, 4.5)}" fill="none" stroke="${C.ink}"` +
-      ` stroke-width="1.7" stroke-linecap="square"${past(i) ? ' opacity="0.35"' : ''}/>`);
+    wind += `<path data-x="${X(i)}" data-h="7" d="${arrowPath(X(i), R.arrowY, w.u[i] / sp, -w.v[i] / sp, 7, 4.5)}" fill="none" stroke="${C.ink}"` +
+      ` stroke-width="1.7" stroke-linecap="square"${past(i) ? ' opacity="0.35"' : ''}/>`;
   }
-  // Swell: height up the row, the fill in the period's colours, the line in
-  // the height's over a darker one, and the swell's way every 6 hours.
-  fill(hy, R.swellTop + R.swellH, (i) => binColour(KEYS.period, s.tp[i]));
-  out.push(`<path d="${line(hy)}" fill="none" stroke="${C.ink}" stroke-opacity="0.5" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"/>`);
+  out.push(row('wind', wind));
+  // Swell: height up the row, the fill in the period's stepped colours, the
+  // line in the height's over a darker one, and the swell's way every 6 hours.
+  const sBase = R.plot.swell + R.plotH;
+  let swell = fill(hy, sBase, (i) => binColour(KEYS.period, s.tp[i])) +
+    `<path d="${line(hy)}" fill="none" stroke="${C.ink}" stroke-opacity="0.5" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"/>`;
   for (let i = 0; i < n - 1; i++) {
     if (Number.isNaN(s.hs[i]) || Number.isNaN(s.hs[i + 1])) continue;
-    out.push(`<line x1="${X(i)}" y1="${hy(i).toFixed(1)}" x2="${X(i + 1)}" y2="${hy(i + 1).toFixed(1)}" stroke="${ramp(C.height, KEYS.height.lev, (s.hs[i] + s.hs[i + 1]) / 2)}" stroke-width="3" stroke-linecap="round"/>`);
+    swell += `<line x1="${X(i)}" y1="${hy(i).toFixed(1)}" x2="${X(i + 1)}" y2="${hy(i + 1).toFixed(1)}" stroke="${ramp(C.height, KEYS.height.lev, (s.hs[i] + s.hs[i + 1]) / 2)}" stroke-width="3" stroke-linecap="round"/>`;
   }
   for (let i = 0; i < n; i++) {
-    if (man.steps[i] % 6 || Number.isNaN(s.dp[i]) || hy(i) > R.swellTop + R.swellH - 14) continue;
+    if (man.steps[i] % 6 || Number.isNaN(s.dp[i]) || hy(i) > sBase - 14) continue;
     const g = (s.dp[i] + 180) * Math.PI / 180;
-    out.push(`<path data-x="${X(i)}" data-h="4" d="${arrowPath(X(i), R.swellTop + R.swellH - 6, Math.sin(g), -Math.cos(g), 4, 3)}" fill="none" stroke="#fff"` +
-      ` stroke-opacity="0.9" stroke-width="1.3" stroke-linecap="square"/>`);
+    swell += `<path data-x="${X(i)}" data-h="4" d="${arrowPath(X(i), sBase - 6, Math.sin(g), -Math.cos(g), 4, 3)}" fill="none" stroke="#fff"` +
+      ` stroke-opacity="0.9" stroke-width="1.3" stroke-linecap="square"/>`;
   }
-  // The past, washed out as the scale's past ticks are.
-  const np = Math.min(X(n - 1) + 4, fracIndex(now) * TICK);
-  if (np > -4) {
-    for (const [y, h] of [[R.windTop, R.windH], [R.swellTop, R.swellH]]) out.push(`<rect x="-4" y="${y}" width="${(np + 4).toFixed(1)}" height="${h}" fill="${C.raised}" fill-opacity="0.6"/>`);
-  }
-  rowsTrack.innerHTML = `<svg width="${X(n)}" height="153" aria-hidden="true">${out.join('')}</svg>`;
+  out.push(row('swell', swell + wash(R.plot.swell, R.plotH)));
+  rowsTrack.innerHTML = `<svg width="${X(n)}" height="${R.h}" aria-hidden="true"><filter id="nss-mono"><feColorMatrix type="saturate" values="0"/></filter>${out.join('')}</svg>`;
   rowArrows = [...rowsTrack.querySelectorAll('[data-x]')].map((el) => ({ el, x: +el.dataset.x, half: +el.dataset.h, off: false }));
+  renderLayers();
   placeRows();
 }
 // With the scale: the same offset, the arrows by the needle put away, and
@@ -1597,33 +1643,40 @@ function placeRows() {
     if (off !== a.off) { a.off = off; a.el.style.visibility = off ? 'hidden' : ''; }
   }
   const s = beacon.s, R = ROWS;
-  if (!s || s.run !== man.run) { marks.wind.hidden = marks.swell.hidden = true; return; }
+  if (!s || s.run !== man.run) { for (const m of Object.values(marks)) m.hidden = true; return; }
   const n = Math.min(man.steps.length, s.hs.length), p = Math.max(0, Math.min(n - 1, pos)), i = Math.min(n - 2, Math.floor(p)), f = p - i;
   const at = (a) => a[i] + (a[i + 1] - a[i]) * f;
-  const mark = (el, v, top, h, max) => {
+  const mark = (el, v, top, h, lo, hi) => {
     el.hidden = Number.isNaN(v);
-    if (!el.hidden) el.style.top = `${(top + h - Math.min(v, max) / max * h - 3).toFixed(1)}px`;
+    if (!el.hidden) el.style.top = `${(top + h - (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * h - 3).toFixed(1)}px`;
   };
-  mark(marks.wind, at(beacon.w.speed), R.windTop, R.windH, R.windMax);
-  mark(marks.swell, at(s.hs), R.swellTop, R.swellH, R.swellMax);
+  mark(marks.pressure, at(s.p), R.plot.pressure, R.plotH, R.pMin, R.pMax);
+  mark(marks.wind, at(beacon.w.speed), R.speedTop, R.speedH, 0, R.windMax);
+  mark(marks.swell, at(s.hs), R.plot.swell, R.plotH, 0, R.swellMax);
 }
-// The readings at a frame, rounded as shown: m to 0.1, s and mph whole.
+// The readings at a frame, rounded as shown: hPa, s and mph whole, m to 0.1;
+// and pressure's change over the 6 hours before (none at the run's start).
 const compass = (deg, long) => (long ? tr('compassLong').split(',') : tr('compass').split(' '))[Math.round(deg / 22.5) % 16];
 function reading(i) {
   const s = beacon && beacon.s;
   if (!s || s.run !== man.run || i >= s.hs.length) return null;
-  const w = beacon.w, ok = (x) => !Number.isNaN(x);
+  const w = beacon.w, ok = (x) => !Number.isNaN(x), j = man.steps.indexOf(man.steps[i] - 6);
+  const trend = j >= 0 && ok(s.p[i]) && ok(s.p[j]) ? s.p[i] - s.p[j] : null;
   return {
+    p: ok(s.p[i]) ? Math.round(s.p[i]) : null, trend,
     speed: ok(w.speed[i]) ? Math.round(w.speed[i]) : null, wfrom: w.from[i],
     hs: ok(s.hs[i]) ? s.hs[i].toFixed(1) : null, tp: ok(s.tp[i]) ? Math.round(s.tp[i]) : null, tpRaw: s.tp[i], sfrom: s.dp[i]
   };
 }
 const dirIcon = (from) => `<svg viewBox="0 0 12 12" aria-hidden="true" style="transform: rotate(${Math.round(from + 180)}deg)">` +
   '<path d="M6 10.5 V1.8 M2.8 5 L6 1.8 L9.2 5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"></path></svg>';
+const trendIcon = (fall) => `<svg class="nss-trend" viewBox="0 0 12 12" aria-hidden="true"><path d="${fall ? 'M1.5 3 H10.5 L6 10 Z' : 'M1.5 9 H10.5 L6 2 Z'}" fill="currentColor"></path></svg>`;
 function renderBeaconNumbers() {
   if (!beacon) return;
   const r = reading(idx), put = (k, html) => { if (vals[k].innerHTML !== html) vals[k].innerHTML = html; };
   const dir = (deg) => (r && !Number.isNaN(deg) ? dirIcon(deg) + compass(deg) : '');
+  put('p', !r ? '' : r.p == null ? '–' : `${r.p}<small> hPa</small>`);
+  put('ptrend', !r || r.trend == null ? '' : `${Math.abs(r.trend) >= 0.05 ? trendIcon(r.trend < 0) : ''}${Math.abs(r.trend).toFixed(1)}<small> /6H</small>`);
   put('wind', !r ? '' : r.speed == null ? '–' : `${r.speed}<small> mph</small>`);
   put('wdir', r && r.speed ? dir(r.wfrom) : '');
   put('hs', !r ? '' : r.hs == null ? '–' : `${r.hs}<small> m</small>`);
@@ -1635,10 +1688,46 @@ function beaconSaid(i) {
   const r = beacon && reading(i);
   if (!r) return '';
   const out = [];
+  if (r.p != null) {
+    const n = r.trend == null ? null : Math.abs(r.trend).toFixed(1);
+    out.push(n == null || n === '0.0' ? tr('beaconPressure', { hpa: r.p }) : tr(r.trend < 0 ? 'beaconPressureFalling' : 'beaconPressureRising', { hpa: r.p, n }));
+  }
   if (r.speed != null) out.push(tr('beaconWind', { speed: r.speed, from: compass(r.wfrom, true) }));
   if (r.hs != null && r.tp != null && !Number.isNaN(r.sfrom)) out.push(tr('beaconSwell', { hs: r.hs, tp: r.tp, from: compass(r.sfrom, true) }));
   return out.length ? `. ${out.join(' ')}` : '';
 }
+
+// ---- The control column: a toggle a row, for that layer on the chart ----
+// Each grid cell keeps its own choice on this device (nss.beacon.layers:
+// cell -> the first letters of the layers on), saved as it's tapped; a cell
+// never opened starts with all three on.
+const LAYERS = ['pressure', 'wind', 'swell'], layerBtns = [...document.querySelectorAll('[data-layer]')];
+const savedLayers = () => store.get('nss.beacon.layers', {});
+function layersFor(id) {
+  const s = savedLayers()[id];
+  return Object.fromEntries(LAYERS.map((l) => [l, typeof s !== 'string' || s.includes(l[0])]));
+}
+// The toggles, and the rows whose layer is off greyed (still updating).
+function renderLayers() {
+  if (!beacon) return;
+  for (const b of layerBtns) b.setAttribute('aria-pressed', String(beacon.layers[b.dataset.layer]));
+  for (const l of LAYERS) {
+    const off = !beacon.layers[l];
+    $(`.nss-row[data-row="${l}"]`).toggleAttribute('data-off', off);
+    marks[l].toggleAttribute('data-off', off);
+    const g = rowsTrack.querySelector(`g[data-row="${l}"]`);
+    if (g) { if (off) { g.setAttribute('filter', 'url(#nss-mono)'); g.setAttribute('opacity', '0.4'); } else { g.removeAttribute('filter'); g.removeAttribute('opacity'); } }
+  }
+}
+for (const b of layerBtns) b.addEventListener('click', () => {
+  if (!beacon) return;
+  const l = b.dataset.layer;
+  beacon.layers[l] = !beacon.layers[l];
+  const all = savedLayers();
+  all[beacon.id] = LAYERS.filter((k) => beacon.layers[k]).map((k) => k[0]).join('');
+  store.set('nss.beacon.layers', all);
+  renderLayers(); requestDraw(); warm();
+});
 
 // ---- The sheet's title row: Copy link, the grip, Close ----
 copyBtn.addEventListener('click', async () => {
