@@ -1523,7 +1523,8 @@ class App(unittest.TestCase):
         self.page.click('[data-beacon-copy]')
         self.page.wait_for_function("document.querySelector('[data-beacon-said]').textContent === 'Link copied'")
         link = self.page.evaluate('navigator.clipboard.readText()')
-        self.assertTrue(link.endswith('/index.html?at=54.75,-1.00&layers=pws'), link)
+        when = self.page.evaluate("new Date(validAt(man, idx)).toISOString().slice(0, 13) + 'Z'")
+        self.assertTrue(link.endswith(f'/index.html?at=54.75,-1.00&layers=pws&t={when}'), link)
         # Opened elsewhere, Beacons off there: on, with the sender's layers.
         self.page.evaluate("localStorage.setItem('nss.beacons', 'false')")
         self.beacon_run('at=54.75,-1.00&layers=ws&', beacons=False)
@@ -1535,6 +1536,30 @@ class App(unittest.TestCase):
         self.assertTrue(self.page.locator('[data-beacon-mark]').is_visible())
         self.page.click('[data-beacon-close]')
         self.assertNotIn('at=', self.page.url)
+
+    def link_time(self, i):
+        return self.page.evaluate(f"new Date(validAt(man, {i})).toISOString().slice(0, 13) + 'Z'")
+
+    def test_the_links_time_starts_the_needle_there_then_plays(self):
+        self.beacon_run()
+        when = self.link_time(3)
+        self.beacon_run(f'at=54.75,-1.00&t={when}&')
+        self.page.wait_for_function("document.querySelector('#panel').hasAttribute('data-beacon')")
+        self.assertEqual(self.page.evaluate('idx'), 3)
+        self.assertFalse(self.page.evaluate('play.on'))                     # a moment on the sender's time first
+        self.page.wait_for_function('play.on', timeout=5000)
+        self.page.click('[data-beacon-close]')
+        self.assertNotIn('t=', self.page.url.split('?')[1] if '?' in self.page.url else '')
+
+    def test_the_links_time_without_motion_doesnt_play(self):
+        self.new_page(service_workers='block', reduced_motion='reduce')
+        self.beacon_run()
+        when = self.link_time(2)
+        self.beacon_run(f'at=54.75,-1.00&t={when}&')
+        self.page.wait_for_function("document.querySelector('#panel').hasAttribute('data-beacon')")
+        self.assertEqual(self.page.evaluate('idx'), 2)
+        self.page.wait_for_timeout(2000)
+        self.assertFalse(self.page.evaluate('play.on'))
 
     def test_the_beacon_without_motion_with_reduce_motion(self):
         self.new_page(service_workers='block', reduced_motion='reduce')

@@ -13,6 +13,11 @@
 'use strict';
 
 const Q = new URLSearchParams(location.search);
+// A beacon link's time (?at=…&t=2026-11-04T18Z): see openAt().
+const timeQ = (() => {
+  const m = /^(\d{4})-(\d\d)-(\d\d)T(\d\d)Z$/.exec(Q.get('t') || '');
+  return m && Q.has('at') ? Date.UTC(+m[1], m[2] - 1, +m[3], +m[4]) : null;
+})();
 // This deploy's commit (index.html's ?v=, stamped by deploy.yml), for feedback.
 const VERSION = new URL(document.currentScript.src).searchParams.get('v') || 'dev';
 const FR = Q.get('frames') || 'https://raw.githubusercontent.com/mattkirwan/north-sea-charts/frames/';
@@ -279,7 +284,7 @@ async function refreshManifest() {
   if (!man) {
     man = m; frames = []; loadIce(m); grid = makeGrid(m);
     present = { wind: [], height: [], period: [] };
-    idx = nearestIndex(m, Date.now());
+    idx = nearestIndex(m, timeQ == null ? Date.now() : timeQ);
     tl.raw = tl.target = idx;
     buildTicks(); setFrame(idx, true); pump(); hintWait(); openAt();
   } else if (m.run > man.run) {
@@ -1413,8 +1418,8 @@ for (const b of playBtns) b.addEventListener('click', () => {
 // ---- Beacon: a forecast point dropped on a sea grid point -----------------------------------
 // The sea grid points (NOAA's cells: grid.js) carry small crosses, thinned
 // out as the map zooms out and filling in as it zooms in. Tap one and a
-// lifeboat beacon drops there, pings three times, and the map glides (and
-// zooms in, if need be) to put it a quarter of the way down, straight above
+// lifeboat beacon drops there, pings three times, and the map glides (at
+// the same zoom) to put it a quarter of the way down, straight above
 // the needle; the open panel becomes its sheet, with the cell's
 // modelled wind and swell drawn on the timeline's own track, so one needle
 // reads everything. One beacon at a time; the link (?at=lat,lon) opens one.
@@ -1580,7 +1585,7 @@ function closeBeacon() {
   applyPanels(); setFrame(idx, true);
   if (Q.has('at')) {
     const u = new URL(location.href);
-    u.searchParams.delete('at'); u.searchParams.delete('layers');
+    u.searchParams.delete('at'); u.searchParams.delete('layers'); u.searchParams.delete('t');
     try { history.replaceState(history.state, '', u); } catch {}
   }
   easeClamp(); menuBtn().focus({ preventScroll: true }); hintWait();
@@ -1812,7 +1817,8 @@ for (const b of layerBtns) b.addEventListener('click', () => {
 // ---- The sheet's title row: Copy link, the grip, Close ----
 copyBtn.addEventListener('click', async () => {
   if (!beacon) return;
-  const link = `${location.origin}${location.pathname}?at=${beacon.lat.toFixed(2)},${beacon.lon.toFixed(2)}&layers=${LAYERS.filter((l) => beacon.layers[l]).map((l) => l[0]).join('') || '-'}`;
+  const link = `${location.origin}${location.pathname}?at=${beacon.lat.toFixed(2)},${beacon.lon.toFixed(2)}&layers=${LAYERS.filter((l) => beacon.layers[l]).map((l) => l[0]).join('') || '-'}` +
+    `&t=${new Date(validAt(man, idx)).toISOString().slice(0, 13)}Z`;
   try { await navigator.clipboard.writeText(link); } catch { return; }
   copyBtn.innerHTML = icon('check'); saidEl.textContent = tr('linkCopied');
   setTimeout(() => { copyBtn.innerHTML = icon('share'); saidEl.textContent = ''; }, 1500);
@@ -1847,8 +1853,13 @@ document.addEventListener('keydown', (e) => {
 });
 // The link: ?at=<lat>,<lon> drops the beacon on the nearest sea grid point,
 // with Beacons on, and the sender's layers (&layers=, the first letters of
-// those on) if it carries them, else the cell's own.
+// those on) if it carries them, else the cell's own. With the sender's time
+// (&t=2026-11-04T18Z, UTC), the needle starts on the nearest frame to it, in
+// whatever run is out by then, and a moment after the glide it plays on from
+// there (not with Reduce Motion; a touch first, and it doesn't). timeQ is
+// read at the top, as the first frame is chosen before this.
 const atQ = (Q.get('at') || '').split(',').map(Number), layersQ = Q.get('layers');
+const LINK_PLAY_MS = 1500;
 async function openAt() {
   if (atQ.length !== 2 || atQ.some(Number.isNaN) || !grid) return;
   // A beacon point of the link's own, else the nearest sea cell.
@@ -1863,6 +1874,10 @@ async function openAt() {
   if (beacon) return;
   if (!beaconsOn) { beaconsOn = true; store.set('nss.beacons', true); renderPanel(); }
   dropBeacon(c, layersQ == null ? null : Object.fromEntries(LAYERS.map((l) => [l, layersQ.includes(l[0])])));
+  if (timeQ != null && !reduced.matches) {
+    const b = beacon, at = idx;
+    setTimeout(() => { if (beacon === b && idx === at && !play.on && !tl.moving) startPlay(); }, LINK_PLAY_MS);
+  }
 }
 
 // ---- Hints: what the app teaches (hints.js), one controller for all of it --------------------
