@@ -38,9 +38,10 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install
+        timeout-minutes: 5
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq libeccodes-dev > /dev/null
-          pip install -q -r requirements/frames.txt
+          # eccodes' C library comes in the eccodeslib wheel: no apt needed
+          pip install -q --retries 10 --timeout 30 -r requirements/frames.txt
       - name: Compare with NOAA's files
         id: check
         env:
